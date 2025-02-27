@@ -1,0 +1,74 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ main, dev ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      URL_SCOREPLAN: ${{ secrets.URL_SCOREPLAN }}
+      APIKEY_SCOREPLAN: ${{ secrets.APIKEY_SCOREPLAN }}
+      USERNAME_SCOREPLAN: ${{ secrets.USERNAME_SCOREPLAN }}
+      PASSWORD_SCOREPLAN: ${{ secrets.PASSWORD_SCOREPLAN }}
+      USERNAME_TOTVS: ${{ secrets.USERNAME_TOTVS }}
+      PASSWORD_TOTVS: ${{ secrets.PASSWORD_TOTVS }}
+      ZEEV_PROD: ${{ secrets.ZEEV_PROD }}
+      RM_PROD: ${{ secrets.RM_PROD }}
+      RM_DEV: ${{ secrets.RM_DEV }}
+      GLPI_PROD: ${{ secrets.GLPI_PROD }}
+      GLPI_DEV: ${{ secrets.GLPI_DEV }}
+      TOKEN_ZEEV: ${{ secrets.TOKEN_ZEEV }}
+      APPTOKEN_GLPI_PROD: ${{ secrets.APPTOKEN_GLPI_PROD }}
+      APPTOKEN_GLPI_DEV: ${{ secrets.APPTOKEN_GLPI_DEV }}
+      USERTOKEN_GLPI_PROD: ${{ secrets.USERTOKEN_GLPI_PROD }}
+      USERTOKEN_GLPI_DEV: ${{ secrets.USERTOKEN_GLPI_DEV }}
+      CREDENTIALS_GOOGLE: ${{ secrets.CREDENTIALS_GOOGLE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prepare Environment Variables
+        run: |
+          echo "URL_SCOREPLAN=${{ secrets.URL_SCOREPLAN }}" >> .env
+          echo "APIKEY_SCOREPLAN=${{ secrets.APIKEY_SCOREPLAN }}" >> .env
+          echo "USERNAME_SCOREPLAN=${{ secrets.USERNAME_SCOREPLAN }}" >> .env
+          echo "PASSWORD_SCOREPLAN=${{ secrets.PASSWORD_SCOREPLAN }}" >> .env
+          echo "USERNAME_TOTVS=${{ secrets.USERNAME_TOTVS }}" >> .env
+          echo "PASSWORD_TOTVS=${{ secrets.PASSWORD_TOTVS }}" >> .env
+          echo "ZEEV_PROD=${{ secrets.ZEEV_PROD }}" >> .env
+          echo "RM_PROD=${{ secrets.RM_PROD }}" >> .env
+          echo "RM_DEV=${{ secrets.RM_DEV }}" >> .env
+          echo "GLPI_PROD=${{ secrets.GLPI_PROD }}" >> .env
+          echo "GLPI_DEV=${{ secrets.GLPI_DEV }}" >> .env
+          echo "TOKEN_ZEEV=${{ secrets.TOKEN_ZEEV }}" >> .env
+          echo "APPTOKEN_GLPI_PROD=${{ secrets.APPTOKEN_GLPI_PROD }}" >> .env
+          echo "APPTOKEN_GLPI_DEV=${{ secrets.APPTOKEN_GLPI_DEV }}" >> .env
+          echo "USERTOKEN_GLPI_PROD=${{ secrets.USERTOKEN_GLPI_PROD }}" >> .env
+          echo "USERTOKEN_GLPI_DEV=${{ secrets.USERTOKEN_GLPI_DEV }}" >> .env
+          echo "CREDENTIALS_GOOGLE=${{ secrets.CREDENTIALS_GOOGLE }}" >> .env
+
+      - name: Deploy to AWS (Prod)
+        if: github.ref == 'refs/heads/main'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'sa-east-1'
+        run: npx serverless deploy --stage prod
+
+      - name: Deploy to AWS (Dev)
+        if: github.ref == 'refs/heads/dev'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'sa-east-1'
+        run: npx serverless deploy --stage dev

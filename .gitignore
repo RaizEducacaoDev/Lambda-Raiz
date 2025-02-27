@@ -1,0 +1,26 @@
+# package directories
+node_modules
+jspm_packages
+
+# Serverless directories
+.serverless
+
+# Webpack directories
+.webpack
+
+.vscode
+
+# Logs
+*.log
+
+# Variáveis de ambiente (arquivos sensíveis)
+.env
+
+# Diretório de cobertura de testes
+coverage
+
+# Diretório de build (se não for necessário no repositório)
+dist
+
+# Arquivos de sistema (macOS)
+.DS_Store
