@@ -1,26 +1,30 @@
-# package directories
-node_modules
-jspm_packages
+# Dependências
+node_modules/
+.npm
+.pnpm
+.yarn
 
-# Serverless directories
-.serverless
-
-# Webpack directories
-.webpack
-
-.vscode
+# Ambiente
+.env*
 
 # Logs
-*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Variáveis de ambiente (arquivos sensíveis)
-.env
+# Builds
+dist/
+.build/
+.serverless/
+coverage/
 
-# Diretório de cobertura de testes
-coverage
+# Configurações locais
+.vscode/
+.idea/
 
-# Diretório de build (se não for necessário no repositório)
-dist
+# Testes
+junit.xml
 
-# Arquivos de sistema (macOS)
+# Sistema
+temp/
 .DS_Store
