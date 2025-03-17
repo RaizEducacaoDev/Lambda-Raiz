@@ -25,8 +25,8 @@ export class ConfigManagerRm {
 
 
     private encodeCredentials(): string {
-        const username = process.env.USERNAME;
-        const password = process.env.PASSWORD;
+        const username = process.env.USERNAME_TOTVS;
+        const password = process.env.PASSWORD_TOTVS;
 
         if (!username || !password) {
             throw new Error('Variáveis de ambiente USERNAME ou PASSWORD não estão definidas.');
