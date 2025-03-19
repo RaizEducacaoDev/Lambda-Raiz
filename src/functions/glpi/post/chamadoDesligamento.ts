@@ -86,15 +86,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 }
             };
         } else {
-            payload = {
-                input: {
-                    name: titulo,
-                    content: content,
-                    itilcategories_id: 14,
-                    _users_id_requester: solicitante
-                    //locations_id: 98, // Alterar na Produção para (98)
-                }
-            };
+            // Construção do payload para criação do ticket
+                payload = {
+                    input: {
+                        name: titulo,
+                        content: content,
+                        itilcategories_id: 14,  // Categoria: Infraestrutura/TI
+                        _users_id_requester: solicitante
+                        //locations_id: 98, // Alterar na Produção para (98)
+                    }
+                };
         }
 
         const urlCriacaoDeTicket = `${configManager.getUrl(process.env.STAGE || 'dev')}Ticket?session_token=${sessionToken}`

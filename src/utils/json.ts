@@ -1,59 +1,27 @@
-export function transformToObjectChapas(str: string): { chapa: string, cargo: string }[] {
-    const regex = /chapa:\s*([^,]+),\s*cargo:\s*([^}]+)\}/g;
-    const result: { chapa: string, cargo: string }[] = [];
+export function extrairDadosGenerico<T>(str: string, regexStr: string, grupos: string[]): T[] {
+    const regex = new RegExp(regexStr, 'g');
+    const result: T[] = [];
+    let match: RegExpExecArray | null;
 
-    let match;
     while ((match = regex.exec(str)) !== null) {
-        const chapa = match[1].trim();
-        const cargo = match[2].trim();
-
-        result.push({ chapa, cargo });
+        const obj = grupos.reduce((acc, grupo, index) => {
+            (acc as Record<string, string>)[grupo] = match?.[index + 1]?.trim() ?? '';
+            return acc;
+        }, {} as T);
+        result.push(obj);
     }
 
     return result;
 }
 
-export function criaItensOC(str: string): { codigoDoItem: string, qtdDoItem: string, precoDoItem: string }[] {
-    const regex = /codigoDoItem:\s*([^,]+),\s*qtdDoItem:\s*([^,]+),\s*precoDoItem:\s*([^}]+)\}/g;
-    const result: { codigoDoItem: string, qtdDoItem: string, precoDoItem: string }[] = [];
+export const transformToObjectChapas = (str: string) =>
+    extrairDadosGenerico<{ chapa: string, cargo: string }>(str, 'chapa:\\s*([^,]+),\\s*cargo:\\s*([^}]+)\\}', ['chapa', 'cargo']);
 
-    let match;
-    while ((match = regex.exec(str)) !== null) {
-        const codigoDoItem = match[1].trim();
-        const qtdDoItem = match[2].trim();
-        const precoDoItem = match[3].trim();
+export const criaItensOC = (str: string) =>
+    extrairDadosGenerico<{ codigoDoItem: string, qtdDoItem: string, precoDoItem: string }>(str, 'codigoDoItem:\\s*([^,]+),\\s*qtdDoItem:\\s*([^,]+),\\s*precoDoItem:\\s*([^}]+)\\}', ['codigoDoItem', 'qtdDoItem', 'precoDoItem']);
 
-        result.push({ codigoDoItem, qtdDoItem, precoDoItem });
-    }
+export const criaItensSC = (str: string) =>
+    extrairDadosGenerico<{ codigoDoItem: string, qtdDoItem: string }>(str, 'codigoDoItem:\\s*([^,]+),\\s*qtdDoItem:\\s*([^,]+)\\}', ['codigoDoItem', 'qtdDoItem']);
 
-    return result;
-}
-
-export function criaItensSC(str: string): { codigoDoItem: string, qtdDoItem: string }[] {
-    const regex = /codigoDoItem:\s*([^,]+),\s*qtdDoItem:\s*([^,]+)\}/g;
-    const result: { codigoDoItem: string, qtdDoItem: string }[] = [];
-
-    let match;
-    while ((match = regex.exec(str)) !== null) {
-        const codigoDoItem = match[1].trim();
-        const qtdDoItem = match[2].trim();
-
-        result.push({ codigoDoItem, qtdDoItem });
-    }
-
-    return result;
-}
-
-
-export function criaFornecedores(str: string): { codigoDoFornecedor: string }[] {
-    const regex = /codigoDoFornecedor:\s*([^,]+)\}/g;
-    const result: { codigoDoFornecedor: string}[] = [];
-
-    let match;
-    while ((match = regex.exec(str)) !== null) {
-        const codigoDoFornecedor = match[1].trim();
-        result.push({codigoDoFornecedor});
-    }
-
-    return result;
-}
+export const criaFornecedores = (str: string) =>
+    extrairDadosGenerico<{ codigoDoFornecedor: string }>(str, 'codigoDoFornecedor:\\s*([^,]+)\\}', ['codigoDoFornecedor']);

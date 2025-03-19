@@ -4,8 +4,6 @@ import * as CLASSES from '../../../utils/classGoogle';
 
 const configManager = new CLASSES.ConfigManagerGoogle();
 
-
-
 export const handler: APIGatewayProxyHandler = async () => {
     const token = await configManager.getAccessToken();
     return formatResponse(200, {

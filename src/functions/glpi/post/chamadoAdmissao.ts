@@ -1,13 +1,17 @@
+// Handler para criação de tickets de Admissão no GLPI
+// Responsável por: Novas contratações e requisição de equipamentos
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as CLASSES from '../../../utils/classGlpi';
 import * as FUNCTIONS from '../../../utils/function';
 import axios from 'axios';
 
+// Gerenciador de configuração para conexão com GLPI
 const configManager = new CLASSES.ConfigManagerGlpi();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
+        // Obtenção dos tokens de autenticação para API GLPI
         const sessionToken = await configManager.getSessionToken(process.env.STAGE || 'dev');
         const userToken = await configManager.getUserToken(process.env.STAGE || 'dev');
         const appToken = await configManager.getAppToken(process.env.STAGE || 'dev');
@@ -29,8 +33,11 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         let titulo = ''
         let payload
 
+        // Lógica principal para criação/atualização de tickets
         switch (ticketRaizTI) {
+            // Caso novo ticket (sem ID raiz)
             case '':
+                // Verifica se é requisição de compra de equipamento para coligada 1
                 if ((motivoDaAberturaDaVaga == 'Aumento de quadro' || motivoDaAberturaDaVaga == "AUMENTO DE QUADRO") && coligada == '1') {
                     titulo = "COMPRA DE COMPUTADOR"
                     content = `
@@ -66,6 +73,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     `;
                 }
 
+                // Define payload conforme tipo de solicitante (grupo ou usuário)
                 if (solicitante == 15) {
                     payload = {
                         input: {
@@ -89,6 +97,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 }
 
 
+                // URL para criação de tickets na API GLPI
                 const urlCriacaoDeTicket = `${configManager.getUrl(process.env.STAGE || 'dev')}Ticket?session_token=${sessionToken}`;
                 let respostaDaCriacao = await axios.post(urlCriacaoDeTicket, payload, {
                     headers: {
@@ -123,6 +132,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
                 const urlUpdate = `${configManager.getUrl(process.env.STAGE || 'dev')}TicketFollowup`
 
+                // Verifica se é requisição de compra de equipamento para coligada 1
                 if ((motivoDaAberturaDaVaga == 'Aumento de quadro' || motivoDaAberturaDaVaga == "AUMENTO DE QUADRO") && coligada == '1') {
                     await axios.post(urlUpdate, payload, {
                         headers: {

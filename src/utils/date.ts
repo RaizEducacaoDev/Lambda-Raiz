@@ -1,45 +1,65 @@
+/**
+ * Função auxiliar que adiciona zero à esquerda para números menores que 10
+ * @param num Número a ser formatado
+ * @returns String formatada com zero à esquerda se necessário
+ */
+function padNumber(num: number): string {
+    return String(num).padStart(2, '0');
+}
+
+/**
+ * Formata o offset do fuso horário no formato +/-HH:mm
+ * @param date Data para extrair o offset do fuso horário
+ * @returns String formatada com o offset do fuso horário
+ */
+function formatTimezoneOffset(date: Date) {
+    const offset = -date.getTimezoneOffset();
+    const sinal = offset >= 0 ? '+' : '-';
+    return `${sinal}${padNumber(Math.abs(offset)/60)}:${padNumber(Math.abs(offset)%60)}`;
+}
+
+/**
+ * Formata os componentes da data no padrão ISO
+ * @param date Data a ser formatada
+ * @returns String formatada com a data no padrão YYYY-MM-DDTHH:mm:ss
+ */
+function formatDateComponents(date: Date) {
+    return `${date.getFullYear()}-${padNumber(date.getMonth()+1)}-${padNumber(date.getDate())}` +
+        `T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}:${padNumber(date.getSeconds())}`;
+}
+
+/**
+ * Obtém a data atual no formato ISO completo com timezone
+ * @returns String com a data atual no formato ISO
+ */
 export function getCurrentDateISO(): string {
-    const date = new Date();
-    
-    const timezoneOffset = -date.getTimezoneOffset();
-    const offsetHours = String(Math.floor(Math.abs(timezoneOffset) / 60)).padStart(2, '0');
-    const offsetMinutes = String(Math.abs(timezoneOffset) % 60).padStart(2, '0');
-    const offsetSign = timezoneOffset >= 0 ? '+' : '-';
-  
-    const isoString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}${offsetSign}${offsetHours}:${offsetMinutes}`;
-    
-    return isoString;
+    const dataAtual = new Date();
+    return `${formatDateComponents(dataAtual)}${formatTimezoneOffset(dataAtual)}`;
 }
 
+/**
+ * Obtém a data e hora atual sem timezone
+ * @returns String com a data e hora atual
+ */
 export function getDateTime(): string {
-    const now = new Date(); // Obtém a data e hora atual
-
-    const year = now.getFullYear(); // Ano com 4 dígitos
-    const month = String(now.getMonth() + 1).padStart(2, '0'); // Mês (de 0 a 11) ajustado e formatado com dois dígitos
-    const day = String(now.getDate()).padStart(2, '0'); // Dia formatado com dois dígitos
-
-    const hours = String(now.getHours()).padStart(2, '0'); // Horas formatadas com dois dígitos
-    const minutes = String(now.getMinutes()).padStart(2, '0'); // Minutos formatados com dois dígitos
-    const seconds = String(now.getSeconds()).padStart(2, '0'); // Segundos formatados com dois dígitos
-
-    // Concatena no formato ISO 8601
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    const agora = new Date();
+    return `${agora.getFullYear()}-${padNumber(agora.getMonth()+1)}-${padNumber(agora.getDate())}` +
+        `T${padNumber(agora.getHours())}:${padNumber(agora.getMinutes())}:${padNumber(agora.getSeconds())}`;
 }
 
+/**
+ * Converte uma string de data no formato DD/MM/YYYY para formato ISO
+ * @param dateStr String de data no formato DD/MM/YYYY
+ * @returns String com a data convertida para formato ISO
+ * @throws Error se o formato da data for inválido
+ */
 export function convertToISOFormat(dateStr: string): string {
-    const [day, month, year] = dateStr.split('/').map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day));
+    const [dia, mes, ano] = dateStr.split('/').map(Number);
+    const data = new Date(Date.UTC(ano, mes - 1, dia));
     
-    if (isNaN(date.getTime())) {
+    if (isNaN(data.getTime())) {
         throw new Error("Invalid date format");
     }
 
-    const timezoneOffset = -date.getTimezoneOffset();
-    const offsetHours = String(Math.floor(Math.abs(timezoneOffset) / 60)).padStart(2, '0');
-    const offsetMinutes = String(Math.abs(timezoneOffset) % 60).padStart(2, '0');
-    const offsetSign = timezoneOffset >= 0 ? '+' : '-';
-
-    const isoString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}${offsetSign}${offsetHours}:${offsetMinutes}`;
-    
-    return isoString; // Exemplo de saída: 2024-09-26T00:00:00-03:00
+    return `${formatDateComponents(data)}${formatTimezoneOffset(data)}`;
 }

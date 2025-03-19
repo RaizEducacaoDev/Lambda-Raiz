@@ -61,7 +61,8 @@ export class ConfigManagerRm {
             return response.data[0].CODCOTACAO;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+            console.error('Raw XML Response:', (erro as any).response?.data);
             throw erro;
         }
     }
@@ -83,7 +84,8 @@ export class ConfigManagerRm {
             return response.data;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -107,7 +109,8 @@ export class ConfigManagerRm {
 
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -270,6 +273,7 @@ export class ConfigManagerRm {
                 `${this.getUrl()}:8051/wsProcess/IwsProcess`,
                 soapEnvelope,
                 {
+                    transformResponse: (r) => r,
                     headers: {
                         'Authorization': `Basic ${this.getCredentials()}`,
                         'Content-Type': 'text/xml;charset=UTF-8',
@@ -277,6 +281,7 @@ export class ConfigManagerRm {
                     }
                 }
             );
+            console.log('Raw API XML:', respostas.data);
 
             let result = respostas.data
             result = await FUNCTIONS.buscaResultadoCotacao(result)
@@ -287,7 +292,8 @@ export class ConfigManagerRm {
                 throw new Error('Não foi possível comunicar os fornecedores');
             }
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -309,7 +315,8 @@ export class ConfigManagerRm {
             return response.data[0].ID;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -368,6 +375,7 @@ export class ConfigManagerRm {
                 }
             });
 
+            console.log('Raw XML Response:', response.data);
             let UID = await FUNCTIONS.buscaUID(response.data as any)
 
             if (UID) {
@@ -430,7 +438,8 @@ export class ConfigManagerRm {
 
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -487,7 +496,7 @@ export class ConfigManagerRm {
                                         </d3p1:KeyValueOfanyTypeanyType>
                                         <d3p1:KeyValueOfanyTypeanyType>
                                             <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODUSUARIO</d3p1:Key>
-                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">p_heflo</d3p1:Value>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">p_heflo</d3p1:Value>
                                         </d3p1:KeyValueOfanyTypeanyType>
                                         <d3p1:KeyValueOfanyTypeanyType>
                                             <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$IDPRJ</d3p1:Key>

@@ -1,13 +1,17 @@
+// Handler para movimentações de colaboradores no GLPI
+// Responsável por: Alterações de e-mail e dados cadastrais
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as CLASSES from '../../../utils/classGlpi';
 import * as FUNCTIONS from '../../../utils/function';
 import axios from 'axios';
 
+// Configuração para integração com API GLPI
 const configManager = new CLASSES.ConfigManagerGlpi();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
+        // Obtenção dos tokens de autenticação
         const sessionToken = await configManager.getSessionToken(process.env.STAGE || 'dev');
         const userToken = await configManager.getUserToken(process.env.STAGE || 'dev');
         const appToken = await configManager.getAppToken(process.env.STAGE || 'dev');
@@ -27,6 +31,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         let titulo = 'ALTERAÇÃO DE E-MAIL'
         let payload
 
+        // Construção do conteúdo HTML para o ticket
         let content = `
             <p style="text-align: center;">
                 Olá,<br>
@@ -45,14 +50,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             </p>
         `;
 
+        // Define payload conforme tipo de solicitante (grupo ou usuário)
         if(solicitante == 15){
             payload = {
                 input: {
                     name: titulo,
                     content: content,
-                    itilcategories_id: 14,
+                    itilcategories_id: 14,  // Categoria: Infraestrutura/TI
                     _groups_id_requester: solicitante
-                    //locations_id: 98, // Alterar na Produção para (98)
+                    //locations_id: 98,  // PRODUÇÃO: ID da localização Raiz Educação
                 }
             };
         } else {
@@ -62,7 +68,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     content: content,
                     itilcategories_id: 14,
                     _users_id_requester: solicitante
-                    //locations_id: 98, // Alterar na Produção para (98)
+                    //locations_id: 98,  // PRODUÇÃO: ID da localização Raiz Educação
                 }
             };
         }

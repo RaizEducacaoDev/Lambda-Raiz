@@ -1,17 +1,17 @@
 import { XMLParser } from 'fast-xml-parser';
 
 export function escapeXml(unsafe: string): string {
-  return unsafe.replace(/[<>&'"\\/]/g, (char) => {
-    switch (char) {
-      case '<': return '&lt;'
-      case '>': return '&gt;'
-      case '&': return '&amp;'
-      case "'": return '&apos;'
-      case '"': return '&quot;'
-      case '/': return '&#x2F;'
-      default: return char
-    }
-  })
+    return unsafe.replace(/[<>&'"\\/]/g, (char) => {
+        switch (char) {
+            case '<': return '&lt;'
+            case '>': return '&gt;'
+            case '&': return '&amp;'
+            case "'": return '&apos;'
+            case '"': return '&quot;'
+            case '/': return '&#x2F;'
+            default: return char
+        }
+    })
 }
 
 export function montaTag(campo: string, valor: any): string {
@@ -21,82 +21,49 @@ export function montaTag(campo: string, valor: any): string {
         return "";
 }
 
-export async function buscaResultado(xmlString: string): Promise<any> {
-    const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        allowBooleanAttributes: true
-    });
+const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    allowBooleanAttributes: true,
+    parseTagValue: false
+});
 
+async function parseXML<T>(
+    xmlString: string,
+    responseKey: string,
+    resultKey: string
+): Promise<T> {
     try {
         const json = parser.parse(xmlString.trim());
-        return json['s:Envelope']['s:Body'][0]['SaveRecordResponse'][0]['SaveRecordResult'][0];
+        if (!json['s:Envelope']) throw new Error('Missing s:Envelope in XML response');
+        const body = json['s:Envelope']['s:Body'];
+        const reportResponse = body[responseKey];
+        if (!reportResponse) throw new Error(`Missing ${responseKey} in XML body`);
+        const result = reportResponse[resultKey];
+        if (!result) throw new Error(`Missing ${resultKey} in response`);
+        return result;
     } catch (error) {
         console.error("Erro ao converter XML para JSON:", error);
         throw error;
     }
+}
+
+export async function buscaResultado(xmlString: string): Promise<any> {
+    return parseXML(xmlString, 'SaveRecordResponse', 'SaveRecordResult');
 }
 
 export async function buscaResultadoCotacao(xmlString: string): Promise<any> {
-    const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        allowBooleanAttributes: true
-    });
-
-    try {
-        const json = parser.parse(xmlString.trim());
-        return json['s:Envelope']['s:Body'][0]['ExecuteWithXmlParamsResponse'][0]['ExecuteWithXmlParamsResult'][0];
-    } catch (error) {
-        console.error("Erro ao converter XML para JSON:", error);
-        throw error;
-    }
+    return parseXML(xmlString, 'ExecuteWithXmlParamsResponse', 'ExecuteWithXmlParamsResult');
 }
 
 export async function buscaUID(xmlString: string): Promise<any> {
-    const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        allowBooleanAttributes: true
-    });
-
-    try {
-        const json = parser.parse(xmlString.trim());
-        return json["s:Envelope"]["s:Body"][0].GenerateReportResponse[0].GenerateReportResult[0];;
-    } catch (error) {
-        console.error("Erro ao converter XML para JSON:", error);
-        throw error;
-    }
+    return parseXML(xmlString, 'GenerateReportResponse', 'GenerateReportResult');
 }
 
 export async function buscaSIZE(xmlString: string): Promise<any> {
-    const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        allowBooleanAttributes: true
-    });
-
-    try {
-        const json = parser.parse(xmlString.trim());
-        return json['s:Envelope']['s:Body'][0].GetGeneratedReportSizeResponse[0].GetGeneratedReportSizeResult[0];
-    } catch (error) {
-        console.error("Erro ao converter XML para JSON:", error);
-        throw error;
-    }
+    return parseXML(xmlString, 'GetGeneratedReportSizeResponse', 'GetGeneratedReportSizeResult');
 }
 
 export async function buscaFILE(xmlString: string): Promise<any> {
-    const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        allowBooleanAttributes: true
-    });
-
-    try {
-        const json = parser.parse(xmlString.trim());
-        return json['s:Envelope']['s:Body'][0].GetFileChunkResponse[0].GetFileChunkResult[0];
-    } catch (error) {
-        console.error("Erro ao converter XML para JSON:", error);
-        throw error;
-    }
+    return parseXML(xmlString, 'GetFileChunkResponse', 'GetFileChunkResult');
 }
