@@ -1,29 +1,26 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@libs/*": ["src/libs/*"]
-    },
-    "lib": ["ESNext"],
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
     "moduleResolution": "node",
+    "rootDir": "./",
+    "outDir": ".build",
+    "removeComments": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "removeComments": true,
-    "sourceMap": true,
-    "target": "ES2020",
-    "outDir": "lib",
-    "resolveJsonModule": true,
-    "esModuleInterop": true
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "serverless.ts"],
-  "exclude": [
-    "node_modules/**/*",
-    ".serverless/**/*",
-    ".webpack/**/*",
-    "_warmup/**/*",
-    ".vscode/**/*"
-  ],
-  "ts-node": {
-    "require": ["tsconfig-paths/register"]
-  }
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

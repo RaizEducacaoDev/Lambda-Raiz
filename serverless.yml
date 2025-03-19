@@ -1,0 +1,155 @@
+service: lambda-raiz
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  stage: ${opt:stage, 'prod'}
+  region: sa-east-1
+  architecture: arm64
+  timeout: 30
+  environment:
+    NODE_OPTIONS: --enable-source-maps
+    GOOGLE_CLIENT_EMAIL: ${env:GOOGLE_CLIENT_EMAIL}
+    GOOGLE_PRIVATE_KEY: ${env:GOOGLE_PRIVATE_KEY}
+    GOOGLE_PROJECT_ID: ${env:GOOGLE_PROJECT_ID}
+    RM_PROD: ${env:RM_PROD}
+    RM_DEV: ${env:RM_DEV}
+    USERNAME_TOTVS: ${env:USERNAME_TOTVS}
+    PASSWORD_TOTVS: ${env:PASSWORD_TOTVS}
+    USERNAME_SCOREPLAN: ${env:USERNAME_SCOREPLAN}
+    PASSWORD_SCOREPLAN: ${env:PASSWORD_SCOREPLAN}
+    ZEEV_PROD: ${env:ZEEV_PROD}
+    TOKEN_ZEEV: ${env:TOKEN_ZEEV}
+    APPTOKEN_GLPI_PROD: ${env:APPTOKEN_GLPI_PROD}
+    USERTOKEN_GLPI_PROD: ${env:USERTOKEN_GLPI_PROD}
+    GLPI_PROD: ${env:GLPI_PROD}
+    APPTOKEN_GLPI_DEV: ${env:APPTOKEN_GLPI_DEV}
+    USERTOKEN_GLPI_DEV: ${env:USERTOKEN_GLPI_DEV}
+    GLPI_DEV: ${env:GLPI_DEV}
+    STAGE: ${self:provider.stage}
+
+package:
+  individually: true
+
+plugins:
+  - serverless-offline
+
+custom:
+  dotenv:
+    path: ./.env
+    include: []
+  serverless-offline:
+    resourceRoutes: false
+    noPrependStageInUrl: false
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: 'node22'
+    exclude: ['aws-sdk']
+    platform: 'node'
+
+functions:
+  cancelaCotacao:
+    handler: src/functions/rm/post/cancelaCotacao.handler
+    events:
+      - http:
+          path: /cancelaCotacao
+          method: post
+          cors: true
+
+  ordemDeCompra:
+    handler: src/functions/rm/post/ordemDeCompra.handler
+    events:
+      - http:
+          path: /ordemDeCompra
+          method: post
+          cors: true
+
+  cotacao:
+    handler: src/functions/rm/post/cotacao.handler
+    events:
+      - http:
+          path: /cotacao
+          method: post
+          cors: true
+
+  geraQuadroComparativo:
+    handler: src/functions/rm/post/geraQuadroComparativo.handler
+    events:
+      - http:
+          path: /geraQuadroComparativo
+          method: post
+          cors: true
+
+  comunicaFornecedor:
+    handler: src/functions/rm/post/comunicaFornecedor.handler
+    events:
+      - http:
+          path: /comunicaFornecedor
+          method: post
+          cors: true
+
+  solicitacaoDeCompra:
+    handler: src/functions/rm/post/solicitacaoDeCompra.handler
+    events:
+      - http:
+          path: /solicitacaoDeCompra
+          method: post
+          cors: true
+
+  gravaNaturezaOrcamentaria:
+    handler: src/functions/rm/post/gravaNaturezaOrcamentaria.handler
+    events:
+      - http:
+          path: /gravaNaturezaOrcamentaria
+          method: post
+          cors: true
+
+  fileQuadroComparativo:
+    handler: src/functions/rm/post/fileQuadroComparativo.handler
+    events:
+      - http:
+          path: /fileQuadroComparativo
+          method: post
+          cors: true
+
+  aberturaDeChamados:
+    handler: src/functions/glpi/post/aberturaDeChamados.handler
+    events:
+      - http:
+          path: /aberturaDeChamados
+          method: post
+          cors: true
+
+  chamadoAdmissao:
+    handler: src/functions/glpi/post/chamadoAdmissao.handler
+    events:
+      - http:
+          path: /chamadoAdmissao
+          method: post
+          cors: true
+
+  chamadoDesligamento:
+    handler: src/functions/glpi/post/chamadoDesligamento.handler
+    events:
+      - http:
+          path: /chamadoDesligamento
+          method: post
+          cors: true
+
+  chamadoMovimentacao:
+    handler: src/functions/glpi/post/chamadoMovimentacao.handler
+    events:
+      - http:
+          path: /chamadoMovimentacao
+          method: post
+          cors: true
+
+  tokenGoogle:
+    handler: src/functions/google/get/tokenGoogle.handler
+    events:
+      - http:
+          path: /tokenGoogle
+          method: get
+          cors: true

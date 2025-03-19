@@ -1,89 +1,5 @@
 import axios from 'axios';
-import * as FUNCTIONS from 'src/utilities/functions'
-import { google } from 'googleapis';
-import { JWT } from 'google-auth-library';
-
-export class ConfigManagerGlpi {
-    private configuracoes: Record<string, { appToken: string; userToken: string; url: string }>;
-
-    constructor() {
-        this.configuracoes = {
-            prod: {
-                appToken: process.env.APPTOKEN_GLPI_PROD || '',
-                userToken: process.env.USERTOKEN_GLPI_PROD || '',
-                url: process.env.GLPI_PROD || ''
-            },
-            dev: {
-                appToken: process.env.APPTOKEN_GLPI_DEV || '',
-                userToken: process.env.USERTOKEN_GLPI_DEV || '',
-                url: process.env.GLPI_DEV || ''
-            }
-        };
-    }
-
-
-    private getConfig(ambiente: string) {
-        const config = this.configuracoes[ambiente];
-        if (!config) throw new Error(`Configuração para o ambiente ${ambiente} não encontrada`);
-        return config;
-    }
-
-    getUrl(ambiente: string): string {
-        return this.getConfig(ambiente).url;
-    }
-
-    getUserToken(ambiente: string): string {
-        return this.getConfig(ambiente).userToken;
-    }
-
-    getAppToken(ambiente: string): string {
-        return this.getConfig(ambiente).appToken;
-    }
-
-    async getSessionToken(ambiente: string): Promise<string> {
-        const { url, userToken, appToken } = this.getConfig(ambiente);
-
-        try {
-            const response = await axios.get(`${url}/initSession?user_token=${userToken}`, {
-                headers: { 'App-Token': appToken }
-            });
-            return response.data.session_token.replace(/['"]/g, '');
-        } catch (error) {
-            throw new Error(`Erro ao obter Session Token: ${error.message}`);
-        }
-    }
-
-    async buscaIdDoUsuario(email: string, sessionToken: string): Promise<number> {
-        const ambiente = process.env.Stage;
-        //const sessionToken = await this.getSessionToken(ambiente);
-        const userToken = this.getUserToken(ambiente);
-        const appToken = this.getAppToken(ambiente);
-
-        const apiURL = `${this.getUrl(ambiente)}search/User?criteria[0][field]=5&criteria[0][searchtype]=contains&criteria[0][value]=${email}&session_token=${sessionToken}&forcedisplay[0]=5&forcedisplay[1]=2`;
-
-        try {
-            const response = await axios.get(apiURL, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'user_token': userToken,
-                    'App-Token': appToken
-                }
-            });
-
-            const userId = response.data.data[0]['2'];
-
-            if (typeof userId === 'number') {
-                return userId;
-            } else {
-                return 15
-            }
-
-        } catch (erro) {
-            console.error('Não foi possível encontrar o solicitante no GLPI', erro.message);
-            return 15
-        }
-    }
-}
+import * as FUNCTIONS from './xml'
 
 export class ConfigManagerRm {
     private configuracoes: Record<string, { url: string }>;
@@ -100,17 +16,17 @@ export class ConfigManagerRm {
     }
 
     private getStage() {
-        const stage = process.env.Stage;
+        const stage = process.env.STAGE || 'dev';
         if (!stage || !this.configuracoes[stage]) {
-            throw new Error(`Configuração para o stage '${stage}' não encontrada.`);
+            throw new Error(`Configuração para o stage '${(stage as string)}' não encontrada.`);
         }
         return this.configuracoes[stage];
     }
 
 
     private encodeCredentials(): string {
-        const username = process.env.USERNAME;
-        const password = process.env.PASSWORD;
+        const username = process.env.USERNAME_TOTVS;
+        const password = process.env.PASSWORD_TOTVS;
 
         if (!username || !password) {
             throw new Error('Variáveis de ambiente USERNAME ou PASSWORD não estão definidas.');
@@ -145,7 +61,8 @@ export class ConfigManagerRm {
             return response.data[0].CODCOTACAO;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+            console.error('Raw XML Response:', (erro as any).response?.data);
             throw erro;
         }
     }
@@ -167,7 +84,8 @@ export class ConfigManagerRm {
             return response.data;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -186,12 +104,13 @@ export class ConfigManagerRm {
                 throw new Error('Resposta da API inválida ou vazia.');
             }
 
-            const idMovString = response.data.map(item => item.IDMOV).join(' | ');
+            const idMovString = response.data.map((item: { IDMOV: string }) => item.IDMOV).join(' | ');
             return idMovString;
 
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -205,18 +124,18 @@ export class ConfigManagerRm {
             var orcamento = ''
             for (let i = 0; i < listaDeFornecedores.length; i++) {
                 fornecedores +=
-                `<CmpComunicarFornecedores>
+                    `<CmpComunicarFornecedores>
                     <InternalId i:nil="true" xmlns="http://www.totvs.com/" />
-                    <CodCfo>${listaDeFornecedores[i]['codigoDoFornecedor']}</CodCfo>
+                    <CodCfo>${(listaDeFornecedores[i] as { codigoDoFornecedor: string }).codigoDoFornecedor}</CodCfo>
                     <CodColCfo>0</CodColCfo>
                     <Contatos xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
                 </CmpComunicarFornecedores>`;
 
                 orcamento +=
-                `<TCORCAMENTO diffgr:id="TCORCAMENTO${i + 1}" msdata:rowOrder="${i}" diffgr:hasChanges="inserted">
+                    `<TCORCAMENTO diffgr:id="TCORCAMENTO${i + 1}" msdata:rowOrder="${i}" diffgr:hasChanges="inserted">
                     <CODCOTACAO>${cotacao}</CODCOTACAO>
                     <CODCOLCFO>0</CODCOLCFO>
-                    <CODCFO>${listaDeFornecedores[i]['codigoDoFornecedor']}</CODCFO>
+                    <CODCFO>${(listaDeFornecedores[i] as { codigoDoFornecedor: string }).codigoDoFornecedor}</CODCFO>
                 </TCORCAMENTO>`;
             }
 
@@ -354,6 +273,7 @@ export class ConfigManagerRm {
                 `${this.getUrl()}:8051/wsProcess/IwsProcess`,
                 soapEnvelope,
                 {
+                    transformResponse: (r) => r,
                     headers: {
                         'Authorization': `Basic ${this.getCredentials()}`,
                         'Content-Type': 'text/xml;charset=UTF-8',
@@ -361,6 +281,7 @@ export class ConfigManagerRm {
                     }
                 }
             );
+            console.log('Raw API XML:', respostas.data);
 
             let result = respostas.data
             result = await FUNCTIONS.buscaResultadoCotacao(result)
@@ -371,7 +292,8 @@ export class ConfigManagerRm {
                 throw new Error('Não foi possível comunicar os fornecedores');
             }
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -393,7 +315,8 @@ export class ConfigManagerRm {
             return response.data[0].ID;
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -452,6 +375,7 @@ export class ConfigManagerRm {
                 }
             });
 
+            console.log('Raw XML Response:', response.data);
             let UID = await FUNCTIONS.buscaUID(response.data as any)
 
             if (UID) {
@@ -514,7 +438,8 @@ export class ConfigManagerRm {
 
 
         } catch (erro) {
-            console.error('Erro ao buscar o número da cotação:', erro);
+            console.error('Erro ao converter XML para JSON:', erro);
+
             throw erro;
         }
     }
@@ -524,7 +449,7 @@ export class ConfigManagerRm {
             const apiURL = `${this.getUrl()}:8051/wsProcess/IwsProcess`;
 
             let soapEnvelope =
-            `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
+                `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
                 <soapenv:Header/>
                 <soapenv:Body>
                     <tot:ExecuteWithXmlParams>
@@ -571,7 +496,7 @@ export class ConfigManagerRm {
                                         </d3p1:KeyValueOfanyTypeanyType>
                                         <d3p1:KeyValueOfanyTypeanyType>
                                             <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODUSUARIO</d3p1:Key>
-                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">p_heflo</d3p1:Value>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">p_heflo</d3p1:Value>
                                         </d3p1:KeyValueOfanyTypeanyType>
                                         <d3p1:KeyValueOfanyTypeanyType>
                                             <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$IDPRJ</d3p1:Key>
@@ -619,26 +544,35 @@ export class ConfigManagerRm {
 
             return true
         } catch (error) {
-            throw new Error(error);
+            throw new Error(error instanceof Error ? error.message : 'An unknown error occurred');
         }
     }
 
-    gerarXMLProdutosPorFornecedor = (listaDeItens, CODCCUSTO, COLIGADADEENTREGA, FILIALDEENTREGA, CODTMVGERADO) => {
+    gerarXMLProdutosPorFornecedor = (
+        listaDeItens: Array<{
+            CODCFO: string;
+            CODCPGNEGOCIADA: string;
+            IDMOV: string;
+            IDPRD: string;
+            NSEQITMMOV: string;
+        }>,
+        CODCCUSTO: string,
+        COLIGADADEENTREGA: string,
+        FILIALDEENTREGA: string,
+        CODTMVGERADO: string
+    ): string => {
         try {
             // Agrupa os produtos por fornecedor
             const fornecedores = listaDeItens.reduce((acc, item) => {
                 acc[item.CODCFO] = acc[item.CODCFO] || [];
                 acc[item.CODCFO].push(item);
                 return acc;
-            }, {});
+            }, {} as Record<string, typeof listaDeItens>);
 
-            let xmlFinal = "";
-
-            // Gera o XML para cada fornecedor
-            Object.keys(fornecedores).forEach((fornecedor) => {
-                const produtos = fornecedores[fornecedor];
-                produtos.forEach((produto) => {
-                    xmlFinal += `
+            // Generate XML string using array methods for better performance
+            const xmlFinal = Object.values(fornecedores)
+                .flatMap(produtos =>
+                    produtos.map(produto => `
                     <a:ProdutoInclusaoMov>
                         <a:InternalId i:nil="true" />
                         <codCCusto>${CODCCUSTO}</codCCusto>
@@ -667,182 +601,15 @@ export class ConfigManagerRm {
                         <statusParadigma>N</statusParadigma>
                         <valFreteParadigma>0</valFreteParadigma>
                         <valorDesOcrc>0</valorDesOcrc>
-                    </a:ProdutoInclusaoMov>`;
-                });
-            });
+                    </a:ProdutoInclusaoMov>`)
+                )
+                .join('');
 
             return xmlFinal;
         } catch (error) {
-            console.error("Erro ao gerar XML:", error);
+            console.error("Error generating XML:", error);
             return "";
         }
     };
 
-}
-
-export class ConfigManagerZeev {
-    private configuracoes: Record<string, { url: string }>;
-
-    constructor() {
-        this.configuracoes = {
-            prod: {
-                url: process.env.ZEEV_PROD || '',
-            },
-            dev: {
-                url: process.env.ZEEV_PROD || '',
-            }
-        };
-    }
-
-    private getStage() {
-        const stage = process.env.Stage;
-        if (!stage || !this.configuracoes[stage]) {
-            throw new Error(`Configuração para o stage '${stage}' não encontrada.`);
-        }
-        return this.configuracoes[stage];
-    }
-
-
-    private encodeCredentials(): string {
-        const TOKEN_ZEEV = process.env.TOKEN_ZEEV;
-
-        return TOKEN_ZEEV
-    }
-
-
-    getUrl(): string {
-        return this.getStage().url;
-    }
-
-    getCredentials(): string {
-        return this.encodeCredentials();
-    }
-
-    async setValueFields(json: object, instance: string): Promise<any> {
-        const apiURL = `${this.getUrl()}api/2/formvalues/${instance}`;
-
-        let envelope = {
-            "formValues": json,
-            "updateClosedInstance": false
-        }
-
-        let headers = {
-            headers: {
-                'Authorization': `Bearer ${this.getCredentials()}`,
-                'Content-Type': 'application/json'
-            }
-        }
-
-        let retries = 3
-        let delay = 1
-
-        for (let i = 0; i < retries; i++) {
-            try {
-                const response = await axios.patch(apiURL, envelope, headers);
-                return response.data;
-            } catch (error) {
-                if (i < retries - 1) {
-                    console.warn(`Tentativa ${i + 1} falhou, tentando novamente em ${delay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                } else {
-                    throw error; // Repropaga o erro se for a última tentativa
-                }
-            }
-        }
-    }
-}
-
-export class ConfigManagerGoogle {
-    private client: JWT;
-
-    constructor() {
-        // Obter as credenciais a partir do environment variable
-        const credentials = process.env.CREDENTIALS_GOOGLE
-            ? JSON.parse(process.env.CREDENTIALS_GOOGLE)
-            : null;
-
-        if (!credentials) {
-            throw new Error('Credenciais do Google não encontradas.');
-        }
-
-        this.client = new google.auth.JWT(
-            credentials.client_email,
-            undefined,
-            credentials.private_key,
-            ['https://www.googleapis.com/auth/drive'],
-            undefined
-        );
-    }
-
-    public async getAccessToken(): Promise<string> {
-        try {
-            const res = await this.client.getAccessToken();
-            if (res.token) {
-                return res.token;
-            } else {
-                throw new Error('Falha ao obter o token de acesso.');
-            }
-        } catch (error) {
-            console.error('Erro ao obter o token de acesso:', error);
-            throw error;
-        }
-    }
-
-    public async liberaPermissaoAnexo(anexo: string): Promise<any[]> {
-        try {
-            const res = await this.client.getAccessToken();
-
-            let apiURL = `https://www.googleapis.com/drive/v3/files/${anexo}/permissions`
-
-            let headers = {
-                'Authorization': `Bearer ${res.token}`,
-                'Content-Type': 'application/json'
-            };
-
-            let dominios = [
-                "colegioqi.com.br",
-                "aocuboeducacao.com.br",
-                "colegioleonardodavinci.com.br",
-                "crechebomtempo.com.br",
-                "crecheescolaipe.com.br",
-                "crecheglobaltree.com.br",
-                "crecheipe.com.br",
-                "crechesunny.com.br",
-                "cubo.global",
-                "matrizeducacao.com.br",
-                "parceiros.proraiz.com.br",
-                "parceiros.raizeducacao.com.br",
-                "proraiz.com.br",
-                "raizeducacao.com.br",
-                "sarahdawseyjf.com.br",
-                "sdjf.com.br",
-                "unificado.com.br",
-                "escolaintegra.com",
-                "colegioapogeu.com.br",
-                "escolasap.com.br",
-                "sapereira.com.br"
-            ]
-
-            let respostas = []
-
-            for (let i = 0; i < dominios.length; i++) {
-                let envelope = {
-                    "type": "domain",
-                    "role": "reader",  // Pode ser "reader", "writer", "owner"
-                    "domain": dominios[i]// E-mail da pessoa com quem você quer compartilhar
-                }
-                let resposta = await axios.post(apiURL, envelope, { headers: headers })
-                respostas.push(resposta.data);
-            }
-
-            if (respostas) {
-                return respostas
-            } else {
-                throw new Error('Falha ao obter o token de acesso.');
-            }
-        } catch (error) {
-            console.error('Erro ao obter o token de acesso:', error);
-            throw error;
-        }
-    }
 }
