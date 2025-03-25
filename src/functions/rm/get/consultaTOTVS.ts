@@ -18,7 +18,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const parametros = `${queryParams.cc}/0/${queryParams.cs}?parameters=${queryParams.p}`;
 
     try {
-        const apiURL = baseURL + endpoint + parametros;
+        const apiURL = baseURL + endpoint + parametros; // URL da API
 
         const response = await axios.get(apiURL, {
             headers: {
