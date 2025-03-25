@@ -153,3 +153,11 @@ functions:
           path: /tokenGoogle
           method: get
           cors: true
+
+  consultaTOTVS:
+      handler: src/functions/rm/get/consultaTOTVS.handler
+      events:
+        - http:
+            path: /consultaTOTVS
+            method: get
+            cors: true
