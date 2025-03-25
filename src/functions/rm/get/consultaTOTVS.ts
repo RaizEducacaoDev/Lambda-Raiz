@@ -26,8 +26,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 'Content-Type': 'application/json',
             },
         });
-
+        if (response.data.length !== 0) {
         return formatResponse(200, { message: 'Consulta realizada com sucesso.', data: response.data });
+        }
+        else{
+            return formatResponse(402, { message: 'Nenhuma informação encontrada.', data: [] });
+        }
     } catch (error) {
         return formatResponse(500, { message: 'Erro interno no servidor.', error: error instanceof Error ? error.message : String(error) });
     }
