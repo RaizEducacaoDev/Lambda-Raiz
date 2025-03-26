@@ -30,7 +30,7 @@ function formatDateComponents(date: Date) {
 
 /**
  * Obtém a data atual no formato ISO completo com timezone
- * @returns String com a data atual no formato ISO
+ * @returns String com a data atual no formato ISO completo com timezone (ex: YYYY-MM-DDTHH:mm:ss±HH:mm)
  */
 export function getCurrentDateISO(): string {
     const dataAtual = new Date();
@@ -39,7 +39,7 @@ export function getCurrentDateISO(): string {
 
 /**
  * Obtém a data e hora atual sem timezone
- * @returns String com a data e hora atual
+ * @returns String com a data e hora local no formato ISO sem offset (ex: YYYY-MM-DDTHH:mm:ss)
  */
 export function getDateTime(): string {
     const agora = new Date();
@@ -50,7 +50,7 @@ export function getDateTime(): string {
 /**
  * Converte uma string de data no formato DD/MM/YYYY para formato ISO
  * @param dateStr String de data no formato DD/MM/YYYY
- * @returns String com a data convertida para formato ISO
+ * @returns String com a data convertida para formato ISO completo com timezone (ex: YYYY-MM-DDTHH:mm:ss±HH:mm)
  * @throws Error se o formato da data for inválido
  */
 export function convertToISOFormat(dateStr: string): string {
