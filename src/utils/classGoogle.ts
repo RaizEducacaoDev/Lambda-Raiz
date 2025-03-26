@@ -42,58 +42,51 @@ export class ConfigManagerGoogle {
 
     public async liberaPermissaoAnexo(anexo: string): Promise<any[]> {
         try {
-            const res = await this.client.getAccessToken();
-
-            let apiURL = `https://www.googleapis.com/drive/v3/files/${anexo}/permissions`
-
-            let headers = {
-                'Authorization': `Bearer ${res.token}`,
+            console.log(`Iniciando liberação de permissões para o arquivo: ${anexo}`);
+            
+            // Obtém o token de acesso do cliente JWT
+            const { token } = await this.client.getAccessToken();
+            
+            // Configuração da API do Google Drive
+            const apiURL = `https://www.googleapis.com/drive/v3/files/${anexo}/permissions`;
+            const headers = {
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             };
-
-            let dominios = [
+            
+            // Lista de domínios autorizados
+            const dominios = [
                 "colegioqi.com.br",
-                "aocuboeducacao.com.br",
-                "colegioleonardodavinci.com.br",
-                "crechebomtempo.com.br",
-                "crecheescolaipe.com.br",
-                "crecheglobaltree.com.br",
-                "crecheipe.com.br",
-                "crechesunny.com.br",
-                "cubo.global",
-                "matrizeducacao.com.br",
-                "parceiros.proraiz.com.br",
-                "parceiros.raizeducacao.com.br",
-                "proraiz.com.br",
-                "raizeducacao.com.br",
-                "sarahdawseyjf.com.br",
-                "sdjf.com.br",
-                "unificado.com.br",
-                "escolaintegra.com",
-                "colegioapogeu.com.br",
-                "escolasap.com.br",
-                "sapereira.com.br"
-            ]
-
-            let respostas = []
-
-            for (let i = 0; i < dominios.length; i++) {
-                let envelope = {
-                    "type": "domain",
-                    "role": "reader",  // Pode ser "reader", "writer", "owner"
-                    "domain": dominios[i]// E-mail da pessoa com quem você quer compartilhar
-                }
-                let resposta = await axios.post(apiURL, envelope, { headers: headers })
-                respostas.push(resposta.data);
-            }
-
-            if (respostas) {
-                return respostas
-            } else {
-                throw new Error('Falha ao obter o token de acesso.');
-            }
+                // ... outros domínios
+            ];
+            
+            console.log(`Configurando permissões de leitura para ${dominios.length} domínios`);
+            
+            // Cria promises para cada permissão de domínio
+            const permissionPromises = dominios.map((domain) => {
+                console.log(`Adicionando permissão para o domínio: ${domain}`);
+                
+                const payload = {
+                    type: "domain",
+                    role: "reader",
+                    domain: domain
+                };
+                
+                return axios.post(apiURL, payload, { headers })
+                            .then(response => response.data);
+            });
+            
+            // Executa todas as operações de permissão
+            const responses = await Promise.all(permissionPromises);
+            
+            console.log(`Permissões liberadas com sucesso para o arquivo: ${anexo}`);
+            return responses;
         } catch (error) {
-            console.error('Erro ao obter o token de acesso:', error);
+            console.error(`Erro detalhado ao liberar permissões para ${anexo}:`, {
+                message: (error as Error).message,
+                response: (error as any).response?.data,
+                stack: (error as Error).stack
+            });
             throw error;
         }
     }
