@@ -11,7 +11,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const queryParams = event.queryStringParameters;
     console.log('Parâmetros recebidos:', queryParams);
 
-    let formatParametro = ((queryParams?.p ?? '') as string).replaceAll('@', ';');
+    let formatParametro = ((queryParams?.p ?? '') as string).replaceAll('%', ';');
 
 
     const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
