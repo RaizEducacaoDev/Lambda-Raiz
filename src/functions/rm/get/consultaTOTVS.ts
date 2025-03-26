@@ -7,28 +7,38 @@ import axios from 'axios';
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
+    // Obtém os parâmetros da query string da requisição
     const queryParams = event.queryStringParameters;
+    console.log('Parâmetros recebidos:', queryParams);
 
-    const baseURL = ConfigManagerRm.getUrl();
-    const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/';
-    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${queryParams?.p}`;
+    const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
+    const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/'; // Endpoint da API
+    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${queryParams?.p}`; // Monta os parâmetros dinâmicos
+    console.log('URL construída:', baseURL + endpoint + parametros);
 
     try {
         const apiURL = baseURL + endpoint + parametros;
 
+        // Realiza a requisição GET para o serviço TOTVS
         const response = await axios.get(apiURL, {
             headers: {
-                'Authorization': `Basic ${ConfigManagerRm.getCredentials()}`,
-                'Content-Type': 'application/json',
+                'Authorization': `Basic ${ConfigManagerRm.getCredentials()}`, // Autenticação básica
+                'Content-Type': 'application/json', // Tipo de conteúdo JSON
             },
         });
+
+        console.log('Resposta da API:', response.data);
+
+        // Verifica se há dados na resposta
         if (response.data.length !== 0) {
-        return formatResponse(200, { message: 'Consulta realizada com sucesso.', data: response.data });
-        }
-        else{
+            return formatResponse(200, { message: 'Consulta realizada com sucesso.', data: response.data });
+        } else {
+            console.warn('Nenhuma informação encontrada.');
             return formatResponse(402, { message: 'Nenhuma informação encontrada.', data: [] });
         }
     } catch (error) {
+        // Loga o erro para facilitar a depuração
+        console.error('Erro ao consultar o serviço TOTVS:', error);
         return formatResponse(500, { message: 'Erro interno no servidor.', error: error instanceof Error ? error.message : String(error) });
     }
 };
