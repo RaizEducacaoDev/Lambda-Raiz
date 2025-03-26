@@ -63,7 +63,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (result) {
             console.log(`Arquivo ${result} enviado com sucesso, liberando permissões...`);
-            ConfigManagerGoogle.liberaPermissaoAnexo(result);
+            await ConfigManagerGoogle.liberaPermissaoAnexo(result);
             let link = `https://drive.google.com/file/d/${result}/view`
             return formatResponse(200, { link });
         } else {

@@ -82,7 +82,11 @@ export class ConfigManagerGoogle {
             console.log(`Permissões liberadas com sucesso para o arquivo: ${anexo}`);
             return responses;
         } catch (error) {
-            console.error(`Erro ao liberar permissões para ${anexo}:`, error);
+            console.error(`Erro detalhado ao liberar permissões para ${anexo}:`, {
+                message: (error as Error).message,
+                response: (error as any).response?.data,
+                stack: (error as Error).stack
+            });
             throw error;
         }
     }
