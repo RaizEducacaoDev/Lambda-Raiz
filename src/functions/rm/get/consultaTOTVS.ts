@@ -11,9 +11,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     const queryParams = event.queryStringParameters;
     console.log('Parâmetros recebidos:', queryParams);
 
+    let formatParametro = ((queryParams?.p ?? '') as string).replaceAll('|', ';');
+
+
     const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
     const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/'; // Endpoint da API
-    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${queryParams?.p}`; // Monta os parâmetros dinâmicos
+    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${formatParametro}`; // Monta os parâmetros dinâmicos
+    
     console.log('URL construída:', baseURL + endpoint + parametros);
 
     try {
