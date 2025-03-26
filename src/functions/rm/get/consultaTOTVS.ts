@@ -9,13 +9,9 @@ const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 export const handler: APIGatewayProxyHandler = async (event) => {
     const queryParams = event.queryStringParameters;
 
-    if (!queryParams) {
-        return formatResponse(400, { message: 'Parâmetros de consulta são obrigatórios.' });
-    }
-
     const baseURL = ConfigManagerRm.getUrl();
     const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/';
-    const parametros = `${queryParams.cc}/0/${queryParams.cs}?parameters=${queryParams.p}`;
+    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${queryParams?.p}`;
 
     try {
         const apiURL = baseURL + endpoint + parametros; // URL da API
