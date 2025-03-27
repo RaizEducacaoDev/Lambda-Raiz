@@ -17,7 +17,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
         const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/'; // Endpoint da API
-        const parametros = `RAIZA0016/0/S?parameters=${queryParams?.p || 'MARCA=MATRIZ'}`; // Monta os parâmetros dinâmicos
+        const parametros = `RAIZA.0016/0/S?parameters=${queryParams?.p || 'MARCA=MATRIZ'}`; // Monta os parâmetros dinâmicos
         console.log('[INFO] URL construída:', baseURL + endpoint + parametros);
 
         const apiURL = baseURL + endpoint + parametros;
