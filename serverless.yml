@@ -168,3 +168,17 @@ functions:
             path: /consultaAlunosPorGrade
             method: get
             cors: true
+  consultaDePagamento:
+      handler: src/functions/rm/get/consultaDePagamento.handler
+      events:
+        - http:
+            path: /consultaDePagamento
+            method: get
+            cors: true
+  consultaDeHorarios:
+      handler: src/functions/rm/get/consultaDeHorarios.handler
+      events:
+        - http:
+            path: /consultaDeHorarios
+            method: get
+            cors: true
