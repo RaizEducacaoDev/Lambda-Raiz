@@ -57,7 +57,26 @@ export class ConfigManagerGoogle {
             // Lista de domínios autorizados
             const dominios = [
                 "colegioqi.com.br",
-                // ... outros domínios
+                "aocuboeducacao.com.br",
+                "colegioleonardodavinci.com.br",
+                "crechebomtempo.com.br",
+                "crecheescolaipe.com.br",
+                "crecheglobaltree.com.br",
+                "crecheipe.com.br",
+                "crechesunny.com.br",
+                "cubo.global",
+                "matrizeducacao.com.br",
+                "parceiros.proraiz.com.br",
+                "parceiros.raizeducacao.com.br",
+                "proraiz.com.br",
+                "raizeducacao.com.br",
+                "sarahdawseyjf.com.br",
+                "sdjf.com.br",
+                "unificado.com.br",
+                "escolaintegra.com",
+                "colegioapogeu.com.br",
+                "escolasap.com.br",
+                "sapereira.com.br"
             ];
             
             console.log(`Configurando permissões de leitura para ${dominios.length} domínios`);
