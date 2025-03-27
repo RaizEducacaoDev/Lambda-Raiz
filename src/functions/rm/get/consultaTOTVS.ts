@@ -7,22 +7,23 @@ import axios from 'axios';
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
-    // Obtém os parâmetros da query string da requisição
-    const queryParams = event.queryStringParameters;
-    console.log('Parâmetros recebidos:', queryParams);
-
-    let formatParametro = ((queryParams?.p ?? '') as string).replaceAll('%', ';');
-
-
-    const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
-    const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/'; // Endpoint da API
-    const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${formatParametro}`; // Monta os parâmetros dinâmicos
-    
-    console.log('URL construída:', baseURL + endpoint + parametros);
-
     try {
+        // Obtém os parâmetros da query string da requisição
+        const queryParams = event.queryStringParameters;
+        console.log('[INFO] Parâmetros recebidos:', queryParams);
+
+        // Formata o parâmetro 'p', substituindo '%' por ';'
+        let formatParametro = ((queryParams?.p ?? '') as string).replaceAll('%', ';');
+        console.log('[INFO] Parâmetro formatado:', formatParametro);
+
+        const baseURL = ConfigManagerRm.getUrl(); // URL base do serviço TOTVS
+        const endpoint = ':8051/api/framework/v1/consultaSQLServer/RealizaConsulta/'; // Endpoint da API
+        const parametros = `${queryParams?.cc}/0/${queryParams?.cs}?parameters=${formatParametro}`; // Monta os parâmetros dinâmicos
+        console.log('[INFO] URL construída:', baseURL + endpoint + parametros);
+
         const apiURL = baseURL + endpoint + parametros;
 
+        console.log('[INFO] Enviando requisição para a API TOTVS...');
         // Realiza a requisição GET para o serviço TOTVS
         const response = await axios.get(apiURL, {
             headers: {
@@ -31,18 +32,19 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             },
         });
 
-        console.log('Resposta da API:', response.data);
+        console.log('[INFO] Resposta da API recebida:', response.data);
 
         // Verifica se há dados na resposta
         if (response.data.length !== 0) {
+            console.log('[INFO] Dados encontrados na resposta.');
             return formatResponse(200, { message: 'Consulta realizada com sucesso.', data: response.data });
         } else {
-            console.warn('Nenhuma informação encontrada.');
+            console.warn('[WARN] Nenhuma informação encontrada na resposta.');
             return formatResponse(402, { message: 'Nenhuma informação encontrada.', data: [] });
         }
     } catch (error) {
         // Loga o erro para facilitar a depuração
-        console.error('Erro ao consultar o serviço TOTVS:', error);
+        console.error('[ERROR] Erro ao consultar o serviço TOTVS:', error);
         return formatResponse(500, { message: 'Erro interno no servidor.', error: error instanceof Error ? error.message : String(error) });
     }
 };
