@@ -161,3 +161,10 @@ functions:
             path: /consultaTOTVS
             method: get
             cors: true
+  consultaAlunosPorGrade:
+      handler: src/functions/rm/get/consultaAlunosPorGrade.handler
+      events:
+        - http:
+            path: /consultaAlunosPorGrade
+            method: get
+            cors: true
