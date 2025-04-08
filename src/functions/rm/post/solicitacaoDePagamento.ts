@@ -12,30 +12,26 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     try {
         const campos = JSON.parse(event.body as string);
 
-        const ESTOQUE = campos.codigoDaColigada === '1'
+        const ESTOQUE = campos.codigoDaColigada == '1'
             ? `${(campos.filialDeEntrega as string).split(" - ")[0]}.001`
             : `${(campos.unidadeFilial as string).split(" - ")[0]}.001`;
 
-        const HISTORICOCURTO = campos.tipoDeSolicitacao === 'P'
-            ? `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}`
-            : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
-        DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`
+        const HISTORICOCURTO = campos.informacoes;
 
-        const CODCOLIGADA = campos.codigoDaColigada === '1'
+        const CODCOLIGADA = campos.codigoDaColigada == '1'
             ? campos.codigoDaColigada2 || ''
             : campos.codigoDaColigada || '';
 
-        const CODFILIAL = campos.codigoDaColigada === '1'
+        const CODFILIAL = campos.codigoDaColigada == '1'
             ? campos.codigoDaFilial2 || ''
             : campos.codigoDaFilial || '';
 
-        const CODTMV = campos.tipoDeSolicitacao === 'P'
-            ? '1.1.10'
-            : '1.1.11';
-        const SERIE = campos.tipoDeSolicitacao === 'P'
-            ? 'PM'
-            : 'PS';
+        const CODTMV = campos.codigoDoMovimento;
+
+        const SERIE = campos.serie;
+
         const OC = campos.ordemDeCompra;
+
         const AD = campos.adiantamento;
         // const valorTotal = UTILS.moedaParaFloat(campos.valorTotal);
         const valorTotal = campos.valorTotal;
@@ -156,7 +152,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         }
 
         var cData = '';
-        
+
         cData += '<![CDATA['
             cData += '<MovMovimento>'
                 cData += '<TMOV>'
@@ -267,18 +263,25 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     cData += XML.montaTag('VALOR', valorTotal)
                     cData += XML.montaTag('IDMOVRATCCU', '-1')
                 cData += '</TMOVRATCCU>'
-                // cData += '<TMOVPAGTO>'
-                //     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
-                //     cData += XML.montaTag('IDSEQPAGTO', '-1');
-                //     cData += XML.montaTag('IDMOV', '-1');
-                //     cData += XML.montaTag('TAXAADM', '0.0000');
-                //     cData += XML.montaTag('IDLAN', '-1');
-                //     cData += XML.montaTag('DATAVENCIMENTO', date.getDateTime());
-                //     cData += XML.montaTag('TIPOPAGAMENTO', '1');
-                //     cData += XML.montaTag('VALOR', valorTotal);
-                //     cData += XML.montaTag('DEBITOCREDITO', 'C');
-                //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
-                // cData += '</TMOVPAGTO>'
+                if(SERIE == "PR"){
+                    cData += '<TMOVPAGTO>'
+                        cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
+                        cData += XML.montaTag('IDSEQPAGTO', '-1');
+                        cData += XML.montaTag('IDMOV', '-1');
+                        cData += XML.montaTag('CODCOLCFODEFAULT', '0');
+                        cData += XML.montaTag('TIPOFORMAPAGTO', '3');
+                        cData += XML.montaTag('TAXAADM', '0.0000');
+                        cData += XML.montaTag('CODCXA', '003');
+                        cData += XML.montaTag('CODCOLCXA', '0');
+                        cData += XML.montaTag('IDLAN', '-1');
+                        cData += XML.montaTag('IDFORMAPAGTO', '2');
+                        cData += XML.montaTag('DATAVENCIMENTO', '2025-04-08T00:00:00');
+                        cData += XML.montaTag('TIPOPAGAMENTO', '1');
+                        cData += XML.montaTag('VALOR', valorTotal);
+                        cData += XML.montaTag('DEBITOCREDITO', 'C');
+                        cData += XML.montaTag('IDSEQPAGTO1', '-1');
+                    cData += '</TMOVPAGTO>'
+                }
                 cData += xmlContent // ITENS DO MOVIMENTO
                 cData += '<TMOVCOMPL>'
                     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA)
