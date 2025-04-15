@@ -98,6 +98,14 @@ functions:
           method: post
           cors: true
 
+  gravaOrcamento:
+    handler: src/functions/rm/post/gravaOrcamento.handler
+    events:
+      - http:
+          path: /gravaOrcamento
+          method: post
+          cors: true
+
   solicitacaoDeCompra:
     handler: src/functions/rm/post/solicitacaoDeCompra.handler
     events:

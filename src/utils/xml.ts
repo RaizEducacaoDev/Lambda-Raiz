@@ -1,5 +1,23 @@
 import { XMLParser } from 'fast-xml-parser';
 
+export function corrigirXML(xml: string, novoIdPgto: number): string {
+    // Corrige valores numéricos com 4 casas decimais, separador ponto
+    const corrigidoNumeros = xml.replace(/>(\d+)\.(\d{4})</g, (_, intPart, decimalPart) => {
+      const numero = parseFloat(`${intPart}.${decimalPart}`);
+      const valorFormatado = numero.toFixed(2).replace('.', ',');
+      return `>${valorFormatado}<`;
+    });
+  
+    // Altera o valor da tag <IDPGTO>...</IDPGTO>
+    const corrigidoIdPgto = corrigidoNumeros.replace(
+      /<IDPGTO>(.*?)<\/IDPGTO>/,
+      `<IDPGTO>${novoIdPgto}</IDPGTO>`
+    );
+  
+    return corrigidoIdPgto;
+}
+  
+
 export function escapeXml(unsafe: string): string {
     return unsafe.replace(/[<>&'"\\/]/g, (char) => {
         switch (char) {
@@ -55,6 +73,10 @@ async function parseXML<T>(
 
 export async function buscaResultado(xmlString: string): Promise<string> {
     return parseXML(xmlString, 'SaveRecordResponse', 'SaveRecordResult');
+}
+
+export async function buscaResultadoRead(xmlString: string): Promise<string> {
+    return parseXML(xmlString, 'ReadRecordResponse', 'ReadRecordResult');
 }
 
 export async function buscaResultadoCotacao(xmlString: string): Promise<any> {

@@ -279,6 +279,8 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
 export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SERIE: string, CODTMV: string, ESTOQUE: string, HISTORICOCURTO: string) {
     try {
         let listaDeItens = campos.itens as object[];
+        let listaDeParcelas = campos.parcelas as object[];
+        let tipoDeFrete = campos.tipoDeFrete == 'CIF'? '1' : '2';
     
         var cData = '';
         cData += '<![CDATA['
@@ -290,19 +292,21 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', '-1')
+                    cData += XML.montaTag('NUMEROMOV', campos.numeroDaNF)
                     cData += XML.montaTag('SERIE', SERIE)
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
+                    cData += XML.montaTag('CHAVEACESSONFE', campos.chaveDeAcesso)
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
                     cData += XML.montaTag('VALORLIQUIDO', campos.valorTotal)
                     cData += XML.montaTag('VALOROUTROS', campos.valorTotal)
+                    cData += XML.montaTag('FRETECIFOUFOB', tipoDeFrete)
                     cData += XML.montaTag('PERCENTUALFRETE', '0.0000')
                     cData += XML.montaTag('VALORFRETE', '0.0000')
                     cData += XML.montaTag('PERCENTUALDESC', '0.0000')
@@ -315,7 +319,7 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -330,12 +334,12 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -345,7 +349,7 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -391,18 +395,23 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALOR', campos.valorTotal)
                     cData += XML.montaTag('IDMOVRATCCU', '-1')
                 cData += '</TMOVRATCCU>'
-                // cData += '<TMOVPAGTO>'
-                //     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
-                //     cData += XML.montaTag('IDSEQPAGTO', '-1');
-                //     cData += XML.montaTag('IDMOV', '-1');
-                //     cData += XML.montaTag('TAXAADM', '0.0000');
-                //     cData += XML.montaTag('IDLAN', '-1');
-                //     cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
-                //     cData += XML.montaTag('TIPOPAGAMENTO', '1');
-                //     cData += XML.montaTag('VALOR', campos.valorTotal);
-                //     cData += XML.montaTag('DEBITOCREDITO', 'C');
-                //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
-                // cData += '</TMOVPAGTO>'
+                for (let j = 0; j < listaDeParcelas.length; j++) {
+                    let valorDaParcela = (listaDeParcelas[j] as { valorDaParcela: string }).valorDaParcela;
+                    let vencimentoDaParcela = (listaDeParcelas[j] as { vencimentoDaParcela: string }).vencimentoDaParcela;
+
+                    cData += '<TMOVPAGTO>'
+                        cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
+                        cData += XML.montaTag('IDSEQPAGTO', '-1');
+                        cData += XML.montaTag('IDMOV', '-1');
+                        //cData += XML.montaTag('TAXAADM', '0.0000');
+                        cData += XML.montaTag('IDLAN', '-1');
+                        cData += XML.montaTag('DATAVENCIMENTO', vencimentoDaParcela);
+                        cData += XML.montaTag('TIPOPAGAMENTO', '1');
+                        cData += XML.montaTag('VALOR', valorDaParcela);
+                        //cData += XML.montaTag('DEBITOCREDITO', 'C');
+                        cData += XML.montaTag('IDSEQPAGTO1', '-1');
+                    cData += '</TMOVPAGTO>'
+                }
                 for (let i = 0; i < listaDeItens.length; i++) {
                     let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
@@ -420,7 +429,7 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -545,25 +554,27 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
 export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SERIE: string, CODTMV: string, ESTOQUE: string, HISTORICOCURTO: string) {
     try {
         let listaDeItens = campos.itens as object[];
+        let listaDeParcelas = campos.parcelas as object[];
     
         var cData = '';
         cData += '<![CDATA['
             cData += '<MovMovimento>'
-                cData += '<TMOV>'
+                    cData += '<TMOV>'
                     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA)
                     cData += XML.montaTag('IDMOV', '-1')
                     cData += XML.montaTag('CODFILIAL', CODFILIAL)
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', '-1')
+                    cData += XML.montaTag('NUMEROMOV', campos.numeroDaNF)
                     cData += XML.montaTag('SERIE', SERIE)
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
                     cData += XML.montaTag('MOVIMPRESSO', '0')
+                    cData += XML.montaTag('CODDADOSPGTO', '2')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -578,10 +589,11 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PERCCOMISSAO', '0.0000')
                     cData += XML.montaTag('CODMEN', '01')
                     cData += XML.montaTag('PESOLIQUIDO', '0.0000')
+                    cData += XML.montaTag('IDNAT', '20')
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -590,18 +602,19 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('CODVEN1', campos.codigoDoComprador)
                     cData += XML.montaTag('PERCCOMISSAOVEN2', '0.0000')
                     cData += XML.montaTag('CODCOLCFO', '0')
+                    cData += XML.montaTag('CODNAT', campos.naturezaFiscal)
                     cData += XML.montaTag('CODUSUARIO', 'p_heflo')
                     cData += XML.montaTag('CODFILIALDESTINO', CODFILIAL)
                     cData += XML.montaTag('GERADOPORLOTE', '0')
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -611,7 +624,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -657,18 +670,23 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALOR', campos.valorTotal)
                     cData += XML.montaTag('IDMOVRATCCU', '-1')
                 cData += '</TMOVRATCCU>'
-                // cData += '<TMOVPAGTO>'
-                //     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
-                //     cData += XML.montaTag('IDSEQPAGTO', '-1');
-                //     cData += XML.montaTag('IDMOV', '-1');
-                //     cData += XML.montaTag('TAXAADM', '0.0000');
-                //     cData += XML.montaTag('IDLAN', '-1');
-                //     cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
-                //     cData += XML.montaTag('TIPOPAGAMENTO', '1');
-                //     cData += XML.montaTag('VALOR', campos.valorTotal);
-                //     cData += XML.montaTag('DEBITOCREDITO', 'C');
-                //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
-                // cData += '</TMOVPAGTO>'
+                for (let j = 0; j < listaDeParcelas.length; j++) {
+                    let valorDaParcela = (listaDeParcelas[j] as { valorDaParcela: string }).valorDaParcela;
+                    let vencimentoDaParcela = (listaDeParcelas[j] as { vencimentoDaParcela: string }).vencimentoDaParcela;
+
+                    cData += '<TMOVPAGTO>'
+                        cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
+                        cData += XML.montaTag('IDSEQPAGTO', '-1');
+                        cData += XML.montaTag('IDMOV', '-1');
+                        //cData += XML.montaTag('TAXAADM', '0.0000');
+                        cData += XML.montaTag('IDLAN', '-1');
+                        cData += XML.montaTag('DATAVENCIMENTO', vencimentoDaParcela);
+                        cData += XML.montaTag('TIPOPAGAMENTO', '1');
+                        cData += XML.montaTag('VALOR', valorDaParcela);
+                        //cData += XML.montaTag('DEBITOCREDITO', 'C');
+                        cData += XML.montaTag('IDSEQPAGTO1', '-1');
+                    cData += '</TMOVPAGTO>'
+                }
                 for (let i = 0; i < listaDeItens.length; i++) {
                     let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
@@ -686,7 +704,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -694,6 +712,8 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('CODCCUSTO', campos.codigoDoCentroDeCusto);
                         cData += XML.montaTag('ALIQORDENACAO', '0.0000');
                         cData += XML.montaTag('QUANTIDADEORIGINAL', qtdDoItem);
+                        cData += XML.montaTag('CODNATUREZAITEM', campos.naturezaFiscal)
+                        cData += XML.montaTag('IDNAT', '20')
                         cData += XML.montaTag('FLAG', '0');
                         cData += XML.montaTag('FATORCONVUND', '0.0000');
                         cData += XML.montaTag('VALORBRUTOITEM', '0.0000'); 
@@ -1091,7 +1111,7 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -1109,7 +1129,7 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -1124,12 +1144,12 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -1139,7 +1159,7 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -1214,7 +1234,7 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -1339,6 +1359,7 @@ export function xmlMovRE(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
 export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SERIE: string, CODTMV: string, ESTOQUE: string, HISTORICOCURTO: string) {
     try {
         let listaDeItens = campos.itens as object[];
+        let listaDeParcelas = campos.parcelas as object[];
     
         var cData = '';
         cData += '<![CDATA['
@@ -1350,14 +1371,14 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', '-1')
+                    cData += XML.montaTag('NUMEROMOV', campos.numeroDaNF)
                     cData += XML.montaTag('SERIE', SERIE)
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -1375,7 +1396,7 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -1390,12 +1411,12 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -1405,7 +1426,7 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -1451,19 +1472,25 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALOR', campos.valorTotal)
                     cData += XML.montaTag('IDMOVRATCCU', '-1')
                 cData += '</TMOVRATCCU>'
-                // cData += '<TMOVPAGTO>'
-                //     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
-                //     cData += XML.montaTag('IDSEQPAGTO', '-1');
-                //     cData += XML.montaTag('IDMOV', '-1');
-                //     cData += XML.montaTag('TAXAADM', '0.0000');
-                //     cData += XML.montaTag('IDLAN', '-1');
-                //     cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
-                //     cData += XML.montaTag('TIPOPAGAMENTO', '1');
-                //     cData += XML.montaTag('VALOR', campos.valorTotal);
-                //     cData += XML.montaTag('DEBITOCREDITO', 'C');
-                //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
-                // cData += '</TMOVPAGTO>'
+                for (let j = 0; j < listaDeParcelas.length; j++) {
+                    let valorDaParcela = (listaDeParcelas[j] as { valorDaParcela: string }).valorDaParcela;
+                    let vencimentoDaParcela = (listaDeParcelas[j] as { vencimentoDaParcela: string }).vencimentoDaParcela;
+
+                    cData += '<TMOVPAGTO>'
+                        cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
+                        cData += XML.montaTag('IDSEQPAGTO', '-1');
+                        cData += XML.montaTag('IDMOV', '-1');
+                        //cData += XML.montaTag('TAXAADM', '0.0000');
+                        cData += XML.montaTag('IDLAN', '-1');
+                        cData += XML.montaTag('DATAVENCIMENTO', vencimentoDaParcela);
+                        cData += XML.montaTag('TIPOPAGAMENTO', '1');
+                        cData += XML.montaTag('VALOR', valorDaParcela);
+                        //cData += XML.montaTag('DEBITOCREDITO', 'C');
+                        cData += XML.montaTag('IDSEQPAGTO1', '-1');
+                    cData += '</TMOVPAGTO>'
+                }
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -1479,7 +1506,7 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -1632,14 +1659,14 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', '-1')
+                    cData += XML.montaTag('NUMEROMOV', campos.numeroDaNF)
                     cData += XML.montaTag('SERIE', SERIE)
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -1657,7 +1684,7 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -1672,12 +1699,12 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -1687,7 +1714,7 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -1753,9 +1780,9 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('NUMEROSEQUENCIAL', '1');
                     cData += XML.montaTag('IDPRD', idPrd);
                     cData += XML.montaTag('QUANTIDADE', '1');
-                    cData += XML.montaTag('PRECOUNITARIO', campos.valorTotal); // PRECO UNITARIO
+                    cData += XML.montaTag('PRECOUNITARIO', campos.valorDoItem); // PRECO UNITARIO
                     cData += XML.montaTag('PRECOTABELA', '0.0000');
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                     cData += XML.montaTag('CODUND', 'UN');
                     cData += XML.montaTag('QUANTIDADEARECEBER', '1');
                     cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -1914,7 +1941,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -1932,7 +1959,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -1947,12 +1974,12 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -1962,7 +1989,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -2021,6 +2048,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
                 // cData += '</TMOVPAGTO>'
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -2036,7 +2064,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -2179,7 +2207,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -2197,7 +2225,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -2212,12 +2240,12 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -2227,7 +2255,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -2286,6 +2314,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
                 // cData += '</TMOVPAGTO>'
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -2301,7 +2330,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -2444,7 +2473,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -2462,7 +2491,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -2477,12 +2506,12 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -2492,7 +2521,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -2551,6 +2580,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                 //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
                 // cData += '</TMOVPAGTO>'
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -2566,7 +2596,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -2709,7 +2739,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -2727,7 +2757,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -2742,12 +2772,12 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -2757,7 +2787,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -2816,6 +2846,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
                 // cData += '</TMOVPAGTO>'
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -2831,7 +2862,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');
@@ -2974,7 +3005,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
@@ -2992,7 +3023,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
-                    cData += XML.montaTag('DATAMOVIMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATAMOVIMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('GEROUFATURA', '0')
                     cData += XML.montaTag('NUMEROLCTABERTO', '1')
                     cData += XML.montaTag('CODCFOAUX', campos.codigoDoFornecedor)
@@ -3007,12 +3038,12 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('STATUSEXPORTCONT', '0')
                     cData += XML.montaTag('GEROUCONTATRABALHO', '0')
                     cData += XML.montaTag('GERADOPORCONTATRABALHO', '0')
-                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORULTIMAALTERACAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('INDUSOOBJ', '0.00')
                     cData += XML.montaTag('INTEGRADOBONUM', '0')
                     cData += XML.montaTag('FLAGPROCESSADO', '0')
                     cData += XML.montaTag('ABATIMENTOICMS', '0.0000')
-                    cData += XML.montaTag('HORARIOEMISSAO', DATE.getDateTime())
+                    cData += XML.montaTag('HORARIOEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('USUARIOCRIACAO', 'p_heflo')
                     cData += XML.montaTag('STSEMAIL', '0.0000')
                     cData += XML.montaTag('VALORBRUTOINTERNO', campos.valorTotal)
@@ -3022,7 +3053,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('VALORDESPCONDICIONAL', '0.0000')
                     cData += XML.montaTag('INTEGRADOAUTOMACAO', '0.0000')
                     cData += XML.montaTag('INTEGRAAPLICACAO', 'T')
-                    cData += XML.montaTag('DATALANCAMENTO', DATE.getDateTime())
+                    cData += XML.montaTag('DATALANCAMENTO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('RECIBONFESTATUS', '0')
                     cData += XML.montaTag('VALORMERCADORIAS', '0.0000')
                     cData += XML.montaTag('USARATEIOVALORFIN', '1')
@@ -3081,6 +3112,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 //     cData += XML.montaTag('IDSEQPAGTO1', '-1');
                 // cData += '</TMOVPAGTO>'
                 for (let i = 0; i < listaDeItens.length; i++) {
+                    let codigoDaNatureza = (listaDeItens[i] as { codigoDaNatureza: string }).codigoDaNatureza;
                     let codigoDoItem = (listaDeItens[i] as { codigoDoItem: string }).codigoDoItem;
                     let qtdDoItem = (listaDeItens[i] as { qtdDoItem: string }).qtdDoItem;
                     let valorDoItem = (listaDeItens[i] as { valorDoItem: string }).valorDoItem;
@@ -3096,7 +3128,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
                         cData += XML.montaTag('PRECOUNITARIO', valorDoItem); // PRECO UNITARIO
                         cData += XML.montaTag('PRECOTABELA', '0.0000');
-                        cData += XML.montaTag('DATAEMISSAO', DATE.getDateTime());
+                        cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao));
                         cData += XML.montaTag('CODUND', 'UN');
                         cData += XML.montaTag('QUANTIDADEARECEBER', qtdDoItem);
                         cData += XML.montaTag('VALORUNITARIO', '0.0000');

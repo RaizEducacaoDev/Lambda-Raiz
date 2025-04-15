@@ -82,8 +82,8 @@ export class wsDataserver {
     }
 
     public async saveRecord(cData: string, dataServer: string, contexto: string): Promise<string> {
-        if (!cData || !dataServer || !contexto) {
-            throw new Error('CDATA, DATASERVER e CONTEXTO são obrigatórios');
+        if (!cData || !dataServer) {
+            throw new Error('CDATA, DATASERVER são obrigatórios');
         }
 
         const url = `${this.getUrl()}:8051/wsDataServer/IwsDataServer`;
@@ -110,6 +110,44 @@ export class wsDataserver {
         try {
             const response = await axios.post(url, soapEnvelope, { headers });
             return XML.buscaResultado(response.data);
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                const message = `Erro na requisição SOAP: ${error.message}`;
+                const status = error.response?.status;
+                const data = error.response?.data;
+                throw new Error(`${message} - Status: ${status} - Data: ${JSON.stringify(data)}`);
+            }
+            throw new Error(`Erro desconhecido na requisição SOAP: ${error}`);
+        }
+    }
+
+    public async readReacord(primaryKey: string, dataServer: string, contexto: string): Promise<string> {
+        if (!primaryKey || !dataServer) {
+            throw new Error('PRIMARYKEY, DATASERVER são obrigatórios');
+        }
+
+        const url = `${this.getUrl()}:8051/wsDataServer/IwsDataServer`;
+        const headers = {
+            'Authorization': `Basic ${this.getCredentials()}`,
+            'Content-Type': 'text/xml;charset=UTF-8',
+            'SOAPAction': 'http://www.totvs.com/IwsDataServer/ReadRecord'
+        };
+
+        const soapEnvelope =
+        `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
+            <soapenv:Header/>
+            <soapenv:Body>
+            <tot:ReadRecord>
+                <tot:DataServerName>${dataServer}</tot:DataServerName>
+                <tot:PrimaryKey>${primaryKey}</tot:PrimaryKey>
+                <tot:Contexto>${contexto}</tot:Contexto>
+            </tot:ReadRecord>
+            </soapenv:Body>
+        </soapenv:Envelope>`;
+
+        try {
+            const response = await axios.post(url, soapEnvelope, { headers });
+            return XML.buscaResultadoRead(response.data);
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 const message = `Erro na requisição SOAP: ${error.message}`;

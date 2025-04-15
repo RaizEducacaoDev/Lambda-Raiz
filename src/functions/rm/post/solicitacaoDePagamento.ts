@@ -10,8 +10,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const campos = JSON.parse(event.body as string);
 
         const ESTOQUE = campos.codigoDaColigada == '1'
-            ? `${(campos.filialDeEntrega as string).split(" - ")[0]}.001`
-            : `${(campos.unidadeFilial as string).split(" - ")[0]}.001`;
+            ? `${(campos.filial as string).split(" - ")[0]}.001`
+            : `${(campos.filial2 as string).split(" - ")[0]}.001`;
 
         const HISTORICOCURTO = campos.informacoes;
 
