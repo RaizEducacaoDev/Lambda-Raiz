@@ -13,3 +13,22 @@ export function valorNaoDefinido(valor: any) {
         return valor
     }
 }
+
+/**
+ * Converte um valor monetário em formato brasileiro (1.000.000,00) para formato float (1000000.00)
+ * @param value - Valor monetário como string no formato brasileiro
+ * @returns Representação do valor em formato float como string
+ */
+export function moedaParaFloat(value: string): string {
+    if (!value) return '0.00';
+    
+    // Remove all dots and replace comma with dot
+    const cleanValue = value
+        .replace(/\./g, '')  // Remove all dots
+        .replace(',', '.');  // Replace comma with dot
+    
+    // Parse to float and format with 2 decimal places
+    const floatValue = parseFloat(cleanValue).toFixed(2);
+    
+    return floatValue;
+}

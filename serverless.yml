@@ -3,7 +3,7 @@ service: lambda-raiz
 provider:
   name: aws
   runtime: nodejs22.x
-  stage: ${opt:stage, 'prod'}
+  stage: ${opt:stage, 'dev'}
   region: sa-east-1
   architecture: arm64
   timeout: 30
@@ -87,6 +87,22 @@ functions:
     events:
       - http:
           path: /comunicaFornecedor
+          method: post
+          cors: true
+
+  solicitacaoDePagamento:
+    handler: src/functions/rm/post/solicitacaoDePagamento.handler
+    events:
+      - http:
+          path: /solicitacaoDePagamento
+          method: post
+          cors: true
+
+  gravaOrcamento:
+    handler: src/functions/rm/post/gravaOrcamento.handler
+    events:
+      - http:
+          path: /gravaOrcamento
           method: post
           cors: true
 
