@@ -321,6 +321,47 @@ export class ConfigManagerRm {
         }
     }
 
+    async consultaSQL(codigoDaConsulta: string, parametros: string): Promise<any> {
+        try {
+            const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/${codigoDaConsulta}/0/T?parameters=${parametros}`;
+
+            // Make request with timeout and retry logic
+            const response = await axios.get(apiURL, {
+                headers: {
+                    'Authorization': `Basic ${this.getCredentials()}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 30000, // 30 second timeout
+                validateStatus: (status) => status >= 200 && status < 300
+            });
+
+            // Validate response data
+            if (!response.data) {
+                throw new Error('Empty response received from API');
+            }
+
+            // Return data if exists, otherwise null
+            if (Array.isArray(response.data) && response.data.length > 0) {
+                return response.data;
+            }
+
+            console.warn('[WARN] No data found in response');
+            return null;
+
+        } catch (error) {
+            // Enhanced error handling
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error('[ERROR] TOTVS service query failed:', {
+                error: errorMessage,
+                query: codigoDaConsulta,
+                params: parametros
+            });
+
+            throw new Error(`Failed to query TOTVS service: ${errorMessage}`);
+        }
+    }
+
     async getQuadroComparativo(CODCOTACAO: string, CODCOLIGADA: string, NOMEARQUIVO: string): Promise<string> {
         try {
             const apiURL = `${this.getUrl()}:8051/wsReport/IwsReport`;

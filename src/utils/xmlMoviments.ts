@@ -555,6 +555,29 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
     try {
         let listaDeItens = campos.itens as object[];
         let listaDeParcelas = campos.parcelas as object[];
+        let listaDeTributos = campos.tributos as object[];
+
+        let tributos = ''
+
+        listaDeTributos.forEach((tributo, indice) => {
+            tributos += '<TTRBITMMOV>';
+                tributos += XML.montaTag('CODCOLIGADA', CODCOLIGADA); 
+                tributos += XML.montaTag('IDMOV', '-1');  
+                tributos += XML.montaTag('NSEQITMMOV', (indice + 1).toString());   
+                tributos += XML.montaTag('CODTRB', (tributo as { codigoDoTributo: string }).codigoDoTributo);
+                tributos += XML.montaTag('CODTRBBASE', (tributo as { codigoDoTributo: string }).codigoDoTributo);
+                //tributos += XML.montaTag('ALIQUOTA', '0.0000');
+                tributos += XML.montaTag('BASEDECALCULO', (tributo as { valorDaAliquota: string }).valorDaAliquota);
+                //tributos += XML.montaTag('VALOR', '0.0000');    
+                //tributos += XML.montaTag('FATORREDUCAO', '0.0000');
+                //tributos += XML.montaTag('FATORSUBSTTRIB', '0.0000');
+                tributos += XML.montaTag('BASEDECALCULOCALCULADA', (tributo as { valorDaAliquota: string }).valorDaAliquota);
+                //tributos += XML.montaTag('EDITADO', '0');
+                //tributos += XML.montaTag('PERCDIFERIMENTOPARCIALICMS', '0.0000');
+                //tributos += XML.montaTag('BASECHEIA', '0.0000');
+                tributos += XML.montaTag('CODRETENCAO',  (tributo as { codigoDeRetencao: string }).codigoDeRetencao);
+            tributos += '</TTRBITMMOV>';
+        });
     
         var cData = '';
         cData += '<![CDATA['
@@ -762,33 +785,6 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('IDMOV', '-1');
                         cData += XML.montaTag('NSEQITMMOV', (i + 1).toString());
                     cData += '</TITMMOVCOMPL>'
-                    // if(OC !== '' || AD !== ''){
-                    //     cData += '<TITMMOVRELAC>'
-                    //         cData += XML.montaTag('IDMOVORIGEM', OC);
-                    //         cData += XML.montaTag('NSEQITMMOVORIGEM', (i + 1).toString());
-                    //         cData += XML.montaTag('CODCOLORIGEM', CODCOLIGADA);
-                    //         cData += XML.montaTag('IDMOVDESTINO', '-1');
-                    //         cData += XML.montaTag('NSEQITMMOVDESTINO', (i + 1).toString());
-                    //         cData += XML.montaTag('CODCOLDESTINO', CODCOLIGADA);
-                    //         cData += XML.montaTag('QUANTIDADE', qtdDoItem);
-                    //     cData += '</TITMMOVRELAC>'
-                    // }
-                    // for (let j = 0; j < tributos.length; j++) {
-                    //     cData += '<TTRBITMMOV>';
-                    //         cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA); 
-                    //         cData += XML.montaTag('IDMOV', '-1');  
-                    //         cData += XML.montaTag('NSEQITMMOV', (i + 1).toString());   
-                    //         cData += XML.montaTag('CODTRB', tributos[j]);
-                    //         cData += XML.montaTag('BASEDECALCULO', totalDoItem);
-                    //         cData += XML.montaTag('VALOR', '0.0000');    
-                    //         cData += XML.montaTag('FATORREDUCAO', '0.0000');
-                    //         cData += XML.montaTag('FATORSUBSTTRIB', '0.0000');
-                    //         cData += XML.montaTag('BASEDECALCULOCALCULADA', totalDoItem);
-                    //         cData += XML.montaTag('EDITADO', '0');
-                    //         cData += XML.montaTag('PERCDIFERIMENTOPARCIALICMS', '0.0000');
-                    //         cData += XML.montaTag('BASECHEIA', '0.0000');
-                    //     cData += '</TTRBITMMOV>';
-                    // }
                     cData += '<TITMMOVFISCAL>'
                         cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
                         cData += XML.montaTag('IDMOV', '-1');
@@ -797,7 +793,8 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('VLRTOTTRIB', '0.0000');
                         cData += XML.montaTag('AQUISICAOPAA', '0');
                         cData += XML.montaTag('POEBTRIBUTAVEL', '1');
-                    cData += '</TITMMOVFISCAL>';
+                    cData += '</TITMMOVFISCAL>'
+                    cData += tributos
                 }
                 cData += '<TMOVCOMPL>'
                     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA)
