@@ -43,7 +43,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         let record: any = null;
         let obj: any = null;
 
-        if (CODMOV == '1.2.06' || CODMOV == '1.2.08' || CODMOV == '1.2.17' || CODMOV == '1.2.9' || CODMOV == '1.2.10' || CODMOV == '1.2.11' || CODMOV == '1.2.12') {
+        if (CODMOV == '1.2.06' || CODMOV == '1.2.08' || CODMOV == '1.2.17' || CODMOV == '1.2.09' || CODMOV == '1.2.10' || CODMOV == '1.2.11' || CODMOV == '1.2.12') {
             var natureza = ''
 
             if (CODMOV == '1.2.06') {
@@ -81,9 +81,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     }
                 });
             }
-
-
-
         } else {
             // Agrupar itens por IDORCAMENTO e somar valores
             const grupos = itens.reduce((acc: any, item: any) => {
