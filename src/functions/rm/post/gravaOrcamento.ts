@@ -103,8 +103,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 obj = await parseStringPromise(record);
 
                 // Formatar valores existentes para o padrão 1000,00
-                if (obj.PRJ3873536.ZMDMOVIMENTACOESORC) {
-                    obj.PRJ3873536.ZMDMOVIMENTACOESORC.forEach((mov: any) => {
+                if (obj.PRJ3873536.ZMDORCAMENTO) {
+                    obj.PRJ3873536.ZMDORCAMENTO.forEach((mov: any) => {
                         if (mov.VALOR) {
                             const valorNumerico = parseFloat(mov.VALOR);
                             mov.VALOR = valorNumerico.toFixed(2).replace('.', ',');
@@ -112,11 +112,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     });
                 }
 
-                const movimentacoes = obj.PRJ3873536.ZMDMOVIMENTACOESORC || [];
+                const movimentacoes = obj.PRJ3873536.ZMDORCAMENTO;
 
                 novaMovimentacao.ID = movimentacoes.length + 1;
                 novaMovimentacao.TIPO = "E";
                 novaMovimentacao.SOLICITACAO = (grupo as { SOLICITACAO: string }).SOLICITACAO;
+                novaMovimentacao.IDORC = (grupo as { IDORCAMENTO: string }).IDORCAMENTO;
                 novaMovimentacao.DESCRICAO = (grupo as { DESCRICAO: string }).DESCRICAO;
                 novaMovimentacao.VALOR = ((grupo as { VALOR: number }).VALOR).toFixed(2).replace('.', ',');
 
