@@ -64,7 +64,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             novaMovimentacao.TIPO = "E";
             novaMovimentacao.SOLICITACAO = campos.SOLICITACAO;
             novaMovimentacao.DESCRICAO = campos.DESCRICAO;
-            novaMovimentacao.VALOR = campos.VALORDOPAGAMENTO;
+            novaMovimentacao.VALOR = campos.VALORDOPAGAMENTO.replace(/\./g, '');
 
             let result = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${natureza}`);
             novaMovimentacao.IDORC = result[0].ID;
@@ -76,8 +76,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             if (obj.PRJ3873536.ZMDMOVIMENTACOESORC) {
                 obj.PRJ3873536.ZMDMOVIMENTACOESORC.forEach((mov: any) => {
                     if (mov.VALOR) {
-                        const valorNumerico = parseFloat(mov.VALOR);
-                        mov.VALOR = valorNumerico.toFixed(2).replace('.', ',');
+                        mov.VALOR = mov.VALOR;
+                        mov.VALOR = mov.VALOR.toString().replace(/\./g, '');
                     }
                 });
             }
@@ -93,7 +93,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         DESCRICAO: item.DESCRICAO
                     };
                 }
-                acc[key].VALOR += parseFloat(item.VALOR);
+                acc[key].VALOR += item.VALOR;
                 return acc;
             }, {});
 
@@ -106,8 +106,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 if (obj.PRJ3873536.ZMDORCAMENTO) {
                     obj.PRJ3873536.ZMDORCAMENTO.forEach((mov: any) => {
                         if (mov.VALOR) {
-                            const valorNumerico = parseFloat(mov.VALOR);
-                            mov.VALOR = valorNumerico.toFixed(2).replace('.', ',');
+                            mov.VALOR = mov.VALOR.toString().replace(/\./g, '');
                         }
                     });
                 }
@@ -119,8 +118,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 novaMovimentacao.SOLICITACAO = (grupo as { SOLICITACAO: string }).SOLICITACAO;
                 novaMovimentacao.IDORC = (grupo as { IDORCAMENTO: string }).IDORCAMENTO;
                 novaMovimentacao.DESCRICAO = (grupo as { DESCRICAO: string }).DESCRICAO;
-                novaMovimentacao.VALOR = ((grupo as { VALOR: number }).VALOR).toFixed(2).replace('.', ',');
-
+                novaMovimentacao.VALOR = ((grupo as { VALOR: string }).VALOR).replace(/\./g, '');
             }
 
         }
