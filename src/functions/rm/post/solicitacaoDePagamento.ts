@@ -7,7 +7,9 @@ const dataServer = new wsDataserver.wsDataserver();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
+        console.log('[RM-LOG] Iniciando processamento da solicitação de pagamento');
         const campos = JSON.parse(event.body as string);
+        console.log(`[RM-LOG] Parâmetros recebidos: ${JSON.stringify(campos)}`);
 
         // const ESTOQUE = campos.codigoDaColigada == '1'
         //     ? `${(campos.filial2 as string).split(" - ")[0]}.001`
@@ -39,6 +41,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         // let listaDeItens = campos.itens as object[];
         // const tributos = ['ICMS', 'IPI'];
 
+        console.log('[RM-LOG] Gerando XML para movimento tipo:', campos.codigoDoMovimento);
         let cData = '';
 
         switch (campos.codigoDoMovimento) {
@@ -84,7 +87,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             throw new Error('Falha ao gerar XML de movimento');
         }
 
+        console.log('[RM-LOG] XML gerado com sucesso. Enviando para o DataServer');
         let result = await dataServer.saveRecord(cData, 'MovMovimentoTBCData', `CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`);
+        console.log('[RM-LOG] Resposta do DataServer:', result.substring(0, 100));
 
         if (!(result).includes('=')) {
             let PG = result.split(';')[1]
@@ -98,6 +103,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             return formatResponse(400, { message: 'Internal Server Error', error: error });
         }
     } catch (error) {
+        console.error('[RM-ERRO] Falha no processamento:', error);
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 };
