@@ -252,7 +252,7 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -533,7 +533,7 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -815,7 +815,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -1082,7 +1082,7 @@ export function xmlMovFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -1635,7 +1635,7 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -1932,7 +1932,7 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -2237,7 +2237,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -2543,7 +2543,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -2814,7 +2814,7 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -3085,7 +3085,7 @@ export function xmlMovPAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);
@@ -3356,7 +3356,7 @@ export function xmlMovRFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
-                    cData += XML.montaTag('LINKDOCUMENTO', campos.anexarNotaFiscal);
+                    cData += XML.montaTag('LINKDOCUMENTO', (campos.anexarNotaFiscal).slice(0, 255));
                     cData += XML.montaTag('REMETENTE', campos.remetente);
                     cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
                     cData += XML.montaTag('DESTINATARIO', campos.destinatario);

@@ -68,7 +68,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             }
             novaMovimentacao.TIPO = "E";
             novaMovimentacao.SOLICITACAO = campos.SOLICITACAO;
-            novaMovimentacao.DESCRICAO = (campos.DESCRICAO).slice(0, 254);
+            novaMovimentacao.DESCRICAO = (campos.DESCRICAO).slice(0, 255);
             novaMovimentacao.VALOR = campos.VALORDOPAGAMENTO.replace(/\./g, '');
 
             console.log(`[RM-LOG] Consultando SQL com natureza: ${natureza}`);
