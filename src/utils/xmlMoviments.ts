@@ -1704,7 +1704,7 @@ export function xmlMovCC(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('FATIMPRESSA', '0')
                     cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
-                    cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
+                    cData += XML.montaTag('CODCPG', '001')
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
                     cData += XML.montaTag('VALORLIQUIDO', campos.valorTotal)
                     cData += XML.montaTag('VALOROUTROS', campos.valorTotal)
@@ -1971,7 +1971,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
             totalDoItem: campos.valorTotal
         }];
 
-        if(campos.valorDoIPTU != ""){
+        if(campos.valorDoIPTU != "" && campos.valorDoIPTU!= "0,00"){
             listaDeItens.push({
                 codigoDaNatureza: '02.09.00001',
                 codigoDoItem: '11',
@@ -1980,7 +1980,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 totalDoItem: campos.valorDoIPTU
             })
         }
-        if(campos.valorDoCondominio != ""){
+        if(campos.valorDoCondominio != "" && campos.valorDoCondominio!= "0,00"){
             listaDeItens.push({
                 codigoDaNatureza: '02.09.00001',
                 codigoDoItem:'5659',
@@ -1989,7 +1989,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                 totalDoItem: campos.valorDoCondominio
             })
         }
-        if(campos.valorTaxaDeIncendio != ""){
+        if(campos.valorTaxaDeIncendio != "" && campos.valorTaxaDeIncendio!= "0,00"){
             listaDeItens.push({
                 codigoDaNatureza: '02.09.00001',
                 codigoDoItem:'5709',
@@ -2018,7 +2018,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('FATIMPRESSA', '0')
                     cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
-                    cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
+                    cData += XML.montaTag('CODCPG', '001')
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
                     cData += XML.montaTag('VALORLIQUIDO', campos.valorTotal)
                     cData += XML.montaTag('VALOROUTROS', campos.valorTotal)
