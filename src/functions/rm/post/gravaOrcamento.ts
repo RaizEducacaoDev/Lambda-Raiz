@@ -103,7 +103,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         DESCRICAO: item.DESCRICAO
                     };
                 }
-                acc[key].VALOR += item.VALOR;
+                acc[key].VALOR += parseFloat(item.VALOR.replace(/\./g, '').replace(/\,/g, '.'));
                 return acc;
             }, {});
 
@@ -118,8 +118,14 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 // Formatar valores existentes para o padrão 1000,00
                 if (obj.PRJ3873536.ZMDORCAMENTO) {
                     obj.PRJ3873536.ZMDORCAMENTO.forEach((mov: any) => {
+                        if (mov.SALDO) {
+                            mov.SALDO = mov.SALDO.toString().replace(/\./g, ',');
+                        }
+                        if (mov.ORCAMENTO) {
+                            mov.ORCAMENTO = mov.ORCAMENTO.toString().replace(/\./g, ',');
+                        }
                         if (mov.VALOR) {
-                            mov.VALOR = mov.VALOR.toString().replace(/\./g, '');
+                            mov.VALOR = mov.VALOR.toString().replace(/\./g, ',');
                         }
                     });
                 }
@@ -131,12 +137,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 novaMovimentacao.SOLICITACAO = (grupo as { SOLICITACAO: string }).SOLICITACAO;
                 novaMovimentacao.IDORC = (grupo as { IDORCAMENTO: string }).IDORCAMENTO;
                 novaMovimentacao.DESCRICAO = ((grupo as { DESCRICAO: string }).DESCRICAO).slice(0, 254);
-                novaMovimentacao.VALOR = ((grupo as { VALOR: string }).VALOR).replace(/\./g, '');
+                novaMovimentacao.VALOR = ((grupo as { VALOR: string }).VALOR.toString()).replace(/\./g, ',');
             }
 
         }
 
-        if (!obj.PRJ3873536.ZMDMOVIMENTACOESORC) {
+        if (obj.PRJ3873536.ZMDMOVIMENTACOESORC) {
+            obj.PRJ3873536.ZMDMOVIMENTACOESORC.forEach((element: { VALOR: string | number }) => {
+                element.VALOR = element.VALOR.toString().replace(/\./g, ','); // Formata o valor para o padrão 1000,00
+            });
+        } else {
             obj.PRJ3873536.ZMDMOVIMENTACOESORC = [];
         }
 
