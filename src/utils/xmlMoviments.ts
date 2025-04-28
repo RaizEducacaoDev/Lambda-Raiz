@@ -2009,7 +2009,7 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', '-1')
+                    cData += XML.montaTag('NUMEROMOV', (campos.numeroDaNF).slice(0, 9))
                     cData += XML.montaTag('SERIE', 'ALPJ')
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
