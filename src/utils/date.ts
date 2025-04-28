@@ -43,7 +43,7 @@ export function getCurrentDateISO(): string {
  */
 export function getDateTime(): string {
     const agora = new Date();
-    return `${agora.getFullYear()}-${padNumber(agora.getMonth()+1)}-${padNumber(agora.getDate())}` +
+    return `${agora.getFullYear()}-${padNumber(agora.getMonth()+1)}-${padNumber(agora.getDate()-1)}` +
         `T00:00:00`;
 }
 
