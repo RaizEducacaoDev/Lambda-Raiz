@@ -122,7 +122,7 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('TAXAADM', '0.0000');
                     cData += XML.montaTag('IDLAN', '-1');
-                    cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
+                    cData += XML.montaTag('DATAVENCIMENTO', campos.dataDeVencimento);
                     cData += XML.montaTag('TIPOPAGAMENTO', '1');
                     cData += XML.montaTag('VALOR', campos.valorTotal);
                     cData += XML.montaTag('DEBITOCREDITO', 'C');
@@ -200,7 +200,7 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                 //     cData += XML.montaTag('CODCOLCXA', '0');
                 //     cData += XML.montaTag('IDLAN', '-1');
                 //     cData += XML.montaTag('IDFORMAPAGTO', '2');
-                //     cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
+                //     cData += XML.montaTag('DATAVENCIMENTO', campos.dataDeVencimento);
                 //     cData += XML.montaTag('TIPOPAGAMENTO', '1');
                 //     cData += XML.montaTag('VALOR', campos.valorTotal);
                 //     cData += XML.montaTag('DEBITOCREDITO', 'C');
@@ -970,7 +970,7 @@ export function xmlMovFF(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                 cData += XML.montaTag('CODCOLCXA', '0');
                 cData += XML.montaTag('IDLAN', '-1');
                 cData += XML.montaTag('IDFORMAPAGTO', '2');
-                cData += XML.montaTag('DATAVENCIMENTO', DATE.getDateTime());
+                cData += XML.montaTag('DATAVENCIMENTO', campos.dataDeVencimento);
                 cData += XML.montaTag('TIPOPAGAMENTO', '1');
                 cData += XML.montaTag('VALOR', campos.valorTotal);
                 cData += XML.montaTag('DEBITOCREDITO', 'C');
