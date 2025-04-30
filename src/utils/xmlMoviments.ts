@@ -305,7 +305,7 @@ export function xmlMovNM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('FATIMPRESSA', '0')
                     cData += XML.montaTag('DATAEMISSAO', DATE.convertToISOFormat(campos.dataDeEmissao))
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
-                    cData += XML.montaTag('CHAVEACESSONFE', campos.chaveDeAcesso)
+                    cData += XML.montaTag('CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, ''))
                     cData += XML.montaTag('CODCPG', campos.codigoDaFormaPagamento)
                     cData += XML.montaTag('VALORBRUTO', campos.valorTotal)
                     cData += XML.montaTag('VALORLIQUIDO', campos.valorTotal)
