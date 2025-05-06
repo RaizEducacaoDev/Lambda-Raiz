@@ -13,6 +13,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         console.log('[RM-LOG] Iniciando processamento de gravação de orçamento');
         const campos = JSON.parse(event.body as string);
         const itens = campos.itens;
+        console.log(`[RM-LOG] Parâmetros recebidos: ${JSON.stringify(campos)}`);
         const CODMOV = campos.MOVIMENTO;
         console.log(`[RM-LOG] Tipo de movimento: ${CODMOV}`);
         console.log(`[RM-LOG] Dados recebidos: ${JSON.stringify(campos).substring(0, 200)}...`);
