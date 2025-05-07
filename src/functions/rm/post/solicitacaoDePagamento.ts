@@ -2,8 +2,10 @@ import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as wsDataserver from '../../../utils/wsDataserver';
 import * as MOV from '../../../utils/xmlMoviments';
+import { ConfigManagerRm } from '../../../utils/classRm';
 
 const dataServer = new wsDataserver.wsDataserver();
+const configManagerRm = new ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
@@ -14,19 +16,18 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         // const ESTOQUE = campos.codigoDaColigada == '1'
         //     ? `${(campos.filial2 as string).split(" - ")[0]}.001`
         //     : `${(campos.filial as string).split(" - ")[0]}.001`;
-
-        const ESTOQUE = campos.localDeEstoque;
-
+        
         const HISTORICOCURTO = campos.informacoes;
-
+        
         const CODCOLIGADA = campos.codigoDaColigada == '1'
-            ? campos.codigoDaColigada2 || ''
-            : campos.codigoDaColigada || '';
-
+        ? campos.codigoDaColigada2 || ''
+        : campos.codigoDaColigada || '';
+        
         const CODFILIAL = campos.codigoDaColigada == '1'
-            ? campos.codigoDaFilial2 || ''
-            : campos.codigoDaFilial || '';
-
+        ? campos.codigoDaFilial2 || ''
+        : campos.codigoDaFilial || '';
+        
+        const ESTOQUE = await configManagerRm.getLOC(CODCOLIGADA as string, CODFILIAL as string);
         const CODTMV = campos.codigoDoMovimento;
 
         const SERIE = campos.serie;
