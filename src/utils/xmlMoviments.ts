@@ -750,7 +750,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('ALIQORDENACAO', '0.0000');
                         cData += XML.montaTag('QUANTIDADEORIGINAL', qtdDoItem);
                         cData += XML.montaTag('CODNATUREZAITEM', campos.codigoDaNaturezaFiscal)
-                        cData += XML.montaTag('IDNAT', '20')
+                        cData += XML.montaTag('IDNAT', campos.idDaNaturezaFiscal)
                         cData += XML.montaTag('FLAG', '0');
                         cData += XML.montaTag('FATORCONVUND', '0.0000');
                         cData += XML.montaTag('VALORBRUTOITEM', '0.0000'); 
