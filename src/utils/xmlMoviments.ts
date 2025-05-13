@@ -626,7 +626,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('PERCCOMISSAO', '0.0000')
                     cData += XML.montaTag('CODMEN', '01')
                     cData += XML.montaTag('PESOLIQUIDO', '0.0000')
-                    cData += XML.montaTag('IDNAT', '20')
+                    cData += XML.montaTag('IDNAT', campos.idDaNaturezaFiscal)
                     cData += XML.montaTag('PESOBRUTO', '0.0000')
                     cData += XML.montaTag('IDMOVLCTFLUXUS', '-1')
                     cData += XML.montaTag('CODMOEVALORLIQUIDO', 'R$')
@@ -639,7 +639,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('CODVEN1', campos.codigoDoComprador)
                     cData += XML.montaTag('PERCCOMISSAOVEN2', '0.0000')
                     cData += XML.montaTag('CODCOLCFO', '0')
-                    cData += XML.montaTag('CODNAT', campos.naturezaFiscal)
+                    cData += XML.montaTag('CODNAT', campos.codigoDaNaturezaFiscal)
                     cData += XML.montaTag('CODUSUARIO', 'p_heflo')
                     cData += XML.montaTag('CODFILIALDESTINO', CODFILIAL)
                     cData += XML.montaTag('GERADOPORLOTE', '0')
@@ -749,7 +749,7 @@ export function xmlMovNS(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                         cData += XML.montaTag('CODCCUSTO', campos.codigoDoCentroDeCusto);
                         cData += XML.montaTag('ALIQORDENACAO', '0.0000');
                         cData += XML.montaTag('QUANTIDADEORIGINAL', qtdDoItem);
-                        cData += XML.montaTag('CODNATUREZAITEM', campos.naturezaFiscal)
+                        cData += XML.montaTag('CODNATUREZAITEM', campos.codigoDaNaturezaFiscal)
                         cData += XML.montaTag('IDNAT', '20')
                         cData += XML.montaTag('FLAG', '0');
                         cData += XML.montaTag('FATORCONVUND', '0.0000');
