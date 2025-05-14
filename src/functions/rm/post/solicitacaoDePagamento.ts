@@ -101,6 +101,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 throw new Error('Failed to extract error message from result');
             }
             const error = matchResult[0];
+            console.warn('[RM-WARN] Falha no processamento:', error);
             return formatResponse(400, { message: 'Internal Server Error', error: error });
         }
     } catch (error) {

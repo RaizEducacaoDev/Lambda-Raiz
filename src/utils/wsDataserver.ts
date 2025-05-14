@@ -18,7 +18,7 @@ export class wsDataserver {
      * @constructor
      */
     constructor() {
-        console.log('[RM] Inicializando configurações dos ambientes');
+        console.info('[RM] Inicializando configurações dos ambientes');
         this.configuracoes = {
             prod: {
                 url: process.env.RM_PROD || '',
@@ -37,7 +37,7 @@ export class wsDataserver {
      */
     private getStage(): ConfiguracaoStage {
         const stage = process.env.STAGE || 'dev';
-        console.log(`[RM] Verificando ambiente configurado: ${stage}`);
+        console.info(`[RM] Verificando ambiente configurado: ${stage}`);
         const stagesDisponiveis = Object.keys(this.configuracoes).join(', ');
 
         if (!stage || !this.configuracoes[stage]) {
@@ -53,7 +53,7 @@ export class wsDataserver {
      * @throws {Error} Se as variáveis de ambiente não estiverem definidas
      */
     private encodeCredentials(): string {
-        console.log('[RM] Validando credenciais de acesso');
+        console.info('[RM] Validando credenciais de acesso');
         const validarVariavelAmbiente = (nome: string, valor?: string): string => {
             if (!valor || valor.trim() === '') {
                 throw new Error(`Variável de ambiente ${nome} não está definida ou é inválida`);
@@ -109,11 +109,11 @@ export class wsDataserver {
                 </soapenv:Body>
             </soapenv:Envelope>`;
 
-        console.log(`[RM] Iniciando saveRecord no DataServer: ${dataServer}`);
-        console.log(`[RM] CDATA: ${cData}`);
+        console.info(`[RM] Iniciando saveRecord no DataServer: ${dataServer}`);
+        console.debug(`[RM] CDATA: ${cData}`);
         try {
             const response = await axios.post(url, soapEnvelope, { headers });
-            console.log('[RM] Requisição SOAP saveRecord bem-sucedida');
+            console.info('[RM] Requisição SOAP saveRecord bem-sucedida');
             return XML.buscaResultado(response.data);
         } catch (error) {
             console.error('[RM] Erro no saveRecord:', error);
@@ -151,10 +151,10 @@ export class wsDataserver {
             </soapenv:Body>
         </soapenv:Envelope>`;
 
-        console.log(`[RM] Iniciando readReacord para chave: ${primaryKey}`);
+        console.info(`[RM] Iniciando readReacord para chave: ${primaryKey}`);
         try {
             const response = await axios.post(url, soapEnvelope, { headers });
-            console.log('[RM] Requisição SOAP readReacord bem-sucedida');
+            console.info('[RM] Requisição SOAP readReacord bem-sucedida');
             return XML.buscaResultadoRead(response.data);
         } catch (error) {
             console.error('[RM] Erro no readReacord:', error);
