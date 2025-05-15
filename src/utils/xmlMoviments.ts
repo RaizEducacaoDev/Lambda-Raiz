@@ -1415,6 +1415,7 @@ export function xmlMovTM(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
+                    cData += XML.montaTag('CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, ''))
                     cData += XML.montaTag('DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao))
                     cData += XML.montaTag('DATASAIDA', DATE.getNow())
                     cData += XML.montaTag('COMISSAOREPRES', '0.0000')
