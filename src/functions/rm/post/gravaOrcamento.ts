@@ -73,7 +73,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             novaMovimentacao.VALOR = campos.VALORDOPAGAMENTO.replace(/\./g, '');
 
             console.log(`[RM-LOG] Consultando SQL com natureza: ${natureza}`);
-            let result = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${natureza}`);
+            let result = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${natureza}`);
             console.log('[RM-LOG] Resultado da consulta SQL obtido com sucesso');
             novaMovimentacao.IDORC = result[0].ID;
 

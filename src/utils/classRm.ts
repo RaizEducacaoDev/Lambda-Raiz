@@ -346,9 +346,9 @@ export class ConfigManagerRm {
         }
     }
 
-    async consultaSQL(codigoDaConsulta: string, parametros: string): Promise<any> {
+    async consultaSQL(codigoDaConsulta: string, sistema: string, parametros: string): Promise<any> {
         try {
-            const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/${codigoDaConsulta}/0/T?parameters=${parametros}`;
+            const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/${codigoDaConsulta}/0/${sistema}?parameters=${parametros}`;
 
             // Make request with timeout and retry logic
             const response = await axios.get(apiURL, {

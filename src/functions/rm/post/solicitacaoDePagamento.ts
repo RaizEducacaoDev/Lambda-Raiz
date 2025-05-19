@@ -45,9 +45,17 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         console.log('[RM-LOG] Gerando XML para movimento tipo:', campos.codigoDoMovimento);
         let cData = '';
 
+        if (campos.idDoMovimento != '') {
+            return formatResponse(200, { message: 'Movimento já existe' });
+        }
+
         switch (campos.codigoDoMovimento) {
             case '1.2.06':
-                cData = MOV.xmlMovAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                if(campos.idDoMovimento){
+                    cData = MOV.xmlMovPAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                } else {
+                    cData = MOV.xmlMovAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                }
                 break;
             case '1.2.01':
                 cData = MOV.xmlMovNM(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
@@ -73,9 +81,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             case '1.2.16':
                 cData = MOV.xmlMovRF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
                 break;
-            case '001':
-                cData = MOV.xmlMovPAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
-                break;
             case '1.2.28':
                 cData = MOV.xmlMovRFF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
                 break;
@@ -94,7 +99,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (!(result).includes('=')) {
             let PG = result.split(';')[1]
-            return formatResponse(200, { PG });
+            return formatResponse(200, { PG, });
         } else {
             const matchResult = result.match(/^[^\r\n]+/);
             if (!matchResult) {
