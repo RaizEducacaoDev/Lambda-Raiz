@@ -47,7 +47,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (campos.idDoMovimento != '') {
             return formatResponse(200, { message: 'Movimento já existe' });
-        } else if(campos.movimentoExistente == '') {
+        } else if(campos.movimentoExistente != '') {
             return formatResponse(200, { PG: campos.movimentoExistente });
         }
 
