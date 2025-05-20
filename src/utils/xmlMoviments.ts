@@ -22,7 +22,7 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('MOVIMPRESSO', '0')
                     cData += XML.montaTag('DOCIMPRESSO', '0')
                     cData += XML.montaTag('FATIMPRESSA', '0')
-                    cData += XML.montaTag('DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao))
+                    cData += XML.montaTag('DATAEMISSAO', DATE.toISOSimple(campos.dataDeVencimento))
                     cData += XML.montaTag('DATASAIDA', DATE.getNow())
                     cData += XML.montaTag('DATAMOVIMENTO', DATE.getNow())
                     cData += XML.montaTag('HORARIOEMISSAO', DATE.getNow())
@@ -138,7 +138,7 @@ export function xmlMovAD(campos: any, CODCOLIGADA: string, CODFILIAL: string, SE
                     cData += XML.montaTag('QUANTIDADE', '1');
                     cData += XML.montaTag('PRECOUNITARIO', campos.valorTotal); // PRECO UNITARIO
                     cData += XML.montaTag('PRECOTABELA', '0.0000');
-                    cData += XML.montaTag('DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao))
+                    cData += XML.montaTag('DATAEMISSAO', DATE.toISOSimple(campos.dataDeVencimento))
                     cData += XML.montaTag('CODUND', 'UN');
                     cData += XML.montaTag('QUANTIDADEARECEBER', '1');
                     cData += XML.montaTag('VALORUNITARIO', '0.0000');
