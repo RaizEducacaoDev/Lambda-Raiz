@@ -2311,7 +2311,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
                     cData += XML.montaTag('CODLOC', ESTOQUE)
                     cData += XML.montaTag('CODLOCDESTINO', ESTOQUE)
                     cData += XML.montaTag('CODCFO', campos.codigoDoFornecedor)
-                    cData += XML.montaTag('NUMEROMOV', campos.numeroDoDocumento)
+                    cData += XML.montaTag('NUMEROMOV', campos.numeroDaNF)
                     cData += XML.montaTag('SERIE', 'AL')
                     cData += XML.montaTag('CODTMV', CODTMV)
                     cData += XML.montaTag('TIPO', 'A')
