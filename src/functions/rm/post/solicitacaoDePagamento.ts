@@ -46,9 +46,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         let cData = '';
 
         if (campos.idDoMovimento != '') {
-            return formatResponse(200, { message: 'Movimento já existe' });
+            console.log(`[RM-LOG] Returning existing movement ID: ${campos.idDoMovimento}`);
+            let PG = campos.idDoMovimento;
+            return formatResponse(200, {PG});
         } else if(campos.movimentoExistente != '') {
-            return formatResponse(200, { PG: campos.movimentoExistente });
+            console.log(`[RM-LOG] Returning existing movement: ${campos.movimentoExistente}`);
+            let PG = campos.movimentoExistente;
+            return formatResponse(200, {PG});
         }
 
         switch (campos.codigoDoMovimento) {
@@ -101,7 +105,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (!(result).includes('=')) {
             let PG = result.split(';')[1]
-            return formatResponse(200, { PG, });
+            return formatResponse(200, {PG});
         } else {
             const matchResult = result.match(/^[^\r\n]+/);
             if (!matchResult) {

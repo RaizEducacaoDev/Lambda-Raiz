@@ -1979,28 +1979,28 @@ export function xmlMovAPJ(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
             totalDoItem: campos.valorTotal
         }];
 
-        if(campos.valorDoIPTU != "" && campos.valorDoIPTU!= "0,00"){
+        if(campos.contemIPTU == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
+                codigoDaNatureza: '02.09.00002',
                 codigoDoItem: '11',
                 qtdDoItem: '1',
                 valorDoItem: campos.valorDoIPTU,
                 totalDoItem: campos.valorDoIPTU
             })
         }
-        if(campos.valorDoCondominio != "" && campos.valorDoCondominio!= "0,00"){
+        if(campos.contemCondominio == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
+                codigoDaNatureza: '02.09.00006',
                 codigoDoItem:'5659',
                 qtdDoItem:'1',
                 valorDoItem: campos.valorDoCondominio,
                 totalDoItem: campos.valorDoCondominio
             })
         }
-        if(campos.valorTaxaDeIncendio != "" && campos.valorTaxaDeIncendio!= "0,00"){
+        if(campos.contemTaxaDeIncendio == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
-                codigoDoItem:'5709',
+                codigoDaNatureza: '02.09.00004',
+                codigoDoItem:'1.02.000100',
                 qtdDoItem:'1',
                 valorDoItem: campos.valorTaxaDeIncendio,
                 totalDoItem: campos.valorTaxaDeIncendio
@@ -2285,28 +2285,28 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
             totalDoItem: campos.valorTotal
         }];
 
-        if(campos.valorDoIPTU != ""){
+        if(campos.contemIPTU == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
+                codigoDaNatureza: '02.09.00002',
                 codigoDoItem: '11',
                 qtdDoItem: '1',
                 valorDoItem: campos.valorDoIPTU,
                 totalDoItem: campos.valorDoIPTU
             })
         }
-        if(campos.valorDoCondominio != ""){
+        if(campos.contemCondominio == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
+                codigoDaNatureza: '02.09.00006',
                 codigoDoItem:'5659',
                 qtdDoItem:'1',
                 valorDoItem: campos.valorDoCondominio,
                 totalDoItem: campos.valorDoCondominio
             })
         }
-        if(campos.valorTaxaDeIncendio != ""){
+        if(campos.contemTaxaDeIncendio == "Sim"){
             listaDeItens.push({
-                codigoDaNatureza: '02.09.00001',
-                codigoDoItem:'5709',
+                codigoDaNatureza: '02.09.00004',
+                codigoDoItem:'1.02.000100',
                 qtdDoItem:'1',
                 valorDoItem: campos.valorTaxaDeIncendio,
                 totalDoItem: campos.valorTaxaDeIncendio
