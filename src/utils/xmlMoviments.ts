@@ -2281,8 +2281,8 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string, S
             codigoDaNatureza: '02.09.00001',
             codigoDoItem:'113849',
             qtdDoItem:'1',
-            valorDoItem: campos.valorTotal,
-            totalDoItem: campos.valorTotal
+            valorDoItem: campos.valorPagamento,
+            totalDoItem: campos.valorPagamento
         }];
 
         if(campos.contemIPTU == "Sim"){
