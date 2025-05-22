@@ -1,65 +1,104 @@
 /**
- * Função auxiliar que adiciona zero à esquerda para números menores que 10
+ * Adiciona zero à esquerda para números menores que 10
  * @param num Número a ser formatado
- * @returns String formatada com zero à esquerda se necessário
+ * @returns String formatada com zero à esquerda
  */
-function padNumber(num: number): string {
+function pad(num: number): string {
     return String(num).padStart(2, '0');
 }
 
 /**
- * Formata o offset do fuso horário no formato +/-HH:mm
- * @param date Data para extrair o offset do fuso horário
- * @returns String formatada com o offset do fuso horário
- */
-function formatTimezoneOffset(date: Date) {
-    const offset = -date.getTimezoneOffset();
-    const sinal = offset >= 0 ? '+' : '-';
-    return `${sinal}${padNumber(Math.abs(offset)/60)}:${padNumber(Math.abs(offset)%60)}`;
-}
-
-/**
- * Formata os componentes da data no padrão ISO
+ * Formata data no padrão ISO
  * @param date Data a ser formatada
- * @returns String formatada com a data no padrão YYYY-MM-DDTHH:mm:ss
+ * @param withTz Se deve incluir timezone
+ * @returns String formatada no padrão ISO
  */
-function formatDateComponents(date: Date) {
-    return `${date.getFullYear()}-${padNumber(date.getMonth()+1)}-${padNumber(date.getDate())}` +
-        `T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}:${padNumber(date.getSeconds())}`;
-}
-
-/**
- * Obtém a data atual no formato ISO completo com timezone
- * @returns String com a data atual no formato ISO completo com timezone (ex: YYYY-MM-DDTHH:mm:ss±HH:mm)
- */
-export function getCurrentDateISO(): string {
-    const dataAtual = new Date();
-    return `${formatDateComponents(dataAtual)}${formatTimezoneOffset(dataAtual)}`;
-}
-
-/**
- * Obtém a data e hora atual sem timezone
- * @returns String com a data e hora local no formato ISO sem offset (ex: YYYY-MM-DDTHH:mm:ss)
- */
-export function getDateTime(): string {
-    const agora = new Date();
-    return `${agora.getFullYear()}-${padNumber(agora.getMonth()+1)}-${padNumber(agora.getDate()-1)}` +
-        `T00:00:00`;
-}
-
-/**
- * Converte uma string de data no formato DD/MM/YYYY para formato ISO
- * @param dateStr String de data no formato DD/MM/YYYY
- * @returns String com a data convertida para formato ISO completo com timezone (ex: YYYY-MM-DDTHH:mm:ss±HH:mm)
- * @throws Error se o formato da data for inválido
- */
-export function convertToISOFormat(dateStr: string): string {
-    const [dia, mes, ano] = dateStr.split('/').map(Number);
-    const data = new Date(Date.UTC(ano, mes - 1, dia));
+function formatISO(date: Date, withTz: boolean = false): string {
+    const datePart = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+    const timePart = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     
-    if (isNaN(data.getTime())) {
-        throw new Error("Invalid date format");
+    let result = `${datePart}T${timePart}`;
+    
+    if (withTz) {
+        const offset = -date.getTimezoneOffset();
+        const sign = offset >= 0 ? '+' : '-';
+        const tzPart = `${sign}${pad(Math.abs(offset)/60)}:${pad(Math.abs(offset)%60)}`;
+        result += tzPart;
     }
+    
+    return result;
+}
 
-    return `${formatDateComponents(data)}${formatTimezoneOffset(data)}`;
+/**
+ * Obtém data atual no formato ISO com timezone
+ * @returns Data atual no formato ISO com timezone
+ */
+export function getNowISO(): string {
+    return formatISO(new Date(), true);
+}
+
+/**
+ * Obtém data atual no formato ISO sem timezone (meia-noite)
+ * @returns Data atual no formato ISO sem timezone
+ */
+export function getNow(): string {
+    return formatISO(new Date(), false);
+}
+
+/**
+ * Obtém data atual no formato ISO sem timezone (meia-noite)
+ * @returns Data atual no formato ISO sem timezone
+ */
+export function getToday(): string {
+    const hoje = new Date();
+    return `${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}T00:00:00`;
+}
+
+/**
+ * Converte data de DD/MM/YYYY para formato especificado
+ * @param dateStr Data no formato DD/MM/YYYY
+ * @param withTz Se deve incluir timezone
+ * @returns Data convertida para o formato especificado
+ * @throws Error se formato inválido
+ */
+function parseDate(dateStr: string, withTz: boolean = false): string {
+    const [dia, mes, ano] = dateStr.split('/').map(Number);
+    
+    // Validação básica
+    if (isNaN(dia) || isNaN(mes) || isNaN(ano) || 
+        dia < 1 || dia > 31 || mes < 1 || mes > 12) {
+        throw new Error("Data inválida");
+    }
+    
+    if (withTz) {
+        const data = new Date(Date.UTC(ano, mes - 1, dia));
+        
+        if (isNaN(data.getTime())) {
+            throw new Error("Data inválida");
+        }
+        
+        return formatISO(data, true);
+    } else {
+        return `${ano}-${pad(mes)}-${pad(dia)}T00:00:00`;
+    }
+}
+
+/**
+ * Converte data de DD/MM/YYYY para ISO com timezone
+ * @param dateStr Data no formato DD/MM/YYYY
+ * @returns Data convertida para ISO com timezone
+ * @throws Error se formato inválido
+ */
+export function toISO(dateStr: string): string {
+    return parseDate(dateStr, true);
+}
+
+/**
+ * Converte data de DD/MM/YYYY para ISO sem timezone
+ * @param dateStr Data no formato DD/MM/YYYY
+ * @returns Data convertida para ISO sem timezone
+ * @throws Error se formato inválido
+ */
+export function toISOSimple(dateStr: string): string {
+    return parseDate(dateStr, false);
 }

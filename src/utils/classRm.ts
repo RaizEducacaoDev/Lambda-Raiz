@@ -115,6 +115,31 @@ export class ConfigManagerRm {
         }
     }
 
+    async getLOC(CODCOLIGADA: string, CODFILIAL: string): Promise<any> {
+        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0041/0/T?parameters=CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL}`;
+
+        try {
+            const response = await axios.get(apiURL, {
+                headers: {
+                    'Authorization': `Basic ${this.getCredentials()}`,
+                }
+            });
+
+            if (!response.data || response.data.length === 0) {
+                throw new Error('Resposta da API inválida ou vazia.');
+            }
+
+            const codLoc = response.data[0].CODLOC;
+            return codLoc;
+
+
+        } catch (erro) {
+            console.error('Erro ao converter XML para JSON:', erro);
+
+            throw erro;
+        }
+    }
+
     async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string): Promise<string> {
         try {
             const LINK = `Portal: ${this.getUrl()}/FrameHTML/Web/App/Cmp/PortalDoFornecedor/#/login`
@@ -321,9 +346,9 @@ export class ConfigManagerRm {
         }
     }
 
-    async consultaSQL(codigoDaConsulta: string, parametros: string): Promise<any> {
+    async consultaSQL(codigoDaConsulta: string, sistema: string, parametros: string): Promise<any> {
         try {
-            const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/${codigoDaConsulta}/0/T?parameters=${parametros}`;
+            const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/${codigoDaConsulta}/0/${sistema}?parameters=${parametros}`;
 
             // Make request with timeout and retry logic
             const response = await axios.get(apiURL, {

@@ -39,7 +39,7 @@ export function montaTag(campo: string, valor: string | null | undefined): strin
         const valorEscapado = escapeXml(valor.trim());
         return `<${campo}>${valorEscapado}</${campo}>`;
     } else {
-        // Retorna uma tag auto-fechada para manter estrutura XML válida, se necessário
+        console.debug(`[RM-LOG] Campo ${campo} não possui valor válido. Ignorando.`);
         return `<${campo}/>`;
     }
 }
