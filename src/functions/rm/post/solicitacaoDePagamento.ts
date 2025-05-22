@@ -12,12 +12,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         console.log('[RM-LOG] Iniciando processamento da solicitação de pagamento');
         const campos = JSON.parse(event.body as string);
         console.log(`[RM-LOG] Parâmetros recebidos: ${JSON.stringify(campos)}`);
-
-        // const ESTOQUE = campos.codigoDaColigada == '1'
-        //     ? `${(campos.filial2 as string).split(" - ")[0]}.001`
-        //     : `${(campos.filial as string).split(" - ")[0]}.001`;
-        
-        const HISTORICOCURTO = campos.informacoes;
         
         const CODCOLIGADA = campos.codigoDaColigada == '1'
         ? campos.codigoDaColigada2 || ''
@@ -26,21 +20,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const CODFILIAL = campos.codigoDaColigada == '1'
         ? campos.codigoDaFilial2 || ''
         : campos.codigoDaFilial || '';
-        
-        const ESTOQUE = await configManagerRm.getLOC(CODCOLIGADA as string, CODFILIAL as string);
-        const CODTMV = campos.codigoDoMovimento;
-
-        const SERIE = campos.serie;
-
-        // const OC = campos.ordemDeCompra;
-
-        // const AD = campos.adiantamento;
-        // // const valorTotal = UTILS.moedaParaFloat(campos.valorTotal);
-        // const valorTotal = campos.valorTotal;
-
-        // //let listaDeItens = XML.criaItensSC(campos.itens as string)
-        // let listaDeItens = campos.itens as object[];
-        // const tributos = ['ICMS', 'IPI'];
 
         console.log('[RM-LOG] Gerando XML para movimento tipo:', campos.codigoDoMovimento);
         let cData = '';
@@ -57,41 +36,37 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         switch (campos.codigoDoMovimento) {
             case '1.2.06':
-                if(campos.idDoMovimento){
-                    cData = MOV.xmlMovPAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
-                } else {
-                    cData = MOV.xmlMovAD(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
-                }
+                cData = MOV.xmlMovAD(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.01':
-                cData = MOV.xmlMovNM(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovNM(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.03':
-                cData = MOV.xmlMovNS(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovNS(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.29':
-                cData = MOV.xmlMovFF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovFF(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.07':
-                cData = MOV.xmlMovRE(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovRE(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.25':
-                cData = MOV.xmlMovTM(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovTM(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.17':
-                cData = MOV.xmlMovAPJ(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovAPJ(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.08':
-                cData = MOV.xmlMovAPF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovAPF(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.16':
-                cData = MOV.xmlMovRF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovRF(campos, CODCOLIGADA, CODFILIAL);
                 break;
             case '1.2.28':
-                cData = MOV.xmlMovRFF(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovRFF(campos, CODCOLIGADA, CODFILIAL);
                 break;
             default:
-                cData = MOV.xmlMovCC(campos, CODCOLIGADA, CODFILIAL, SERIE, CODTMV, ESTOQUE, HISTORICOCURTO);
+                cData = MOV.xmlMovCC(campos, CODCOLIGADA, CODFILIAL);
                 break;
         }
 
