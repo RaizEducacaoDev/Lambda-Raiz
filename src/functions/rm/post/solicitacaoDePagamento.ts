@@ -2,10 +2,8 @@ import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as wsDataserver from '../../../utils/wsDataserver';
 import * as MOV from '../../../utils/xmlMoviments';
-import { ConfigManagerRm } from '../../../utils/classRm';
 
 const dataServer = new wsDataserver.wsDataserver();
-const configManagerRm = new ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
