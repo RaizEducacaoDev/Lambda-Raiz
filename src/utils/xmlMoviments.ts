@@ -660,7 +660,7 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string) {
         if(campos.contemTaxaDeIncendio == "Sim"){
             listaDeItens.push({
                 codigoDaNatureza: '02.09.00004',
-                codigoDoItem:'1.02.000100',
+                codigoDoItem:'5709',
                 qtdDoItem:'1',
                 valorDoItem: campos.valorTaxaDeIncendio,
                 totalDoItem: campos.valorTaxaDeIncendio
