@@ -62,6 +62,11 @@ export function getToday(): string {
  * @throws Error se formato inválido
  */
 function parseDate(dateStr: string, withTz: boolean = false): string {
+    
+    if (!dateStr) {
+        return '';
+    }
+    
     // Divide a data e a hora, se houver
     const [datePart, timePart] = dateStr.trim().split(' ');
     const [dia, mes, ano] = datePart.split('/').map(Number);

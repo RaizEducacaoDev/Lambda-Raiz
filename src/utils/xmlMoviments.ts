@@ -715,7 +715,6 @@ export function xmlMovAPF(campos: any, CODCOLIGADA: string, CODFILIAL: string) {
                 cData += '<TMOVCOMPL>'
                     cData += XML.montaTag('CODCOLIGADA', CODCOLIGADA);
                     cData += XML.montaTag('IDMOV', '-1');
-                    cData += XML.montaTag('MULTIPLO', 'N');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
                     cData += XML.montaTag('LINKDOCUMENTO', (campos.linkDaSolicitacao).slice(0, 255));
                 cData += '</TMOVCOMPL>'
@@ -784,10 +783,6 @@ export function xmlMovRF(campos: any, CODCOLIGADA: string, CODFILIAL: string) {
                     cData += XML.montaTag('IDMOV', '-1');
                     cData += XML.montaTag('TICKET', campos.ticketRaiz);
                     cData += XML.montaTag('LINKDOCUMENTO', (campos.linkDaSolicitacao).slice(0, 255));
-                    cData += XML.montaTag('REMETENTE', campos.remetente);
-                    cData += XML.montaTag('INICIOPRESTACAO', campos.inicioDaPrestacao);
-                    cData += XML.montaTag('DESTINATARIO', campos.destinatario);
-                    cData += XML.montaTag('TERMINOPRESTACAO', campos.terminoDaPrestacao);
                 cData += '</TMOVCOMPL>'
             cData += '</MovMovimento>'
         cData += ']]>';
