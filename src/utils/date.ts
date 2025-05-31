@@ -55,31 +55,48 @@ export function getToday(): string {
 }
 
 /**
- * Converte data de DD/MM/YYYY para formato especificado
- * @param dateStr Data no formato DD/MM/YYYY
+ * Converte data de DD/MM/YYYY ou DD/MM/YYYY HH:MM para formato especificado
+ * @param dateStr Data no formato DD/MM/YYYY ou DD/MM/YYYY HH:MM
  * @param withTz Se deve incluir timezone
  * @returns Data convertida para o formato especificado
  * @throws Error se formato inválido
  */
 function parseDate(dateStr: string, withTz: boolean = false): string {
-    const [dia, mes, ano] = dateStr.split('/').map(Number);
     
+    if (!dateStr) {
+        return '';
+    }
+    
+    // Divide a data e a hora, se houver
+    const [datePart, timePart] = dateStr.trim().split(' ');
+    const [dia, mes, ano] = datePart.split('/').map(Number);
+
     // Validação básica
     if (isNaN(dia) || isNaN(mes) || isNaN(ano) || 
         dia < 1 || dia > 31 || mes < 1 || mes > 12) {
         throw new Error("Data inválida");
     }
-    
+
+    // Hora e minuto opcionais
+    let horas = 0;
+    let minutos = 0;
+    if (timePart) {
+        const [h, m] = timePart.split(':').map(Number);
+        if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+            throw new Error("Hora inválida");
+        }
+        horas = h;
+        minutos = m;
+    }
+
     if (withTz) {
-        const data = new Date(Date.UTC(ano, mes - 1, dia));
-        
+        const data = new Date(Date.UTC(ano, mes - 1, dia, horas, minutos));
         if (isNaN(data.getTime())) {
             throw new Error("Data inválida");
         }
-        
         return formatISO(data, true);
     } else {
-        return `${ano}-${pad(mes)}-${pad(dia)}T00:00:00`;
+        return `${ano}-${pad(mes)}-${pad(dia)}T${pad(horas)}:${pad(minutos)}:00`;
     }
 }
 
