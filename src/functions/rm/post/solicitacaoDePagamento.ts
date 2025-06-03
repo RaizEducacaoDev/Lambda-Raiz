@@ -155,7 +155,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['HISTORICOCURTO', campos.informacoes],
         ].map(([tag, valor]) => XML.montaTag(tag, valor));
 
-        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; }[] = [];
+        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string;}[] = [];
 
         const configuracoesItem = {
             '1.2.06': { natureza: '02.23.00001', codigo: '8' },
@@ -163,7 +163,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             '1.2.10': { natureza: '02.07.00047', codigo: '7575' },
             '1.2.11': { natureza: '02.07.00051', codigo: '5251' },
             '1.2.12': { natureza: '02.07.00055', codigo: '5563' },
-            '1.2.25': { natureza: '02.07.00072', codigo: '116181' }
+            '1.2.25': { natureza: '02.07.00072', codigo: '116181' },
+            '1.2.28': { natureza: '02.08.00021', codigo: '7143' },
         };
 
         if (configuracoesItem[CODTMV as keyof typeof configuracoesItem]) {
@@ -172,14 +173,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 codigoDaNatureza: config.natureza,
                 codigoDoItem: config.codigo,
                 qtdDoItem: '1',
-                valorDoItem: campos.valorTotal
+                valorDoItem: campos.valorTotal,
+                desconto: '0'
             });
         } else if (CODTMV === '1.2.08' || CODTMV === '1.2.17') {
             itens.push({
                 codigoDaNatureza: '02.09.00001',
                 codigoDoItem: '113849',
                 qtdDoItem: '1',
-                valorDoItem: campos.valorPagamento
+                valorDoItem: campos.valorPagamento,
+                desconto: '0'
             });
             const taxasAdicionais = [
                 { natureza: '02.09.00002', codigo: '11', valor: 'valorDoIPTU' },
@@ -199,16 +202,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         codigoDaNatureza: taxa.natureza,
                         codigoDoItem: taxa.codigo,
                         qtdDoItem: '1',
-                        valorDoItem: valor
+                        valorDoItem: valor,
+                        desconto: '0'
                     });
                 }
-            });
-        } else if (CODTMV === '1.2.28') {
-            itens.push({
-                codigoDaNatureza: '02.08.00021',
-                codigoDoItem: '7143',
-                qtdDoItem: '1',
-                valorDoItem: campos.valorPagamento
             });
         } else {
             itens.push(...campos.itens);
@@ -222,7 +219,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['IDPRD', item.codigoDoItem],
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
-                ['CODCOLTBORCAMENTO', '0'],
+                ['VALORDESC', item.desconto],
+                ['CODCTABORCAMENTO', '0'],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
