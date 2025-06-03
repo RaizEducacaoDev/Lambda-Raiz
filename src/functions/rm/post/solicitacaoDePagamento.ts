@@ -131,7 +131,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['IDMOV', '-1'],
             ['CODFILIAL', CODFILIAL],
             ['CODLOC', campos.localDeEstoque],
-            ['CODCFO', campos.codigoDoFornecedor],
+            ['CODCFO', (campos.atividadeAtual === 'validarPrestacaoContas' && CODTMV !== '1.2.28' ? campos.codigoDoFornecedor2 : campos.codigoDoFornecedor)],
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
             ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
