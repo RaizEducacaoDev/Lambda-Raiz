@@ -22,6 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             AD: '1.2.06',
             RE: '1.2.07',
             FF: '1.2.29',
+            RFF: '1.2.28',
             PG: {
                 TM: '1.2.25',
                 CC: { A: '1.2.09', E: '1.2.10', T: '1.2.11', G: '1.2.12' },
@@ -40,9 +41,26 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const tipoDeItem = campos.tipoDeItem || '';
             const outrosGastos = campos.outrosGastos || '';
             const tipoDoLocador = campos.tipoDoLocador || '';
+            const atividadeAtual = campos.atividadeAtual || '';
 
             if (!tipoDaSolicitacao) {
                 throw new Error('O tipo da solicitação é obrigatório');
+            }
+
+            if (atividadeAtual === 'validarPrestacaoContas') {
+                if (tipoDaSolicitacao === 'AD' && tipoDeItem) {
+                    const codigo = codigos.PG.NF[tipoDeItem as keyof typeof codigos.PG.NF];
+                    if (codigo) {
+                        return codigo;
+                    }
+                } 
+
+                if (tipoDaSolicitacao === 'FF') {
+                    const codigo = codigos.RFF;
+                    if (codigo) {
+                        return codigo;
+                    }
+                }
             }
 
             if (tipoDaSolicitacao !== 'PG') {
@@ -52,6 +70,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 }
                 return codigo;
             }
+
 
             const tiposDePagamento = {
                 'TM': () => codigos.PG.TM,
@@ -114,6 +133,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['CODLOC', campos.localDeEstoque],
             ['CODCFO', campos.codigoDoFornecedor],
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
+            ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
             ...tagIfElse(!isMovimentoSimples,
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
@@ -125,6 +145,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(isMovimentoComFrete, ['FRETECIFOUFOB', campos.tipoDeFrete]),
             ...tagIf(isMovimentoComFrete, ['VALORFRETE', campos.valorDoFrete === '9' || !campos.valorDoFrete ? '0' : campos.valorDoFrete]),
             ...tagIf(CODTMV.toString() === '1.2.01', ['VALORDESP', campos.outrasDespesas]),
+            ...tagIf(CODTMV.toString() === '1.2.03', ['VALOREXTRA1', campos.outrasDespesas]),
             ...tagIf(isMovimentoComTributo, ['IDNAT', campos.idDaNaturezaFiscal]),
             ...tagIf(isMovimentoComTributo, ['CODIGOIRRF', campos.tributosCodigoDaReceita]),
             ...tagIf(isMovimentoComMunicipio, ['CODETDMUNSERV', campos.codigoDoEstado]),
@@ -181,6 +202,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         valorDoItem: valor
                     });
                 }
+            });
+        } else if (CODTMV === '1.2.28') {
+            itens.push({
+                codigoDaNatureza: '02.08.00021',
+                codigoDoItem: '7143',
+                qtdDoItem: '1',
+                valorDoItem: campos.valorPagamento
             });
         } else {
             itens.push(...campos.itens);
