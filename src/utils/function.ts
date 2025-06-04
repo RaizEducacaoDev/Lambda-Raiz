@@ -5,11 +5,9 @@
  *          caso contrário retorna o próprio valor
  */
 export function valorNaoDefinido(valor: any) {
-    // Verifica se o valor está vazio, é nulo ou indefinido
     if (valor == '' || valor == null || valor == undefined) {
         return 'AINDA NÃO DEFINIDO'
     } else {
-        // Retorna o valor original caso esteja definido
         return valor
     }
 }
@@ -22,12 +20,10 @@ export function valorNaoDefinido(valor: any) {
 export function moedaParaFloat(value: string): string {
     if (!value) return '0.00';
     
-    // Remove all dots and replace comma with dot
     const cleanValue = value
-        .replace(/\./g, '')  // Remove all dots
-        .replace(',', '.');  // Replace comma with dot
+        .replace(/\./g, '')
+        .replace(',', '.');
     
-    // Parse to float and format with 2 decimal places
     const floatValue = parseFloat(cleanValue).toFixed(2);
     
     return floatValue;
