@@ -18,7 +18,6 @@ export class wsDataserver {
      * @constructor
      */
     constructor() {
-        console.info('[RM] Inicializando configurações dos ambientes');
         this.configuracoes = {
             prod: {
                 url: process.env.RM_PROD || '',
@@ -37,7 +36,6 @@ export class wsDataserver {
      */
     private getStage(): ConfiguracaoStage {
         const stage = process.env.STAGE || 'dev';
-        console.info(`[RM] Verificando ambiente configurado: ${stage}`);
         const stagesDisponiveis = Object.keys(this.configuracoes).join(', ');
 
         if (!stage || !this.configuracoes[stage]) {
@@ -53,7 +51,6 @@ export class wsDataserver {
      * @throws {Error} Se as variáveis de ambiente não estiverem definidas
      */
     private encodeCredentials(): string {
-        console.info('[RM] Validando credenciais de acesso');
         const validarVariavelAmbiente = (nome: string, valor?: string): string => {
             if (!valor || valor.trim() === '') {
                 throw new Error(`Variável de ambiente ${nome} não está definida ou é inválida`);
@@ -109,14 +106,12 @@ export class wsDataserver {
                 </soapenv:Body>
             </soapenv:Envelope>`;
 
-        console.info(`[RM] Iniciando saveRecord no DataServer: ${dataServer}`);
-        console.debug(`[RM] CDATA: ${cData}`);
+        console.debug(`[AWS] XML: ${cData}`);
         try {
             const response = await axios.post(url, soapEnvelope, { headers });
-            console.info('[RM] Requisição SOAP saveRecord bem-sucedida');
             return XML.buscaResultado(response.data);
         } catch (error) {
-            console.error('[RM] Erro no saveRecord:', error);
+            console.error('[AWS] Erro no saveRecord:', error);
             if (axios.isAxiosError(error)) {
                 const message = `Erro na requisição SOAP: ${error.message}`;
                 const status = error.response?.status;
@@ -151,13 +146,12 @@ export class wsDataserver {
             </soapenv:Body>
         </soapenv:Envelope>`;
 
-        console.info(`[RM] Iniciando readReacord para chave: ${primaryKey}`);
+        console.debug(`[AWS] XML: ${soapEnvelope}`);
         try {
             const response = await axios.post(url, soapEnvelope, { headers });
-            console.info('[RM] Requisição SOAP readReacord bem-sucedida');
             return XML.buscaResultadoRead(response.data);
         } catch (error) {
-            console.error('[RM] Erro no readReacord:', error);
+            console.error('[AWS] Erro no readReacord:', error);
             if (axios.isAxiosError(error)) {
                 const message = `Erro na requisição SOAP: ${error.message}`;
                 const status = error.response?.status;

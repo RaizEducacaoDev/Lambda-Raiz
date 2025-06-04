@@ -1,14 +1,12 @@
 import { XMLParser } from 'fast-xml-parser';
 
 export function corrigirXML(xml: string, novoIdPgto: number): string {
-    // Corrige valores numéricos com 4 casas decimais, separador ponto
     const corrigidoNumeros = xml.replace(/>(\d+)\.(\d{4})</g, (_, intPart, decimalPart) => {
       const numero = parseFloat(`${intPart}.${decimalPart}`);
       const valorFormatado = numero.toFixed(2).replace('.', ',');
       return `>${valorFormatado}<`;
     });
   
-    // Altera o valor da tag <IDPGTO>...</IDPGTO>
     const corrigidoIdPgto = corrigidoNumeros.replace(
       /<IDPGTO>(.*?)<\/IDPGTO>/,
       `<IDPGTO>${novoIdPgto}</IDPGTO>`
@@ -39,7 +37,6 @@ export function montaTag(campo: string, valor: string | null | undefined): strin
         const valorEscapado = escapeXml(valor.trim());
         return `<${campo}>${valorEscapado}</${campo}>`;
     } else {
-        console.debug(`[RM-LOG] Campo ${campo} não possui valor válido. Ignorando.`);
         return `<${campo}/>`;
     }
 }
