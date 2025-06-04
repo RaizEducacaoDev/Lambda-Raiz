@@ -22,6 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             AD: '1.2.06',
             RE: '1.2.07',
             FF: '1.2.29',
+            RFF: '1.2.28',
             PG: {
                 TM: '1.2.25',
                 CC: { A: '1.2.09', E: '1.2.10', T: '1.2.11', G: '1.2.12' },
@@ -40,9 +41,26 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const tipoDeItem = campos.tipoDeItem || '';
             const outrosGastos = campos.outrosGastos || '';
             const tipoDoLocador = campos.tipoDoLocador || '';
+            const atividadeAtual = campos.atividadeAtual || '';
 
             if (!tipoDaSolicitacao) {
                 throw new Error('O tipo da solicitação é obrigatório');
+            }
+
+            if (atividadeAtual === 'validarPrestacaoContas') {
+                if (tipoDaSolicitacao === 'AD' && tipoDeItem) {
+                    const codigo = codigos.PG.NF[tipoDeItem as keyof typeof codigos.PG.NF];
+                    if (codigo) {
+                        return codigo;
+                    }
+                } 
+
+                if (tipoDaSolicitacao === 'FF') {
+                    const codigo = codigos.RFF;
+                    if (codigo) {
+                        return codigo;
+                    }
+                }
             }
 
             if (tipoDaSolicitacao !== 'PG') {
@@ -52,6 +70,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 }
                 return codigo;
             }
+
 
             const tiposDePagamento = {
                 'TM': () => codigos.PG.TM,
@@ -112,8 +131,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['IDMOV', '-1'],
             ['CODFILIAL', CODFILIAL],
             ['CODLOC', campos.localDeEstoque],
-            ['CODCFO', campos.codigoDoFornecedor],
+            ['CODCFO', (campos.atividadeAtual === 'validarPrestacaoContas' && CODTMV !== '1.2.28' ? campos.codigoDoFornecedor2 : campos.codigoDoFornecedor)],
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
+            ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
             ...tagIfElse(!isMovimentoSimples,
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
@@ -125,6 +145,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(isMovimentoComFrete, ['FRETECIFOUFOB', campos.tipoDeFrete]),
             ...tagIf(isMovimentoComFrete, ['VALORFRETE', campos.valorDoFrete === '9' || !campos.valorDoFrete ? '0' : campos.valorDoFrete]),
             ...tagIf(CODTMV.toString() === '1.2.01', ['VALORDESP', campos.outrasDespesas]),
+            ...tagIf(CODTMV.toString() === '1.2.03', ['VALOREXTRA1', campos.outrasDespesas]),
             ...tagIf(isMovimentoComTributo, ['IDNAT', campos.idDaNaturezaFiscal]),
             ...tagIf(isMovimentoComTributo, ['CODIGOIRRF', campos.tributosCodigoDaReceita]),
             ...tagIf(isMovimentoComMunicipio, ['CODETDMUNSERV', campos.codigoDoEstado]),
@@ -134,7 +155,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['HISTORICOCURTO', campos.informacoes],
         ].map(([tag, valor]) => XML.montaTag(tag, valor));
 
-        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; }[] = [];
+        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string;}[] = [];
 
         const configuracoesItem = {
             '1.2.06': { natureza: '02.23.00001', codigo: '8' },
@@ -142,7 +163,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             '1.2.10': { natureza: '02.07.00047', codigo: '7575' },
             '1.2.11': { natureza: '02.07.00051', codigo: '5251' },
             '1.2.12': { natureza: '02.07.00055', codigo: '5563' },
-            '1.2.25': { natureza: '02.07.00072', codigo: '116181' }
+            '1.2.25': { natureza: '02.07.00072', codigo: '116181' },
+            '1.2.28': { natureza: '02.08.00021', codigo: '7143' },
         };
 
         if (configuracoesItem[CODTMV as keyof typeof configuracoesItem]) {
@@ -151,14 +173,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 codigoDaNatureza: config.natureza,
                 codigoDoItem: config.codigo,
                 qtdDoItem: '1',
-                valorDoItem: campos.valorTotal
+                valorDoItem: campos.valorTotal,
+                desconto: '0'
             });
         } else if (CODTMV === '1.2.08' || CODTMV === '1.2.17') {
             itens.push({
                 codigoDaNatureza: '02.09.00001',
                 codigoDoItem: '113849',
                 qtdDoItem: '1',
-                valorDoItem: campos.valorPagamento
+                valorDoItem: campos.valorPagamento,
+                desconto: '0'
             });
             const taxasAdicionais = [
                 { natureza: '02.09.00002', codigo: '11', valor: 'valorDoIPTU' },
@@ -178,7 +202,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         codigoDaNatureza: taxa.natureza,
                         codigoDoItem: taxa.codigo,
                         qtdDoItem: '1',
-                        valorDoItem: valor
+                        valorDoItem: valor,
+                        desconto: '0'
                     });
                 }
             });
@@ -194,7 +219,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['IDPRD', item.codigoDoItem],
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
-                ['CODCOLTBORCAMENTO', '0'],
+                ['VALORDESC', item.desconto],
+                ['CODCTABORCAMENTO', '0'],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
