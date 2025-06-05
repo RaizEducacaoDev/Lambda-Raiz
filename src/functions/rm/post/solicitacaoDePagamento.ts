@@ -135,7 +135,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
             ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
-            ...tagIfElse(!isMovimentoSimples,
+            ...tagIfElse(isMovimentoSimples,
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao)]),
             ['DATASAIDA', DATE.toISOSimple(campos.dataInstancia)],
@@ -220,7 +220,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
                 ['VALORDESC', item.desconto],
-                ['CODCTABORCAMENTO', '0'],
+                ['CODCOLTBORCAMENTO', '0'],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
