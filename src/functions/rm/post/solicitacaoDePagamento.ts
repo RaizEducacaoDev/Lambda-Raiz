@@ -135,7 +135,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
             ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
-            ...tagIfElse(isMovimentoSimples,
+            ...tagIfElse(!isMovimentoSimples,
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
                 ['DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao)]),
             ['DATASAIDA', DATE.toISOSimple(campos.dataInstancia)],
