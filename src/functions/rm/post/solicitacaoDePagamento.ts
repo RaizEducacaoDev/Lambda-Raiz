@@ -9,6 +9,7 @@ const dataServer = new wsDataserver.wsDataserver();
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
         const campos = JSON.parse(event.body as string);
+        console.info('[RM-INFO] Campos recebidos:', JSON.stringify(campos, null, 2));
 
         const PG = campos.idDoMovimento || campos.movimentoExistente;
         if (PG) {
@@ -53,7 +54,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     if (codigo) {
                         return codigo;
                     }
-                } 
+                }
 
                 if (tipoDaSolicitacao === 'FF') {
                     const codigo = codigos.RFF;
@@ -121,10 +122,31 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const isMovimentoSimples = ['1.2.06', '1.2.07', '1.2.29'].includes(CODTMV.toString());
         const isMovimentoComFrete = ['1.2.01', '1.2.25'].includes(CODTMV.toString());
         const isMovimentoComTributo = ['1.2.03'].includes(CODTMV.toString());
-        const isMovimentoComMunicipio = ["1.949.02", "1.949.03", "1.949.04", "1.949.05", "1.949.06", "1.949.07", "1.949.08", "1.949.09", "1.949.10", "1.949.11", "1.949.12", "1.949.13", "1.949.14", "1.949.15", "1.949.16", "1.949.17", "1.949.18", "1.949.19", "1.949.20", "1.949.21", "1.949.22"].includes(campos.codigoDaNaturezaFiscal);
+        const isMovimentoComMunicipio = [
+            "1.949.02", "2.949.02",
+            "1.949.03", "2.949.03",
+            "1.949.04", "2.949.04",
+            "1.949.05", "2.949.05",
+            "1.949.06", "2.949.06",
+            "1.949.07", "2.949.07",
+            "1.949.08", "2.949.08",
+            "1.949.09", "2.949.09",
+            "1.949.10", "2.949.10",
+            "1.949.11", "2.949.11",
+            "1.949.12", "2.949.12",
+            "1.949.13", "2.949.13",
+            "1.949.14", "2.949.14",
+            "1.949.15", "2.949.15",
+            "1.949.16", "2.949.16",
+            "1.949.17", "2.949.17",
+            "1.949.18", "2.949.18",
+            "1.949.19", "2.949.19",
+            "1.949.20", "2.949.20",
+            "1.949.21", "2.949.21",
+            "1.949.22", "2.949.22"
+        ].includes(campos.codigoDaNaturezaFiscal);
 
         const tagIf = (cond: boolean, tag: [string, any]) => cond ? [tag] : [];
-        const tagIfElse = (cond: boolean, tagTrue: [string, any], tagFalse: [string, any]) => cond ? [tagTrue] : [tagFalse];
 
         const tagsMovimento = [
             ['CODCOLIGADA', CODCOLIGADA],
@@ -135,9 +157,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
             ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
-            ...tagIfElse(!isMovimentoSimples,
-                ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
-                ['DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao)]),
+            ['DATAEMISSAO', (CODTMV.toString() === '1.2.06' || CODTMV.toString() === '1.2.07' || CODTMV.toString() === '1.2.29' || CODTMV.toString() === '1.2.28' ? DATE.toISOSimple(campos.dataInstancia) : DATE.toISOSimple(campos.dataDeEmissao))],
             ['DATASAIDA', DATE.toISOSimple(campos.dataInstancia)],
             ...tagIf(isMovimentoComFrete, ['CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, '')]),
             ['CODCPG', campos.codigoDaFormaPagamento],
@@ -155,7 +175,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['HISTORICOCURTO', campos.informacoes],
         ].map(([tag, valor]) => XML.montaTag(tag, valor));
 
-        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string;}[] = [];
+        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string; }[] = [];
 
         const configuracoesItem = {
             '1.2.06': { natureza: '02.23.00001', codigo: '8' },
@@ -196,7 +216,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             taxasAdicionais.forEach(taxa => {
                 const valor = campos[taxa.valor as keyof typeof campos];
                 const valorNumerico = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
-                
+
                 if (valorNumerico > 0) {
                     itens.push({
                         codigoDaNatureza: taxa.natureza,
