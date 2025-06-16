@@ -49,7 +49,15 @@ custom:
     exclude: ['aws-sdk']
     platform: 'node'
 
+
 functions:
+  consultaFeriados:
+    handler: src/functions/others/get/consultaFeriados.handler
+    events:
+      - http:
+          path: /consultaFeriados
+          method: get
+          cors: true
   cancelaCotacao:
     handler: src/functions/rm/post/cancelaCotacao.handler
     events:
