@@ -12,7 +12,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         console.info('[RM-INFO] Campos recebidos:', JSON.stringify(campos, null, 2));
 
         const PG = campos.idDoMovimento || campos.movimentoExistente;
-        if (PG) {
+        if (PG && campos.atividadeAtual != 'validarPrestacaoContas') {
             return formatResponse(200, { PG });
         }
 
