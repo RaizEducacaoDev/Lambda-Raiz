@@ -30,7 +30,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 NF: { Material: '1.2.01', Serviço: '1.2.03' },
                 OG: {
                     FR: '1.2.16',
-                    AL: { 'Pessoa Jurídica': '1.2.17', 'Pessoa Física': '1.2.08' }
+                    AL: { 'PJ': '1.2.17', 'PF': '1.2.08' }
                 }
             }
         } as const;
