@@ -18,6 +18,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         const CODCOLIGADA = campos.codigoDaColigada === '1' ? campos.codigoDaColigada2 : campos.codigoDaColigada || '';
         const CODFILIAL = campos.codigoDaColigada === '1' ? campos.codigoDaFilial2 : campos.codigoDaFilial || '';
+        const CODCOLTBORCAMENTO = CODCOLIGADA === '30' ? CODCOLIGADA : '0';
 
         const codigos = {
             AD: '1.2.06',
@@ -240,7 +241,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
                 ['VALORDESC', item.desconto],
-                ['CODCOLTBORCAMENTO', '0'],
+                ['CODCOLTBORCAMENTO', CODCOLTBORCAMENTO],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
