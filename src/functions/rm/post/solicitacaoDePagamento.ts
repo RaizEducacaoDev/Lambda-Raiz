@@ -259,8 +259,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         interface Tributo {
             codigoDoTributo: string;
+            baseDeCalculo: string;
+            aliquota: string;
             valorDaAliquota: string;
-            codigoDeRetencao: string;
         }
 
         const construirSecaoTributos = (campos.tributos as Tributo[])
@@ -268,12 +269,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 const tags = [
                     ['CODCOLIGADA', CODCOLIGADA],
                     ['IDMOV', '-1'],
-                    ['NSEQITMMOV', (indice + 1).toString()],
+                    ['NSEQITMMOV', '1'],
                     ['CODTRB', tributo.codigoDoTributo],
                     ['CODTRBBASE', tributo.codigoDoTributo],
-                    ['BASEDECALCULO', tributo.valorDaAliquota],
-                    ['BASEDECALCULOCALCULADA', tributo.valorDaAliquota],
-                    ['CODRETENCAO', tributo.codigoDeRetencao]
+                    ['BASEDECALCULO', tributo.baseDeCalculo],
+                    ['ALIQUOTA', tributo.aliquota],
+                    ['VALOR', tributo.valorDaAliquota],
+                    ['EDITADO', '1']
                 ].map(([tag, valor]) => XML.montaTag(tag, valor)).join('');
 
                 return `<TTRBITMMOV>${tags}</TTRBITMMOV>`;
