@@ -26,10 +26,13 @@ Solução serverless para automação de:
 git clone https://github.com/sua-organizacao/lambda-raiz.git
 
 # Instalar dependências
-npm install
+npm install --legacy-peer-deps
 
 # Ambiente de desenvolvimento
 npm run dev
+
+# Debug com logs detalhados
+npm run debug
 ```
 
 ## Configuração de Ambiente
@@ -56,7 +59,11 @@ ZEEV_API_KEY=sua_chave_api
 
 ## Deployment
 ```bash
-sls deploy --stage production
+# Deploy para desenvolvimento
+npm run deploy
+
+# Deploy para produção
+npm run deploy:prod
 ```
 
 ## Documentação das Integrações
@@ -78,7 +85,8 @@ sls deploy --stage production
 
 ## Fluxo de Deploy
 1. Testes locais: `npm run dev`
-2. Build: `npm run build`
-3. Deploy: `sls deploy --stage prod`
+2. Debug com logs: `npm run debug`
+3. Deploy desenvolvimento: `npm run deploy`
+4. Deploy produção: `npm run deploy:prod`
 
 ⚠️ **Important:** Never commit sensitive credentials to version control!

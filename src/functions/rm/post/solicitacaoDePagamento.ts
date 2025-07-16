@@ -161,7 +161,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['DATAEMISSAO', (CODTMV.toString() === '1.2.06' || CODTMV.toString() === '1.2.07' || CODTMV.toString() === '1.2.29' || CODTMV.toString() === '1.2.28' ? DATE.toISOSimple(campos.dataInstancia) : DATE.toISOSimple(campos.dataDeEmissao))],
             ['DATASAIDA', DATE.toISOSimple(campos.dataInstancia)],
             ...tagIf(isMovimentoComFrete, ['CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, '')]),
-            ['CODCPG', campos.codigoDaFormaPagamento],
+            ['CODCPG', (campos.codigoDaFormaPagamento ? campos.codigoDaFormaPagamento : '001')],
             ['VALORLIQUIDO', campos.valorTotal],
             ...tagIf(isMovimentoComFrete, ['FRETECIFOUFOB', campos.tipoDeFrete]),
             ...tagIf(isMovimentoComFrete, ['VALORFRETE', campos.valorDoFrete === '9' || !campos.valorDoFrete ? '0' : campos.valorDoFrete]),
