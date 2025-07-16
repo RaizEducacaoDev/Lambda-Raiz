@@ -241,7 +241,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
                 ['VALORDESC', item.desconto],
-                ['CODCOLTBORCAMENTO', '0'],
+                ['CODCOLTBORCAMENTO', (item.coligadaDaNatureza ? item.coligadaDaNatureza : '0')],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
