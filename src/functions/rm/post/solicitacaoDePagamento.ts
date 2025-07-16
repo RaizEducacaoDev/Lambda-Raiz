@@ -18,7 +18,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         const CODCOLIGADA = campos.codigoDaColigada === '1' ? campos.codigoDaColigada2 : campos.codigoDaColigada || '';
         const CODFILIAL = campos.codigoDaColigada === '1' ? campos.codigoDaFilial2 : campos.codigoDaFilial || '';
-        //const CODCOLTBORCAMENTO = CODCOLIGADA === '30' ? CODCOLIGADA : '0';
 
         const codigos = {
             AD: '1.2.06',
@@ -176,7 +175,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['HISTORICOCURTO', campos.informacoes],
         ].map(([tag, valor]) => XML.montaTag(tag, valor));
 
-        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string; }[] = [];
+        const itens: { coligadaDaNatureza: string; codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string; }[] = [];
 
         const configuracoesItem = {
             '1.2.06': { natureza: '02.23.00001', codigo: '8' },
@@ -192,6 +191,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const config = configuracoesItem[CODTMV as keyof typeof configuracoesItem];
             itens.push({
                 codigoDaNatureza: config.natureza,
+                coligadaDaNatureza: "0",
                 codigoDoItem: config.codigo,
                 qtdDoItem: '1',
                 valorDoItem: campos.valorTotal,
@@ -200,6 +200,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         } else if (CODTMV === '1.2.08' || CODTMV === '1.2.17') {
             itens.push({
                 codigoDaNatureza: '02.09.00001',
+                coligadaDaNatureza: "0",
                 codigoDoItem: '113849',
                 qtdDoItem: '1',
                 valorDoItem: campos.valorPagamento,
@@ -221,6 +222,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 if (valorNumerico > 0) {
                     itens.push({
                         codigoDaNatureza: taxa.natureza,
+                        coligadaDaNatureza: "0",
                         codigoDoItem: taxa.codigo,
                         qtdDoItem: '1',
                         valorDoItem: valor,
