@@ -351,7 +351,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const splitMessage = cleanError.split(':');
 
             let errorMessage;
-            if (hasProduto) {
+            const mainErrorMatch = cleanError.match(/^(.*?)(?:=+|at RM\.|$)/s);
+            if (mainErrorMatch && mainErrorMatch[1]) {
+                errorMessage = mainErrorMatch[1].trim();
+            } else if (hasProduto) {
                 errorMessage = cleanError.trim();
             } else if (hasMetta) {
                 const dateErrorMatch = cleanError.match(/METTA240\.\s*- (.*)/);
