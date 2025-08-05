@@ -286,7 +286,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             .join('');
 
         const construirSecaoPagamento = () => {
-            if (campos.listaDeParcelas?.length > 0) {
+            if (Array.isArray(campos.listaDeParcelas) && campos.listaDeParcelas.length > 0 && campos.listaDeParcelas.every( (parcela: any) => parcela.valorDaParcela && parcela.vencimentoDaParcela )) {
                 return campos.listaDeParcelas.map((parcela: { valorDaParcela: string, vencimentoDaParcela: string }) => {
                     const tagsParcela = [
                         ['CODCOLIGADA', CODCOLIGADA],
