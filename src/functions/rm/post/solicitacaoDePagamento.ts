@@ -203,7 +203,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 coligadaDaNatureza: "0",
                 codigoDoItem: '113849',
                 qtdDoItem: '1',
-                valorDoItem: campos.valorPagamento,
+                valorDoItem: campos.valorDoAluguel,
                 desconto: '0'
             });
             const taxasAdicionais = [
