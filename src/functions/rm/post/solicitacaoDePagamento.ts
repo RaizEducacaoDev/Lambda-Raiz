@@ -286,7 +286,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             .join('');
 
         const construirSecaoPagamento = () => {
-            if ((CODTMV === '1.2.01' || CODTMV === '1.2.03' || CODTMV === '1.2.25') && campos.listaDeParcelas?.length > 0) {
+            if (campos.listaDeParcelas?.length > 0) {
                 return campos.listaDeParcelas.map((parcela: { valorDaParcela: string, vencimentoDaParcela: string }) => {
                     const tagsParcela = [
                         ['CODCOLIGADA', CODCOLIGADA],
