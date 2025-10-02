@@ -9,9 +9,10 @@ const dataServer = new wsDataserver.wsDataserver();
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
         const campos = JSON.parse(event.body as string);
+        console.info('[RM-INFO] Campos recebidos:', JSON.stringify(campos, null, 2));
 
         const PG = campos.idDoMovimento || campos.movimentoExistente;
-        if (PG) {
+        if (PG && campos.atividadeAtual != 'validarPrestacaoContas') {
             return formatResponse(200, { PG });
         }
 
@@ -29,7 +30,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 NF: { Material: '1.2.01', Serviço: '1.2.03' },
                 OG: {
                     FR: '1.2.16',
-                    AL: { 'Pessoa Jurídica': '1.2.17', 'Pessoa Física': '1.2.08' }
+                    AL: { 'PJ': '1.2.17', 'PF': '1.2.08' }
                 }
             }
         } as const;
@@ -53,7 +54,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     if (codigo) {
                         return codigo;
                     }
-                } 
+                }
 
                 if (tipoDaSolicitacao === 'FF') {
                     const codigo = codigos.RFF;
@@ -121,10 +122,31 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const isMovimentoSimples = ['1.2.06', '1.2.07', '1.2.29'].includes(CODTMV.toString());
         const isMovimentoComFrete = ['1.2.01', '1.2.25'].includes(CODTMV.toString());
         const isMovimentoComTributo = ['1.2.03'].includes(CODTMV.toString());
-        const isMovimentoComMunicipio = ["1.949.02", "1.949.03", "1.949.04", "1.949.05", "1.949.06", "1.949.07", "1.949.08", "1.949.09", "1.949.10", "1.949.11", "1.949.12", "1.949.13", "1.949.14", "1.949.15", "1.949.16", "1.949.17", "1.949.18", "1.949.19", "1.949.20", "1.949.21", "1.949.22"].includes(campos.codigoDaNaturezaFiscal);
+        const isMovimentoComMunicipio = [
+            "1.949.02", "2.949.02",
+            "1.949.03", "2.949.03",
+            "1.949.04", "2.949.04",
+            "1.949.05", "2.949.05",
+            "1.949.06", "2.949.06",
+            "1.949.07", "2.949.07",
+            "1.949.08", "2.949.08",
+            "1.949.09", "2.949.09",
+            "1.949.10", "2.949.10",
+            "1.949.11", "2.949.11",
+            "1.949.12", "2.949.12",
+            "1.949.13", "2.949.13",
+            "1.949.14", "2.949.14",
+            "1.949.15", "2.949.15",
+            "1.949.16", "2.949.16",
+            "1.949.17", "2.949.17",
+            "1.949.18", "2.949.18",
+            "1.949.19", "2.949.19",
+            "1.949.20", "2.949.20",
+            "1.949.21", "2.949.21",
+            "1.949.22", "2.949.22"
+        ].includes(campos.codigoDaNaturezaFiscal);
 
         const tagIf = (cond: boolean, tag: [string, any]) => cond ? [tag] : [];
-        const tagIfElse = (cond: boolean, tagTrue: [string, any], tagFalse: [string, any]) => cond ? [tagTrue] : [tagFalse];
 
         const tagsMovimento = [
             ['CODCOLIGADA', CODCOLIGADA],
@@ -133,14 +155,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['CODLOC', campos.localDeEstoque],
             ['CODCFO', (campos.atividadeAtual === 'validarPrestacaoContas' && CODTMV !== '1.2.28' ? campos.codigoDoFornecedor2 : campos.codigoDoFornecedor)],
             ...tagIf(!isMovimentoSimples, ['NUMEROMOV', (campos.numeroDaNF).slice(0, 9)]),
-            ...tagIf(CODTMV.toString() === '1.2.01' || CODTMV.toString() === '1.2.25', ['SERIE', campos.serie]),
+            ...tagIf(isMovimentoComFrete, ['SERIE', campos.serie]),
             ['CODTMV', CODTMV.toString()],
-            ...tagIfElse(!isMovimentoSimples,
-                ['DATAEMISSAO', DATE.toISOSimple(campos.dataInstancia)],
-                ['DATAEMISSAO', DATE.toISOSimple(campos.dataDeEmissao)]),
-            ['DATASAIDA', DATE.toISOSimple(campos.dataInstancia)],
+            ['DATAEMISSAO', (CODTMV.toString() === '1.2.06' || CODTMV.toString() === '1.2.07' || CODTMV.toString() === '1.2.29' || CODTMV.toString() === '1.2.28' ? DATE.toISOSimple(campos.dataDeEntrada) : DATE.toISOSimple(campos.dataDeEmissao))],
+            ['DATASAIDA', DATE.toISOSimple(campos.dataDeEntrada)],
             ...tagIf(isMovimentoComFrete, ['CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, '')]),
-            ['CODCPG', campos.codigoDaFormaPagamento],
+            ['CODCPG', (campos.codigoDaFormaPagamento ? campos.codigoDaFormaPagamento : '001')],
             ['VALORLIQUIDO', campos.valorTotal],
             ...tagIf(isMovimentoComFrete, ['FRETECIFOUFOB', campos.tipoDeFrete]),
             ...tagIf(isMovimentoComFrete, ['VALORFRETE', campos.valorDoFrete === '9' || !campos.valorDoFrete ? '0' : campos.valorDoFrete]),
@@ -155,7 +175,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ['HISTORICOCURTO', campos.informacoes],
         ].map(([tag, valor]) => XML.montaTag(tag, valor));
 
-        const itens: { codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string;}[] = [];
+        const itens: { coligadaDaNatureza: string; codigoDaNatureza: string; codigoDoItem: string; qtdDoItem: string; valorDoItem: string; desconto: string; }[] = [];
 
         const configuracoesItem = {
             '1.2.06': { natureza: '02.23.00001', codigo: '8' },
@@ -171,6 +191,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const config = configuracoesItem[CODTMV as keyof typeof configuracoesItem];
             itens.push({
                 codigoDaNatureza: config.natureza,
+                coligadaDaNatureza: "0",
                 codigoDoItem: config.codigo,
                 qtdDoItem: '1',
                 valorDoItem: campos.valorTotal,
@@ -179,9 +200,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         } else if (CODTMV === '1.2.08' || CODTMV === '1.2.17') {
             itens.push({
                 codigoDaNatureza: '02.09.00001',
+                coligadaDaNatureza: "0",
                 codigoDoItem: '113849',
                 qtdDoItem: '1',
-                valorDoItem: campos.valorPagamento,
+                valorDoItem: campos.valorDoAluguel,
                 desconto: '0'
             });
             const taxasAdicionais = [
@@ -196,10 +218,11 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             taxasAdicionais.forEach(taxa => {
                 const valor = campos[taxa.valor as keyof typeof campos];
                 const valorNumerico = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
-                
+
                 if (valorNumerico > 0) {
                     itens.push({
                         codigoDaNatureza: taxa.natureza,
+                        coligadaDaNatureza: "0",
                         codigoDoItem: taxa.codigo,
                         qtdDoItem: '1',
                         valorDoItem: valor,
@@ -220,7 +243,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 ['QUANTIDADE', item.qtdDoItem],
                 ['PRECOUNITARIO', item.valorDoItem],
                 ['VALORDESC', item.desconto],
-                ['CODCTABORCAMENTO', '0'],
+                ['CODCOLTBORCAMENTO', (item.coligadaDaNatureza ? item.coligadaDaNatureza : '0')],
                 ['CODTBORCAMENTO', item.codigoDaNatureza]
             ].map(([tag, valor]) => XML.montaTag(tag, valor));
             return construirSecaoXML('TITMMOV', itemTags);
@@ -239,8 +262,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         interface Tributo {
             codigoDoTributo: string;
+            baseDeCalculo: string;
+            aliquota: string;
             valorDaAliquota: string;
-            codigoDeRetencao: string;
         }
 
         const construirSecaoTributos = (campos.tributos as Tributo[])
@@ -248,12 +272,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 const tags = [
                     ['CODCOLIGADA', CODCOLIGADA],
                     ['IDMOV', '-1'],
-                    ['NSEQITMMOV', (indice + 1).toString()],
+                    ['NSEQITMMOV', '1'],
                     ['CODTRB', tributo.codigoDoTributo],
                     ['CODTRBBASE', tributo.codigoDoTributo],
-                    ['BASEDECALCULO', tributo.valorDaAliquota],
-                    ['BASEDECALCULOCALCULADA', tributo.valorDaAliquota],
-                    ['CODRETENCAO', tributo.codigoDeRetencao]
+                    ['BASEDECALCULO', tributo.baseDeCalculo],
+                    ['ALIQUOTA', tributo.aliquota],
+                    ['VALOR', tributo.valorDaAliquota],
+                    ['EDITADO', '1']
                 ].map(([tag, valor]) => XML.montaTag(tag, valor)).join('');
 
                 return `<TTRBITMMOV>${tags}</TTRBITMMOV>`;
@@ -261,7 +286,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             .join('');
 
         const construirSecaoPagamento = () => {
-            if ((CODTMV === '1.2.01' || CODTMV === '1.2.03' || CODTMV === '1.2.25') && campos.listaDeParcelas?.length > 0) {
+            if (Array.isArray(campos.listaDeParcelas) && campos.listaDeParcelas.length > 0 && campos.listaDeParcelas.every( (parcela: any) => parcela.valorDaParcela && parcela.vencimentoDaParcela )) {
                 return campos.listaDeParcelas.map((parcela: { valorDaParcela: string, vencimentoDaParcela: string }) => {
                     const tagsParcela = [
                         ['CODCOLIGADA', CODCOLIGADA],
@@ -326,7 +351,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             const splitMessage = cleanError.split(':');
 
             let errorMessage;
-            if (hasProduto) {
+            const mainErrorMatch = cleanError.match(/^(.*?)(?:=+|at RM\.|$)/s);
+            if (mainErrorMatch && mainErrorMatch[1]) {
+                errorMessage = mainErrorMatch[1].trim();
+            } else if (hasProduto) {
                 errorMessage = cleanError.trim();
             } else if (hasMetta) {
                 const dateErrorMatch = cleanError.match(/METTA240\.\s*- (.*)/);

@@ -2,7 +2,7 @@ import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as CLASSES from '../../../utils/classGoogle';
 
-const configManager = new CLASSES.ConfigManagerGoogle();
+const configManager = new CLASSES.GoogleDriveHelper();
 
 export const handler: APIGatewayProxyHandler = async () => {
     const token = await configManager.getAccessToken();
