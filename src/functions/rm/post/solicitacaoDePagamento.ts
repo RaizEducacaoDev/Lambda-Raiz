@@ -162,7 +162,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ...tagIf(isMovimentoComFrete, ['CHAVEACESSONFE', campos.chaveDeAcesso.replace(/\s+/g, '')]),
             ['CODCPG', (campos.codigoDaFormaPagamento ? campos.codigoDaFormaPagamento : '001')],
             ['VALORLIQUIDO', campos.valorTotal],
-            // NÃO MEXA NO FRETE ABAIXO, POIS ESTÁ FUNCIONANDO, COMO EU NAO SEI, MAS FUNCIONA!
             ...tagIf(isMovimentoComFrete, ['FRETECIFOUFOB', campos.tipoDeFrete]),
             ...tagIf(isMovimentoComFrete, ['VALORFRETE', campos.valorDoFrete === '9' || !campos.valorDoFrete ? '0' : campos.valorDoFrete]),
             ...tagIf(CODTMV.toString() === '1.2.01', ['VALORDESP', campos.outrasDespesas]),

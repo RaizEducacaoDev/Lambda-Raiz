@@ -65,7 +65,13 @@ functions:
           path: /cancelaCotacao
           method: post
           cors: true
-
+  orcamentoCompras:
+    handler: src/functions/rm/patch/orcamentoCompras.handler
+    events:
+      - http:
+          path: /orcamentoCompras
+          method: patch
+          cors: true
   ordemDeCompra:
     handler: src/functions/rm/post/ordemDeCompra.handler
     events:
@@ -95,6 +101,13 @@ functions:
     events:
       - http:
           path: /comunicaFornecedor
+          method: post
+          cors: true
+  defineGanhador:
+    handler: src/functions/rm/post/defineGanhador.handler
+    events:
+      - http:
+          path: /defineGanhador
           method: post
           cors: true
 
