@@ -58,6 +58,15 @@ functions:
           path: /consultaFeriados
           method: get
           cors: true
+
+  somaTeste:
+    handler: src/functions/rm/get/somaTeste.handler
+    events:
+      - http:
+          path: /somaTeste
+          method: post
+          cors: true
+
   cancelaCotacao:
     handler: src/functions/rm/post/cancelaCotacao.handler
     events:
