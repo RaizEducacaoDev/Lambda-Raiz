@@ -74,6 +74,7 @@ functions:
           path: /cancelaCotacao
           method: post
           cors: true
+  
   orcamentoCompras:
     handler: src/functions/rm/patch/orcamentoCompras.handler
     events:
@@ -81,6 +82,7 @@ functions:
           path: /orcamentoCompras
           method: patch
           cors: true
+  
   ordemDeCompra:
     handler: src/functions/rm/post/ordemDeCompra.handler
     events:
@@ -112,6 +114,7 @@ functions:
           path: /comunicaFornecedor
           method: post
           cors: true
+  
   defineGanhador:
     handler: src/functions/rm/post/defineGanhador.handler
     events:
@@ -152,76 +155,79 @@ functions:
           method: post
           cors: true
 
-  fileQuadroComparativo:
-    handler: src/functions/rm/post/fileQuadroComparativo.handler
-    events:
-      - http:
-          path: /fileQuadroComparativo
-          method: post
-          cors: true
+  # fileQuadroComparativo:
+  #   handler: src/functions/rm/post/fileQuadroComparativo.handler
+  #   events:
+  #     - http:
+  #         path: /fileQuadroComparativo
+  #         method: post
+  #         cors: true
 
-  aberturaDeChamados:
-    handler: src/functions/glpi/post/aberturaDeChamados.handler
-    events:
-      - http:
-          path: /aberturaDeChamados
-          method: post
-          cors: true
+  # aberturaDeChamados:
+  #   handler: src/functions/glpi/post/aberturaDeChamados.handler
+  #   events:
+  #     - http:
+  #         path: /aberturaDeChamados
+  #         method: post
+  #         cors: true
 
-  chamadoAdmissao:
-    handler: src/functions/glpi/post/chamadoAdmissao.handler
-    events:
-      - http:
-          path: /chamadoAdmissao
-          method: post
-          cors: true
+  # chamadoAdmissao:
+  #   handler: src/functions/glpi/post/chamadoAdmissao.handler
+  #   events:
+  #     - http:
+  #         path: /chamadoAdmissao
+  #         method: post
+  #         cors: true
 
-  chamadoDesligamento:
-    handler: src/functions/glpi/post/chamadoDesligamento.handler
-    events:
-      - http:
-          path: /chamadoDesligamento
-          method: post
-          cors: true
+  # chamadoDesligamento:
+  #   handler: src/functions/glpi/post/chamadoDesligamento.handler
+  #   events:
+  #     - http:
+  #         path: /chamadoDesligamento
+  #         method: post
+  #         cors: true
 
-  chamadoMovimentacao:
-    handler: src/functions/glpi/post/chamadoMovimentacao.handler
-    events:
-      - http:
-          path: /chamadoMovimentacao
-          method: post
-          cors: true
+  # chamadoMovimentacao:
+  #   handler: src/functions/glpi/post/chamadoMovimentacao.handler
+  #   events:
+  #     - http:
+  #         path: /chamadoMovimentacao
+  #         method: post
+  #         cors: true
 
-  tokenGoogle:
-    handler: src/functions/google/get/tokenGoogle.handler
-    events:
-      - http:
-          path: /tokenGoogle
-          method: get
-          cors: true
+  # tokenGoogle:
+  #   handler: src/functions/google/get/tokenGoogle.handler
+  #   events:
+  #     - http:
+  #         path: /tokenGoogle
+  #         method: get
+  #         cors: true
 
-  consultaTOTVS:
-      handler: src/functions/rm/get/consultaTOTVS.handler
-      events:
-        - http:
-            path: /consultaTOTVS
-            method: get
-            cors: true
-  consultaAlunosPorGrade:
-      handler: src/functions/rm/get/consultaAlunosPorGrade.handler
-      events:
-        - http:
-            path: /consultaAlunosPorGrade
-            method: get
-            cors: true
-  consultaDePagamento:
-      handler: src/functions/rm/get/consultaDePagamento.handler
-      events:
-        - http:
-            path: /consultaDePagamento
-            method: get
-            cors: true
-  consultaDeHorarios:
+  # consultaTOTVS:
+  #     handler: src/functions/rm/get/consultaTOTVS.handler
+  #     events:
+  #       - http:
+  #           path: /consultaTOTVS
+  #           method: get
+  #           cors: true
+  
+  # consultaAlunosPorGrade:
+  #     handler: src/functions/rm/get/consultaAlunosPorGrade.handler
+  #     events:
+  #       - http:
+  #           path: /consultaAlunosPorGrade
+  #           method: get
+  #           cors: true
+  
+  # consultaDePagamento:
+  #     handler: src/functions/rm/get/consultaDePagamento.handler
+  #     events:
+  #       - http:
+  #           path: /consultaDePagamento
+  #           method: get
+  #           cors: true
+  
+  # consultaDeHorarios:
       handler: src/functions/rm/get/consultaDeHorarios.handler
       events:
         - http:
