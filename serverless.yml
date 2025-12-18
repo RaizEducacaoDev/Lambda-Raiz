@@ -74,7 +74,6 @@ functions:
           path: /cancelaCotacao
           method: post
           cors: true
-  
   orcamentoCompras:
     handler: src/functions/rm/patch/orcamentoCompras.handler
     events:
@@ -82,7 +81,6 @@ functions:
           path: /orcamentoCompras
           method: patch
           cors: true
-  
   ordemDeCompra:
     handler: src/functions/rm/post/ordemDeCompra.handler
     events:
@@ -114,7 +112,6 @@ functions:
           path: /comunicaFornecedor
           method: post
           cors: true
-  
   defineGanhador:
     handler: src/functions/rm/post/defineGanhador.handler
     events:
@@ -228,9 +225,9 @@ functions:
   #           cors: true
   
   # consultaDeHorarios:
-      handler: src/functions/rm/get/consultaDeHorarios.handler
-      events:
-        - http:
-            path: /consultaDeHorarios
-            method: get
-            cors: true
+  #     handler: src/functions/rm/get/consultaDeHorarios.handler
+  #     events:
+  #       - http:
+  #           path: /consultaDeHorarios
+  #           method: get
+  #           cors: true
