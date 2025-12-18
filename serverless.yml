@@ -97,13 +97,13 @@ functions:
           method: post
           cors: true
 
-  geraQuadroComparativo:
-    handler: src/functions/rm/post/geraQuadroComparativo.handler
-    events:
-      - http:
-          path: /geraQuadroComparativo
-          method: post
-          cors: true
+  # geraQuadroComparativo:
+  #   handler: src/functions/rm/post/geraQuadroComparativo.handler
+  #   events:
+  #     - http:
+  #         path: /geraQuadroComparativo
+  #         method: post
+  #         cors: true
 
   comunicaFornecedor:
     handler: src/functions/rm/post/comunicaFornecedor.handler
