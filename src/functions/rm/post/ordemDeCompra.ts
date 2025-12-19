@@ -3,6 +3,7 @@ import { formatResponse } from '../../../utils/response';
 import * as CLASSES from '../../../utils/classRm';
 import * as XML from '../../../utils/xml';
 import axios from 'axios';
+import { log } from 'node:console';
 
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
@@ -198,10 +199,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             return formatResponse(200, { OC });
         } else {
             let error = result.match(/^[^\r\n]+/)[0];
+            log('[RM-LOG] Erro na resposta do DataServer');
             return formatResponse(400, { message: 'Internal Server Error', error: error });
         }
 
     } catch (error) {
+        log('[RM-LOG] Erro no handler de ordem de compra:', error);
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 };
