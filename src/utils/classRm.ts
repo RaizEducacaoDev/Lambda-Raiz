@@ -68,8 +68,8 @@ export class ConfigManagerRm {
         }
     }
 
-    async getGanhador(CODCOTACAO: string): Promise<any> {
-        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOTACAO=${CODCOTACAO}`; //TICKET.RAIZ.0011 = prod || TICKET.RAIZ.0010 = dev
+    async getGanhador(CODCOLIGADA: string, CODCOTACAO: string): Promise<any> {
+        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOLIGADA=${CODCOLIGADA};CODCOTACAO=${CODCOTACAO}`; //TICKET.RAIZ.0011 = prod || TICKET.RAIZ.0010 = dev
 
         try {
             const response = await axios.get(apiURL, {

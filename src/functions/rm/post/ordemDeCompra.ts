@@ -26,7 +26,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ? '1.1.05'
             : '1.1.06';
 
-        let listaDeItens = await ConfigManagerRm.getGanhador(campos.cotacao as string);
+        let listaDeItens = await ConfigManagerRm.getGanhador(CODCOLIGADA as string, campos.cotacao as string);
 
         // Lógica para gerar o XML incorporada diretamente
         let listaDeProdutos = (() => {
