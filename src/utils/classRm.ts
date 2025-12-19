@@ -92,7 +92,7 @@ export class ConfigManagerRm {
     }
 
     async getOC(CODCOTACAO: string, IDMOV: string): Promise<any> {
-        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOTACAO=${CODCOTACAO};IDMOV=${IDMOV}`;
+        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0009/0/T?parameters=CODCOTACAO=${CODCOTACAO};IDMOV=${IDMOV}`;
 
         try {
             const response = await axios.get(apiURL, {
