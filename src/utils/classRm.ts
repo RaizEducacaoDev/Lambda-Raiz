@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as FUNCTIONS from './xml'
+import { log } from 'console';
 
 export class ConfigManagerRm {
     private configuracoes: Record<string, { url: string }>;
@@ -67,8 +68,8 @@ export class ConfigManagerRm {
         }
     }
 
-    async getGanhador(CODCOTACAO: string): Promise<any> {
-        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOTACAO=${CODCOTACAO}`; //TICKET.RAIZ.0011 = prod || TICKET.RAIZ.0010 = dev
+    async getGanhador(CODCOLIGADA: string, CODCOTACAO: string): Promise<any> {
+        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOLIGADA=${CODCOLIGADA};CODCOTACAO=${CODCOTACAO}`; //TICKET.RAIZ.0011 = prod || TICKET.RAIZ.0010 = dev
 
         try {
             const response = await axios.get(apiURL, {
@@ -91,7 +92,7 @@ export class ConfigManagerRm {
     }
 
     async getOC(CODCOTACAO: string, IDMOV: string): Promise<any> {
-        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0011/0/T?parameters=CODCOTACAO=${CODCOTACAO};IDMOV=${IDMOV}`;
+        const apiURL = `${this.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0012/0/T?parameters=CODCOTACAO=${CODCOTACAO};IDMOV=${IDMOV}`;
 
         try {
             const response = await axios.get(apiURL, {
@@ -140,7 +141,7 @@ export class ConfigManagerRm {
         }
     }
 
-    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string): Promise<string> {
+    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string, TIPOCOTACAO: string): Promise<string> {
         try {
             const LINK = `Portal: ${this.getUrl()}/FrameHTML/Web/App/Cmp/PortalDoFornecedor/#/login`
             const IdRelatorio = await this.buscaIdRelatorio(CODCOLIGADA as string)
@@ -235,6 +236,9 @@ export class ConfigManagerRm {
                                         </a:_params>
                                         <a:Environment>DotNet</a:Environment>
                                     </Context>
+                                    <PrimaryKeyList xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+                                    <PrimaryKeyNames i:nil="true" xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
+                                    <PrimaryKeyTableName i:nil="true" xmlns="http://www.totvs.com/" />
                                     <Anexos xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
                                     <AssuntoEmail>Pedido de Orçamento nº ${cotacao}</AssuntoEmail>
                                     <CodColRel>${CODCOLIGADA}</CodColRel>
@@ -283,7 +287,7 @@ export class ConfigManagerRm {
                                             <DocumentElement xmlns="">${orcamento}</DocumentElement>
                                         </diffgr:diffgram>
                                     </TblFornecedores>
-                                    <TipoComunicacao>WEB</TipoComunicacao>
+                                    <TipoComunicacao>${TIPOCOTACAO}</TipoComunicacao>
                                     <TipoPlanilha i:nil="true" />
                                 </CmpCotacaoComunicarFornecedoresParams>
                             ]]>
@@ -292,7 +296,7 @@ export class ConfigManagerRm {
                 </soapenv:Body>
             </soapenv:Envelope>`;
 
-            console.log(soapEnvelope)
+            //console.log(soapEnvelope)
 
             let respostas = await axios.post(
                 `${this.getUrl()}:8051/wsProcess/IwsProcess`,
