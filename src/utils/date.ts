@@ -14,18 +14,16 @@ function pad(num: number): string {
  * @returns String formatada no padrão ISO
  */
 function formatISO(date: Date, withTz: boolean = false): string {
-    const brasilDate = new Date(date.toLocaleString("en-US", {timeZone: "America/Sao_Paulo"}));
+    const datePart = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
+    const timePart = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     
-    // Garantir que usamos hífens ASCII padrão (-)
-    const year = brasilDate.getFullYear();
-    const month = pad(brasilDate.getMonth() + 1);
-    const day = pad(brasilDate.getDate());
-    
-    // Sempre usar meia-noite (00:00:00)
-    let result = `${year}-${month}-${day}T00:00:00`;
+    let result = `${datePart}T${timePart}`;
     
     if (withTz) {
-        result += '-03:00';
+        const offset = -date.getTimezoneOffset();
+        const sign = offset >= 0 ? '+' : '-';
+        const tzPart = `${sign}${pad(Math.abs(offset)/60)}:${pad(Math.abs(offset)%60)}`;
+        result += tzPart;
     }
     
     return result;
@@ -40,14 +38,21 @@ export function getNowISO(): string {
 }
 
 /**
- * Obtém data atual no formato ISO sem timezone
+ * Obtém data atual no formato ISO sem timezone (meia-noite)
  * @returns Data atual no formato ISO sem timezone
  */
 export function getNow(): string {
     return formatISO(new Date(), false);
 }
 
-// getToday() removido - era idêntico ao getNow()
+/**
+ * Obtém data atual no formato ISO sem timezone (meia-noite)
+ * @returns Data atual no formato ISO sem timezone
+ */
+export function getToday(): string {
+    const hoje = new Date();
+    return `${hoje.getFullYear()}-${pad(hoje.getMonth()+1)}-${pad(hoje.getDate())}T00:00:00`;
+}
 
 /**
  * Converte data de DD/MM/YYYY ou DD/MM/YYYY HH:MM para formato especificado
@@ -85,13 +90,12 @@ function parseDate(dateStr: string, withTz: boolean = false): string {
     }
 
     if (withTz) {
-        const data = new Date(ano, mes - 1, dia, horas, minutos);
+        const data = new Date(Date.UTC(ano, mes - 1, dia, horas, minutos));
         if (isNaN(data.getTime())) {
             throw new Error("Data inválida");
         }
         return formatISO(data, true);
     } else {
-        // Garantir hífens ASCII padrão na formatação manual
         return `${ano}-${pad(mes)}-${pad(dia)}T${pad(horas)}:${pad(minutos)}:00`;
     }
 }
