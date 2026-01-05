@@ -1,0 +1,24 @@
+meta {
+  name: Move task by instance and idTask
+  type: http
+  seq: 2
+}
+
+put {
+  url: https://hmlraizeducacao.zeev.it/api/2/assignments/instance/85569/aguardandoCotacao
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: ZAvmr8gUZcLh3LzYoaDJ9RuTtkPO6aVYs2fhEPKOAmKVkbh2lkTdV%2BiXZJGzGDTXSf37wOICz5o9zreZSrrNuhdq%2Ftf0y6UyXntSI2pgAxUpvaHU5iK1TZZqAkNs7yP5
+}
+
+body:json {
+  {}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
