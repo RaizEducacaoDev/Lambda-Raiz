@@ -1,0 +1,59 @@
+meta {
+  name: Grava orçamento copy
+  type: http
+  seq: 2
+}
+
+patch {
+  url: https:\mongoose-assured-haddock.ngrok-free.app/dev/orcamentoCompras
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+      "CODCOTACAO": "2026.000007",
+      "CODCOLIGADA": "1",
+      "CODCOLIGADAENTREGA": "1",
+      "CODFILIAL": "1",
+      "CODFILIALENTREGA": "1",
+      "CODCPG": "001",
+      "IDMOV": "37831",
+      "CODCCUSTO": "1.02.007",
+      "USUARIOCOMPRADOR": "01.001",
+      "CODLOCAL": "01.001",
+      "DATACOTACAO": "03/01/2026",
+      "TIPOSOLICITACAO": "Material",
+      "produtos": [
+          {
+              "IDPRD": "11336",
+              "QUANTIDADE": "1"
+          }
+      ],
+      "fornecedores": [
+          {
+              "CODCFO": "0000139425"
+          }
+      ],
+      "orcamentos": [
+          {
+              "CODCFO": "0000139425",
+              "VALPRAZOENTREGA": "10",
+              "VALPRAZOVALIDADE": "30",
+              "FRETECIFOUFOB": "1",
+              "DESPESA": "1,00",
+              "VALORFRETE": "3,00",
+              "IDPRD": "11336",
+              "VALCOTACAO": "10,00",
+              "DESCONTO": "0,00",
+              "PRAZOENTREGA": "10",
+              "QUANTIDADE": "9"
+          }
+      ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
