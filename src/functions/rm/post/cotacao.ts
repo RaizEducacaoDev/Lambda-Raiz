@@ -23,13 +23,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ? `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}`
             : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
             DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
-
-        const TIPOCOTACAO = campos.tipoDaCotacao === "WEB"
-            ? campos.tipoDaCotacao
-            : "Email";
-
-        const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string);
-        const dataLimiteDeEntrega = DATE.toISO(campos.dataLimiteDeEntrega as string);
+        
+        const dataLimiteDeResposta = DATE.convertToISOFormat(campos.dataLimiteDeResposta as string)
 
         const listaDeItens = campos.listaDeItens as object[];
         const listaDeFornecedores = campos.fornecedores as object[];
@@ -44,7 +39,16 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 xmlItens +=
                     `<a:CmpCotacaoItmMovPar>
                     <a:InternalId i:nil="true" />
-                    <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
+                    <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+                        <b:string>CodColMov</b:string>
+                        <b:string>IdMov</b:string>
+                        <b:string>NSeqItmMov</b:string>
+                        <b:string>TrocaMarca</b:string>
+                        <b:string>CodCotacaoParadigma</b:string>
+                        <b:string>CodItemCotacaoParadigma</b:string>
+                        <b:string>CodMotivo</b:string>
+                        <b:string>TipoMovCompras</b:string>
+                    </AAlistModified>
                     <CodColigada>${CODCOLIGADA}</CodColigada>
                     <CodCotacao>-1</CodCotacao>
                     <CodUsuarioLogado i:nil="true" />
@@ -65,7 +69,46 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 xmlOrcamento +=
                     `<a:CmpOrcamentoPar>
                     <a:InternalId i:nil="true" />
-                    <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
+                    <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+                        <b:string>CodColCfo</b:string>
+                        <b:string>CodCfo</b:string>
+                        <b:string>CodMoeda</b:string>
+                        <b:string>AliqFixaDiferencial</b:string>
+                        <b:string>CodColFilial</b:string>
+                        <b:string>CodColFilialNeg</b:string>
+                        <b:string>CodCpg</b:string>
+                        <b:string>CodCpgNegociada</b:string>
+                        <b:string>CodFilial</b:string>
+                        <b:string>CodFilialNeg</b:string>
+                        <b:string>CodLoc</b:string>
+                        <b:string>CodLocNeg</b:string>
+                        <b:string>CodMovimentoCfo</b:string>
+                        <b:string>CodTra</b:string>
+                        <b:string>DatEntrega</b:string>
+                        <b:string>DataEntregaOrc</b:string>
+                        <b:string>Despesa</b:string>
+                        <b:string>DscContato</b:string>
+                        <b:string>DthUltEnvio</b:string>
+                        <b:string>FormaComunicacao</b:string>
+                        <b:string>FreteCifouFob</b:string>
+                        <b:string>ItemOrcamentoAgrupado</b:string>
+                        <b:string>PercDescNeg</b:string>
+                        <b:string>PercDescOrc</b:string>
+                        <b:string>StEmailOrdCompra</b:string>
+                        <b:string>StEmailPedOrc</b:string>
+                        <b:string>StEmailQuadroComp</b:string>
+                        <b:string>StatusResposta</b:string>
+                        <b:string>TxtObservacao</b:string>
+                        <b:string>ValFrete</b:string>
+                        <b:string>ValIcmsST</b:string>
+                        <b:string>ValPrazoEntrega</b:string>
+                        <b:string>ValPrazoValidade</b:string>
+                        <b:string>ValTrb</b:string>
+                        <b:string>ValorDesOcrc</b:string>
+                        <b:string>ValorDescNeg</b:string>
+                        <b:string>ValorFrete</b:string>
+                        <b:string>telContato</b:string>
+                    </AAlistModified>
                     <CodColigada>${CODCOLIGADA}</CodColigada>
                     <CodCotacao>-1</CodCotacao>
                     <CodUsuarioLogado i:nil="true" />
@@ -119,7 +162,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 <tot:ProcessServerName>CmpAssistenteCotacaoProc</tot:ProcessServerName>
                 <tot:strXmlParams>
                     <![CDATA[
-                        <CmpAssistenteCotacaoParams xmlns="http://www.totvs.com.br/RM/" xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/">
+                        <CmpAssistenteCotacaoParams xmlns="http://www.totvs.com.br/RM/"
+                            xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
+                            xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/">
                             <Context xmlns="http://www.totvs.com/" xmlns:a="http://www.totvs.com.br/RM/">
                                 <a:_params xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
                                     <b:KeyValueOfanyTypeanyType>
@@ -159,7 +204,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                         <b:Value i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">T</b:Value>
                                     </b:KeyValueOfanyTypeanyType>
                                     <b:KeyValueOfanyTypeanyType>
-                                        <b:Key i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">$CODUSUARIOSERVICO</b:Key>
+                                        <b:Key i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">
+                                            $CODUSUARIOSERVICO</b:Key>
                                         <b:Value i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema" />
                                     </b:KeyValueOfanyTypeanyType>
                                     <b:KeyValueOfanyTypeanyType>
@@ -171,7 +217,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                         <b:Value i:type="c:int" xmlns:c="http://www.w3.org/2001/XMLSchema">-1</b:Value>
                                     </b:KeyValueOfanyTypeanyType>
                                     <b:KeyValueOfanyTypeanyType>
-                                        <b:Key i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">$CHAPAFUNCIONARIO</b:Key>
+                                        <b:Key i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">
+                                            $CHAPAFUNCIONARIO</b:Key>
                                         <b:Value i:type="c:string" xmlns:c="http://www.w3.org/2001/XMLSchema">-1</b:Value>
                                     </b:KeyValueOfanyTypeanyType>
                                     <b:KeyValueOfanyTypeanyType>
@@ -181,9 +228,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 </a:_params>
                                 <a:Environment>DotNet</a:Environment>
                             </Context>
-                            <PrimaryKeyList xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-                            <PrimaryKeyNames i:nil="true" xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-                            <PrimaryKeyTableName i:nil="true" xmlns="http://www.totvs.com/" />
                             <Cotacao>
                                 <InternalId i:nil="true" xmlns="http://www.totvs.com/" />
                                 <AAlistModified xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
@@ -198,8 +242,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <CodTra i:nil="true" />
                                 <CreditarICMS>0</CreditarICMS>
                                 <CreditarIPI>0</CreditarIPI>
-                                <DatCotacao>${DATE.getNowISO()}</DatCotacao>
-                                <DatEntrega>${dataLimiteDeEntrega}</DatEntrega>
+                                <DatCotacao>${DATE.getDateTime()}</DatCotacao>
+                                <DatEntrega i:nil="true" />
                                 <DatLimRespta>${dataLimiteDeResposta}</DatLimRespta>
                                 <Descricao>${DESCRICAO}</Descricao>
                                 <DispFornClicbusiness>false</DispFornClicbusiness>
@@ -215,7 +259,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <StsCotacao i:nil="true" />
                                 <TipoJulgamento>${campos.tipoDeJulgamento == "Melhor oferta por produto" ? "P" : "G"}</TipoJulgamento>
                                 <TxtObservacao>Triagem de Solicitação de Material</TxtObservacao>
-                                <UltimaAtualizacao>${DATE.getNowISO()}</UltimaAtualizacao>
+                                <UltimaAtualizacao>${DATE.getDateTime()}</UltimaAtualizacao>
                                 <ValCustoFinanc>0</ValCustoFinanc>
                                 <ValCustoFrete>0</ValCustoFrete>
                             </Cotacao>
@@ -227,7 +271,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             </soapenv:Body>
         </soapenv:Envelope>`;
 
-        //console.log(soapEnvelope)
+        console.log(soapEnvelope)
 
         let respostas = await axios.post(
             `${ConfigManagerRm.getUrl()}:8051/wsProcess/IwsProcess`,
@@ -246,7 +290,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (result == '1') {
             const cotacao = await ConfigManagerRm.getCotacao(campos.solicitacaoDeCompra as string, CODCOLIGADA as string)
-            await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA as string, CODFILIAL as string, cotacao, campos.regerarSenha as string, listaDeFornecedores as object[], dataLimiteDeResposta as string, TIPOCOTACAO as string);
+            await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA as string, CODFILIAL as string, cotacao, campos.regerarSenha as string, listaDeFornecedores as object[], dataLimiteDeResposta as string)
             return formatResponse(200, { message: 'Cotação criada com sucesso', cotacao: cotacao });
         } else {
             return formatResponse(400, { message: 'Internal Server Error', error: 'Erro ao comunicar os fornecedores' });
