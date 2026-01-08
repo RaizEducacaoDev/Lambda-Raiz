@@ -9,6 +9,8 @@ const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
+        console.log('[RM-LOG] Iniciando handler de ordem de compra');
+        console.log('[RM-LOG] Evento recebido:', event.body);
         const campos = JSON.parse(event.body as string);
 
         const ESTOQUE = campos.codigoDaColigada === '1'

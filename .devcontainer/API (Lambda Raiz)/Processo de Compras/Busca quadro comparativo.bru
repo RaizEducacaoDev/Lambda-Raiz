@@ -1,0 +1,25 @@
+meta {
+  name: Busca quadro comparativo
+  type: http
+  seq: 4
+}
+
+get {
+  url: https://raizeducacao160289.rm.cloudtotvs.com.br:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0014/0/T?parameters=CODCOLIGADA=1;CODCOTACAO=2026.000013
+  body: none
+  auth: basic
+}
+
+params:query {
+  parameters: CODCOLIGADA=1;CODCOTACAO=2026.000013
+}
+
+auth:basic {
+  username: p_heflo
+  password: Q0)G$sW]rj
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

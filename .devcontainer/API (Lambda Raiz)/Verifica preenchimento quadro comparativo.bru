@@ -1,0 +1,24 @@
+meta {
+  name: Verifica preenchimento quadro comparativo
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://n8n.raizeducacao.com.br/webhook-test/5c702934-2d57-4e39-b94a-e2f9fd209e10
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "codColigadaEntrega": "1",
+    "codCotacao": "2026.000013",
+    "solicitacao": "85588"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
