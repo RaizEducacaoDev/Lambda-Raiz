@@ -67,8 +67,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         result = await XML.buscaResultadoCotacao(result)
 
         if (result == '1') {
+            let cotacao = ""
             let resposta = 'CANCELADO'
-            return formatResponse(200, { resposta });
+            return formatResponse(200, { resposta, cotacao });
         } else {
             let error = result.match(/^[^\r\n]+/)[0];
             return formatResponse(400, { message: 'Internal Server Error', error: error });
