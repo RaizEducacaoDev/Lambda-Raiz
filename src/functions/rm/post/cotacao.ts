@@ -8,6 +8,7 @@ import axios from 'axios';
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
+    console.time('Response time');
     try {
         const campos = JSON.parse(event.body as string);
 
@@ -30,14 +31,14 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const listaDeItens = campos.listaDeItens as object[];
         const listaDeFornecedores = campos.fornecedores as object[];
 
-        let xmlItens = '';
-        let xmlOrcamento = '';
+        console.time('XML Build');
+        let xmlItensArray = [];
+        let xmlOrcamentoArray = [];
         const maxLength = Math.max(listaDeItens.length, listaDeFornecedores.length);
 
         for (let i = 0; i < maxLength; i++) {
-            // Construção de xmlItens
             if (i < listaDeItens.length) {
-                xmlItens +=
+                xmlItensArray.push(
                     `<a:CmpCotacaoItmMovPar>
                     <a:InternalId i:nil="true" />
                     <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
@@ -53,12 +54,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     <NSeqItmMov>${i + 1}</NSeqItmMov>
                     <TipoMovCompras>1</TipoMovCompras>
                     <TrocaMarca>1</TrocaMarca>
-                </a:CmpCotacaoItmMovPar>`;
+                </a:CmpCotacaoItmMovPar>`
+                );
             }
 
-            // Construção de xmlOrcamento
             if (i < listaDeFornecedores.length) {
-                xmlOrcamento +=
+                xmlOrcamentoArray.push(
                     `<a:CmpOrcamentoPar>
                     <a:InternalId i:nil="true" />
                     <AAlistModified xmlns:b="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
@@ -103,9 +104,14 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     <ValorDescNeg>0</ValorDescNeg>
                     <ValorFrete>0</ValorFrete>
                     <telContato />
-                </a:CmpOrcamentoPar>`;
+                </a:CmpOrcamentoPar>`
+                );
             }
         }
+
+        const xmlItens = xmlItensArray.join('');
+        const xmlOrcamento = xmlOrcamentoArray.join('');
+        console.timeEnd('XML Build');
 
         let soapEnvelope =
             `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
@@ -223,8 +229,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             </soapenv:Body>
         </soapenv:Envelope>`;
 
-        //console.log(soapEnvelope)
-
+        console.time('TOTVS SOAP Call');
         let respostas = await axios.post(
             `${ConfigManagerRm.getUrl()}:8051/wsProcess/IwsProcess`,
             soapEnvelope,
@@ -236,18 +241,25 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 }
             }
         );
+        console.timeEnd('TOTVS SOAP Call');
 
+        console.time('Parse TOTVS Response');
         let result = respostas.data
         result = await XML.buscaResultadoCotacao(result)
+        console.timeEnd('Parse TOTVS Response');
 
         if (result == '1') {
-            const cotacao = await ConfigManagerRm.getCotacao(campos.solicitacaoDeCompra as string, CODCOLIGADA as string)
-            return formatResponse(200, { message: 'Cotação criada com sucesso', cotacao: cotacao });
+            return formatResponse(200, { message: 'Cotação criada com sucesso'});
         } else {
-            return formatResponse(400, { message: 'Internal Server Error', error: 'Erro ao comunicar os fornecedores' });
+            const jobIdMatch = result.match(/Id do Job:(\d+)/);
+            const jobId = jobIdMatch ? jobIdMatch[1] : 'N/A';
+            const userFriendlyError = `TOTVS: Erro ao criar cotação. Verifique o log do processo para mais detalhes. ID do Job: ${jobId}`;
+            return formatResponse(400, { message: 'Erro ao gravar cotação', error: userFriendlyError });
         }
 
     } catch (error) {
-        return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
+        console.error('Erro ao criar cotação:', error);
+        return formatResponse(500, {  message: 'Erro interno do servidor',  error: error instanceof Error ? error.message : String(error) });
     }
+    console.timeEnd('Response time');
 };

@@ -1,0 +1,39 @@
+meta {
+  name: SUBPROCESS
+  type: http
+  seq: 3
+}
+
+post {
+  url: https://hmlraizeducacao.zeev.it/api/2/instances/subprocess
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: ZAvmr8gUZcLh3LzYoaDJ9RuTtkPO6aVYs2fhEPKOAmKVkbh2lkTdV%2BiXZJGzGDTXSf37wOICz5o9zreZSrrNuhdq%2Ftf0y6UyXntSI2pgAxUpvaHU5iK1TZZqAkNs7yP5
+}
+
+body:json {
+  {
+    "parentInstanceId": 85667,
+    "parentElementCode": "aliastestesub",
+    "formFields": [
+      {
+        "id": 0,
+        "name": "nomeCompleto2",
+        "value": "SML",
+        "row": 1
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

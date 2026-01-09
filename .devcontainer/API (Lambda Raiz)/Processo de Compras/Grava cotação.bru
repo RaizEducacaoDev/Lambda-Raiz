@@ -1,0 +1,97 @@
+meta {
+  name: Grava cotação
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{host_aws}}/dev/cotacao
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "fornecedores": [
+      {
+        "codigoDoFornecedor": "0000139425"
+      },
+      {
+        "codigoDoFornecedor": "0000147035"
+      },
+      {
+        "codigoDoFornecedor": "0000157663"
+      },
+  //     {
+  //       "codigoDoFornecedor": "0000059812"
+  //     },
+      {
+        "codigoDoFornecedor": "0000049404"
+      }
+    ],
+    "codigoDaColigada": "1",
+    "codigoDaColigada2": "1",
+    "codigoDaFilial": "1",
+    "codigoDaFilial2": "1",
+    "codigoDoCentroDeCusto": "1.02.007",
+    "codigoDoComprador": "01.015",
+    "ticketRaiz": "85676",
+    "tipoDeJulgamento": "Melhor oferta global",
+    "codigoDaNatureza": "02.08.00004",
+    "codigoDoPagamento": "001",
+    "solicitacaoDeCompra": "37900",
+    "descricaoDoServico": "",
+    "motivoDaSolicitacao": "motivo teste",
+    "tipoDaCotacao": "WEB",
+    "dataLimiteDeResposta": "15/01/2026",
+    "dataLimiteDeEntrega": "22/01/2026",
+    "regerarSenha": "false",
+    "listaDeItens": [
+      {
+        "codigoDoItem": "9603",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "8258",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "4134",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "11104",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "8417",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "9544",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "4105",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "9344",
+        "qtdDoItem": "1"
+      },
+      {
+        "codigoDoItem": "9999",
+        "qtdDoItem": "2"
+      },
+      {
+        "codigoDoItem": "499",
+        "qtdDoItem": "3"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,47 @@
+meta {
+  name: Comunica Fornecedores
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{host_aws}}/dev/comunicaFornecedor
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "fornecedores": [
+      {
+        "codigoDoFornecedor": "0000139425"
+      },
+      {
+        "codigoDoFornecedor": "0000147035"
+      },
+      {
+        "codigoDoFornecedor": "0000157663"
+      },
+  //     {
+  //       "codigoDoFornecedor": "0000059812"
+  //     },
+      {
+        "codigoDoFornecedor": "0000049404"
+      }
+    ],
+    "cotacao":"2026.000109",
+    "codigoDaColigada": "1",
+    "codigoDaColigada2": "1",
+    "codigoDaFilial": "1",
+    "codigoDaFilial2": "1",
+    "tipoDaCotacao": "WEB",
+    "dataLimiteDeResposta": "15/01/2026",
+    "relatorio":"2234", //WEB: 2234 || Email: ??? ambos para coligada 1
+    "regerarSenha": "false"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

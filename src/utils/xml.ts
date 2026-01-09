@@ -157,6 +157,24 @@ export async function buscaSIZE(xmlString: string): Promise<any> {
     }
 }
 
+export async function buscaResultadoCotacaoAsync(xmlString: string): Promise<string> {
+    try {
+        const result = await parseXML(xmlString, 'ExecuteWithXmlParamsAsyncResponse', 'ExecuteWithXmlParamsAsyncResult');
+        
+        // The result is an XML string, parse it again
+        const innerXml = result as string;
+        const innerJson = parser.parse(innerXml);
+        
+        if (!innerJson.ProcessID || !innerJson.ProcessID.JobID) {
+            throw new Error('JobID não encontrado na resposta assíncrona');
+        }
+        
+        return innerJson.ProcessID.JobID;
+    } catch (error) {
+        throw new Error(`[COTACAO-ASYNC-ERRO] Falha ao processar resposta da cotação assíncrona: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
 export async function buscaFILE(xmlString: string): Promise<any> {
     try {
         return await parseXML(xmlString, 'GetFileChunkResponse', 'GetFileChunkResult');

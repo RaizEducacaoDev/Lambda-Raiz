@@ -1,6 +1,5 @@
 import axios from 'axios';
-import * as FUNCTIONS from './xml'
-import { log } from 'console';
+import * as FUNCTIONS from './xml';
 
 export class ConfigManagerRm {
     private configuracoes: Record<string, { url: string }>;
@@ -141,35 +140,40 @@ export class ConfigManagerRm {
         }
     }
 
-    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string, TIPOCOTACAO: string, relatorio: string): Promise<string> {
+    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string, TIPOCOTACAO: string, relatorio: number): Promise<string> {
         try {
             const LINK = `Portal: ${this.getUrl()}/FrameHTML/Web/App/Cmp/PortalDoFornecedor/#/login`
             const IdRelatorio = relatorio
 
-            var fornecedores = ''
-            var orcamento = ''
+            let fornecedoresArray = [];
+            let orcamentoArray = [];
             for (let i = 0; i < listaDeFornecedores.length; i++) {
-                fornecedores +=
+                fornecedoresArray.push(
                     `<CmpComunicarFornecedores>
                     <InternalId i:nil="true" xmlns="http://www.totvs.com/" />
                     <CodCfo>${(listaDeFornecedores[i] as { codigoDoFornecedor: string }).codigoDoFornecedor}</CodCfo>
                     <CodColCfo>0</CodColCfo>
                     <Contatos xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-                </CmpComunicarFornecedores>`;
+                </CmpComunicarFornecedores>`
+                );
 
-                orcamento +=
+                orcamentoArray.push(
                     `<TCORCAMENTO diffgr:id="TCORCAMENTO${i + 1}" msdata:rowOrder="${i}" diffgr:hasChanges="inserted">
                     <CODCOTACAO>${cotacao}</CODCOTACAO>
                     <CODCOLCFO>0</CODCOLCFO>
                     <CODCFO>${(listaDeFornecedores[i] as { codigoDoFornecedor: string }).codigoDoFornecedor}</CODCFO>
-                </TCORCAMENTO>`;
+                </TCORCAMENTO>`
+                );
             }
+
+            const fornecedores = fornecedoresArray.join('');
+            const orcamento = orcamentoArray.join('');
 
             let soapEnvelope =
                 `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
                 <soapenv:Header />
                 <soapenv:Body>
-                    <tot:ExecuteWithXmlParams>
+                    <tot:ExecuteWithXmlParamsAsync>
                         <tot:ProcessServerName>CmpCotacaoComunicarFornecedoresProc</tot:ProcessServerName>
                         <tot:strXmlParams>
                             <![CDATA[
@@ -236,15 +240,26 @@ export class ConfigManagerRm {
                                         </a:_params>
                                         <a:Environment>DotNet</a:Environment>
                                     </Context>
-                                    <PrimaryKeyList xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-                                    <PrimaryKeyNames i:nil="true" xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
-                                    <PrimaryKeyTableName i:nil="true" xmlns="http://www.totvs.com/" />
+                                    <PrimaryKeyList xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+                                        <a:ArrayOfanyType>
+                                            <a:anyType i:type="b:int" xmlns:b="http://www.w3.org/2001/XMLSchema">${CODCOLIGADA}</a:anyType>
+                                            <a:anyType i:type="b:string" xmlns:b="http://www.w3.org/2001/XMLSchema">${cotacao}</a:anyType>
+                                        </a:ArrayOfanyType>
+                                    </PrimaryKeyList>
+                                    <PrimaryKeyNames xmlns="http://www.totvs.com/" xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+                                        <a:string>CODCOLIGADA</a:string>
+                                        <a:string>CODCOTACAO</a:string>
+                                    </PrimaryKeyNames>
+                                    <PrimaryKeyTableName xmlns="http://www.totvs.com/" />
                                     <Anexos xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays" />
                                     <AssuntoEmail>Pedido de Orçamento nº ${cotacao}</AssuntoEmail>
                                     <CodColRel>${CODCOLIGADA}</CodColRel>
                                     <CodColigada>${CODCOLIGADA}</CodColigada>
                                     <CodColigadaPlanilha>0</CodColigadaPlanilha>
                                     <CodCotacao>${cotacao}</CodCotacao>
+                                    <CodFilial>${CODFILIAL}</CodFilial>
+                                    <CodSistemaPlanilha i:nil="true" />
+                                    <CopiaComprador>false</CopiaComprador>
                                     <CorpoEmail>${LINK}</CorpoEmail>
                                     <DataLimiteResposta>${dataLimiteDeResposta}</DataLimiteResposta>
                                     <EmailSomenteContato>false</EmailSomenteContato>
@@ -258,8 +273,7 @@ export class ConfigManagerRm {
                                     <RelatorioAnexoEmail>false</RelatorioAnexoEmail>
                                     <RelatorioDotNet>true</RelatorioDotNet>
                                     <TblFornecedores>
-                                        <xs:schema id="NewDataSet" xmlns:xs="http://www.w3.org/2001/XMLSchema"
-                                            xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+                                        <xs:schema id="NewDataSet" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
                                             <xs:element name="TCORCAMENTO">
                                                 <xs:complexType>
                                                     <xs:sequence>
@@ -269,13 +283,13 @@ export class ConfigManagerRm {
                                                     </xs:sequence>
                                                 </xs:complexType>
                                             </xs:element>
-                                            <xs:element name="NewDataSet" msdata:IsDataSet="true" msdata:MainDataTable="TCORCAMENTO">
+                                            <xs:element name="NewDataSet" msdata:IsDataSet="true" msdata:MainDataTable="TCORCAMENTO" msdata:UseCurrentLocale="true">
                                                 <xs:complexType>
-                                                    <xs:choice>
+                                                    <xs:choice minOccurs="0" maxOccurs="unbounded">
                                                         <xs:element ref="TCORCAMENTO" />
                                                     </xs:choice>
                                                 </xs:complexType>
-                                                <xs:unique name="pk_rel">
+                                                <xs:unique name="pk_rel" msdata:PrimaryKey="true">
                                                     <xs:selector xpath=".//TCORCAMENTO" />
                                                     <xs:field xpath="CODCOTACAO" />
                                                     <xs:field xpath="CODCOLCFO" />
@@ -292,7 +306,7 @@ export class ConfigManagerRm {
                                 </CmpCotacaoComunicarFornecedoresParams>
                             ]]>
                         </tot:strXmlParams>
-                    </tot:ExecuteWithXmlParams>
+                    </tot:ExecuteWithXmlParamsAsync>
                 </soapenv:Body>
             </soapenv:Envelope>`;
 
@@ -306,20 +320,15 @@ export class ConfigManagerRm {
                     headers: {
                         'Authorization': `Basic ${this.getCredentials()}`,
                         'Content-Type': 'text/xml;charset=UTF-8',
-                        'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParams',
+                        'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParamsAsync',
                     }
                 }
             );
-            console.log('Raw API XML:', respostas.data);
 
             let result = respostas.data
-            result = await FUNCTIONS.buscaResultadoCotacao(result)
+            result = await FUNCTIONS.buscaResultadoCotacaoAsync(result)
 
-            if (result == '1') {
-                return 'Fornecedores comunicados com sucesso'
-            } else {
-                throw new Error('Não foi possível comunicar os fornecedores');
-            }
+            return `Processo iniciado com sucesso. JobID: ${result}`
         } catch (erro) {
             console.error('Erro ao converter XML para JSON:', erro);
 

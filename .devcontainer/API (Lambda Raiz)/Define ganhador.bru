@@ -1,0 +1,26 @@
+meta {
+  name: Define ganhador
+  type: http
+  seq: 2
+}
+
+post {
+  url: https:\mongoose-assured-haddock.ngrok-free.app/dev/defineGanhador
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "cotacao": "2025.000063",
+    "codigoDaColigada": "1",
+    "codigoDaColigada2": "1",
+    "codigoDaFilial": "1",
+    "codigoDaFilial2": "1"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

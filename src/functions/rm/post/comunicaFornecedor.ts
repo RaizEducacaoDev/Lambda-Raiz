@@ -23,7 +23,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string);
 
-        await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA, CODFILIAL, campos.cotacao, campos.regerarSenha, campos.fornecedores, dataLimiteDeResposta, TIPOCOTACAO, campos.relatorio);
+        const relatorio = campos.relatorio;
+
+        await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA, CODFILIAL, campos.cotacao, campos.regerarSenha, campos.fornecedores, dataLimiteDeResposta, TIPOCOTACAO, relatorio);
 
         return formatResponse(200, { message: 'Comunicação realizada com sucesso' });
     } catch (error) {
