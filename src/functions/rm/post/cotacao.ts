@@ -24,10 +24,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
             DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
 
-        const TIPOCOTACAO = campos.tipoDaCotacao === "WEB"
-            ? campos.tipoDaCotacao
-            : "Email";
-
         const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string);
         const dataLimiteDeEntrega = DATE.toISO(campos.dataLimiteDeEntrega as string);
 
@@ -214,7 +210,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <StatusAprovacao i:nil="true" />
                                 <StsCotacao i:nil="true" />
                                 <TipoJulgamento>${campos.tipoDeJulgamento == "Melhor oferta por produto" ? "P" : "G"}</TipoJulgamento>
-                                <TxtObservacao>Triagem de Solicitação de Material</TxtObservacao>
+                                <TxtObservacao>${DESCRICAO}</TxtObservacao>
                                 <UltimaAtualizacao>${DATE.getNowISO()}</UltimaAtualizacao>
                                 <ValCustoFinanc>0</ValCustoFinanc>
                                 <ValCustoFrete>0</ValCustoFrete>
@@ -246,7 +242,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (result == '1') {
             const cotacao = await ConfigManagerRm.getCotacao(campos.solicitacaoDeCompra as string, CODCOLIGADA as string)
-            await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA as string, CODFILIAL as string, cotacao, campos.regerarSenha as string, listaDeFornecedores as object[], dataLimiteDeResposta as string, TIPOCOTACAO as string);
             return formatResponse(200, { message: 'Cotação criada com sucesso', cotacao: cotacao });
         } else {
             return formatResponse(400, { message: 'Internal Server Error', error: 'Erro ao comunicar os fornecedores' });

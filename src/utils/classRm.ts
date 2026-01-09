@@ -141,10 +141,10 @@ export class ConfigManagerRm {
         }
     }
 
-    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string, TIPOCOTACAO: string): Promise<string> {
+    async postComunicaFornecedor(CODCOLIGADA: string, CODFILIAL: string, cotacao: string, regerarSenha: string, listaDeFornecedores: object[], dataLimiteDeResposta: string, TIPOCOTACAO: string, relatorio: string): Promise<string> {
         try {
             const LINK = `Portal: ${this.getUrl()}/FrameHTML/Web/App/Cmp/PortalDoFornecedor/#/login`
-            const IdRelatorio = await this.buscaIdRelatorio(CODCOLIGADA as string)
+            const IdRelatorio = relatorio
 
             var fornecedores = ''
             var orcamento = ''

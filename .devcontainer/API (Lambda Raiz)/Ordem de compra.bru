@@ -1,0 +1,31 @@
+meta {
+  name: Ordem de compra
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{host_aws}}/dev/ordemDeCompra
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+      "codigoDaColigada": "1",
+      "codigoDaColigada2": "1",
+      "codigoDaFilial": "1",
+      "codigoDaFilial2": "1",
+      "unidadeFilial": "01 - RAIZ EDUCAÇÃO S.A. - 21.219.576/0001-14",
+      "filialDeEntrega": "01 - RAIZ EDUCAÇÃO S.A. - 21.219.576/0001-14",
+      "codigoDoCentroDeCusto": "1.01.005",
+      "tipoDeSolicitacao": "P",
+      "cotacao": "2026.000066",
+      "solicitacaoDeCompra": "37875"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
