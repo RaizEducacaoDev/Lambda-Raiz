@@ -2,7 +2,7 @@ service: lambda-raiz
 
 provider:
   name: aws
-  runtime: nodejs22.x
+  runtime: nodejs24.x
   stage: ${opt:stage, 'dev'}
   region: sa-east-1
   architecture: arm64
