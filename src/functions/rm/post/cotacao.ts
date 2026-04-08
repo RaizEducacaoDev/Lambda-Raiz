@@ -34,6 +34,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         }
         
         const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string)
+        const dataLimiteDeEntrega = DATE.toISO(campos.dataLimiteDeEntrega as string)
 
         const listaDeItens = campos.listaDeItens as object[];
         const listaDeFornecedores = campos.fornecedores as object[];
@@ -135,7 +136,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     <CodMoeda>R$</CodMoeda>
                     <CodMovimentoCfo />
                     <CodTra i:nil="true" />
-                    <DatEntrega i:nil="true" />
+                    <DatEntrega>${dataLimiteDeEntrega}</DatEntrega>
                     <DataEntregaOrc i:nil="true" />
                     <Despesa>0</Despesa>
                     <DscContato />

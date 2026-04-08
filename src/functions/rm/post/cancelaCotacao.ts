@@ -68,7 +68,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         if (result == '1') {
             let resposta = 'CANCELADO'
-            return formatResponse(200, { resposta });
+            let cotacao = '';
+            return formatResponse(200, { resposta, cotacao });
         } else {
             let error = result.match(/^[^\r\n]+/)[0];
             return formatResponse(400, { message: 'Internal Server Error', error: error });
