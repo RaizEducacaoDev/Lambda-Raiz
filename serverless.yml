@@ -84,7 +84,13 @@ functions:
           path: /ordemDeCompra
           method: post
           cors: true
-
+  defineGanhador:
+    handler: src/functions/rm/post/defineGanhador.handler
+    events:
+      - http:
+          path: /defineGanhador
+          method: post
+          cors: true
   cotacao:
     handler: src/functions/rm/post/cotacao.handler
     events:
