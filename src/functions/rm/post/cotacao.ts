@@ -27,6 +27,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
         
         const cotacao = campos.cotacao as string;
+        console.log('[cotacao] Contexto:', { CODCOLIGADA, CODFILIAL, SC: campos.solicitacaoDeCompra, cotacao });
         if (cotacao && cotacao.trim() !== '' && cotacao.trim() !== '-1' && cotacao.trim() !== '0' && cotacao.trim() !== 'undefined' && cotacao.trim() !== 'null') {
             console.log('[cotacao] Cotacao já existe, retornando sucesso sem criar nova cotação');
             return formatResponse(200, { message: 'Cotacao já existe, retornando sucesso sem criar nova cotação' });
