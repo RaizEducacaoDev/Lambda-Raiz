@@ -2,7 +2,7 @@ service: lambda-raiz
 
 provider:
   name: aws
-  runtime: nodejs24.x
+  runtime: nodejs22.x
   stage: ${opt:stage, 'dev'}
   region: sa-east-1
   architecture: arm64
@@ -35,9 +35,6 @@ plugins:
   - serverless-offline
 
 custom:
-  dotenv:
-    path: ./.env
-    include: []
   serverless-offline:
     resourceRoutes: false
     noPrependStageInUrl: false
