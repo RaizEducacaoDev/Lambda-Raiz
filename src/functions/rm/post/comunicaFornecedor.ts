@@ -181,7 +181,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                     'Authorization': `Basic ${ConfigManagerRm.getCredentials()}`,
                     'Content-Type': 'text/xml;charset=UTF-8',
                     'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParams',
-                }
+                },
+                timeout: 30000, // Aumenta o timeout para 30 segundos
             }
         );
 
@@ -197,6 +198,15 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         }
     } catch (error) {
         console.error('Erro inesperado:', error);
+        if (axios.isAxiosError(error)) {
+            console.error('Detalhes do erro Axios:', {
+                message: error.message,
+                code: error.code,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+            });
+        }
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 
