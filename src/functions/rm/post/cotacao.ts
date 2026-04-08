@@ -8,8 +8,8 @@ import axios from 'axios';
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
-    console.log('[cotacao] Handler iniciado');
-    console.log('[cotacao] DATE exports:', Object.keys(DATE));
+    // console.log('[cotacao] Handler iniciado');
+    // console.log('[cotacao] DATE exports:', Object.keys(DATE));
     try {
         const campos = JSON.parse(event.body as string);
 
@@ -25,6 +25,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ? `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}`
             : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
             DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
+        
+        const cotacao = campos.cotacao as string;
+        if (cotacao && cotacao.trim() !== '' && cotacao.trim() !== '-1' && cotacao.trim() !== '0' && cotacao.trim() !== 'undefined' && cotacao.trim() !== 'null') {
+            console.log('[cotacao] Cotacao já existe, retornando sucesso sem criar nova cotação');
+            return formatResponse(200, { message: 'Cotacao já existe, retornando sucesso sem criar nova cotação' });
+        }
         
         const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string)
 

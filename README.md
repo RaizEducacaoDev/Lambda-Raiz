@@ -9,7 +9,7 @@ Solução serverless para automação de:
 - Integração com CRM Zeev
 
 ## Pré-requisitos
-- Node.js 18+
+- Node.js 22+
 - Serverless Framework
 - Contas ativas nos serviços integrados
 

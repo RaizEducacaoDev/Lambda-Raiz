@@ -192,9 +192,11 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             return formatResponse(200, { message: 'Comunicação realizada com sucesso' });
         } else {
             let error = result.match(/^[^\r\n]+/)[0];
+            console.error('Erro na comunicação com o RM:', error);
             return formatResponse(400, { message: 'Internal Server Error', error: error });
         }
     } catch (error) {
+        console.error('Erro inesperado:', error);
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 
