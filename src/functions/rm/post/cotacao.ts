@@ -8,6 +8,8 @@ import axios from 'axios';
 const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler: APIGatewayProxyHandler = async (event) => {
+    console.log('[cotacao] Handler iniciado');
+    console.log('[cotacao] DATE exports:', Object.keys(DATE));
     try {
         const campos = JSON.parse(event.body as string);
 
@@ -24,7 +26,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
             DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
         
-        const dataLimiteDeResposta = DATE.convertToISOFormat(campos.dataLimiteDeResposta as string)
+        const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string)
 
         const listaDeItens = campos.listaDeItens as object[];
         const listaDeFornecedores = campos.fornecedores as object[];
@@ -242,7 +244,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <CodTra i:nil="true" />
                                 <CreditarICMS>0</CreditarICMS>
                                 <CreditarIPI>0</CreditarIPI>
-                                <DatCotacao>${DATE.getDateTime()}</DatCotacao>
+                                <DatCotacao>${DATE.getNowISO()}</DatCotacao>
                                 <DatEntrega i:nil="true" />
                                 <DatLimRespta>${dataLimiteDeResposta}</DatLimRespta>
                                 <Descricao>${DESCRICAO}</Descricao>
@@ -259,7 +261,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <StsCotacao i:nil="true" />
                                 <TipoJulgamento>${campos.tipoDeJulgamento == "Melhor oferta por produto" ? "P" : "G"}</TipoJulgamento>
                                 <TxtObservacao>Triagem de Solicitação de Material</TxtObservacao>
-                                <UltimaAtualizacao>${DATE.getDateTime()}</UltimaAtualizacao>
+                                <UltimaAtualizacao>${DATE.getNowISO()}</UltimaAtualizacao>
                                 <ValCustoFinanc>0</ValCustoFinanc>
                                 <ValCustoFrete>0</ValCustoFrete>
                             </Cotacao>
@@ -270,8 +272,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 </tot:ExecuteWithXmlParams>
             </soapenv:Body>
         </soapenv:Envelope>`;
-
         console.log(soapEnvelope)
+        console.log('[cotacao] Contexto', { CODCOLIGADA, CODFILIAL, SC: campos.solicitacaoDeCompra, fornecedores: listaDeFornecedores?.length });
 
         let respostas = await axios.post(
             `${ConfigManagerRm.getUrl()}:8051/wsProcess/IwsProcess`,
@@ -286,17 +288,22 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         );
 
         let result = respostas.data
+        console.log('[cotacao] SOAP HTTP status:', respostas.status);
         result = await XML.buscaResultadoCotacao(result)
+        console.log('[cotacao] Resultado CmpAssistenteCotacaoProc:', JSON.stringify(result).substring(0, 300));
 
         if (result == '1') {
-            const cotacao = await ConfigManagerRm.getCotacao(campos.solicitacaoDeCompra as string, CODCOLIGADA as string)
-            await ConfigManagerRm.postComunicaFornecedor(CODCOLIGADA as string, CODFILIAL as string, cotacao, campos.regerarSenha as string, listaDeFornecedores as object[], dataLimiteDeResposta as string)
-            return formatResponse(200, { message: 'Cotação criada com sucesso', cotacao: cotacao });
+            console.log('[cotacao] Cotacao criada com sucesso');
+            return formatResponse(200, { message: 'Cotação criada com sucesso' });
         } else {
-            return formatResponse(400, { message: 'Internal Server Error', error: 'Erro ao comunicar os fornecedores' });
+            const jobIdMatch = String(result).match(/Id do Job:(\d+)/);
+            const jobId = jobIdMatch ? jobIdMatch[1] : 'N/A';
+            console.error('[cotacao] Erro ao criar cotacao. Job:', jobId, 'result:', JSON.stringify(result).substring(0, 300));
+            return formatResponse(400, { message: 'Erro ao gravar cotação', error: `TOTVS: Erro ao criar cotação. Verifique o log do processo para mais detalhes. ID do Job: ${jobId}` });
         }
 
     } catch (error) {
+        console.error('[cotacao] ERRO no handler:', error instanceof Error ? error.message : String(error));
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 };
