@@ -22,7 +22,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             ? campos.codigoDaFilial2 || ''
             : campos.codigoDaFilial || '';
 
-        const DESCRICAO = campos.tipoDeSolicitacao === 'P'
+        const DESCRICAO = campos.codigoDoTipo === 'P'
             ? `${campos.motivoDaSolicitacao}`
             : `${campos.descricaoDoServico}`;
         
