@@ -253,7 +253,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                                 <CreditarICMS>0</CreditarICMS>
                                 <CreditarIPI>0</CreditarIPI>
                                 <DatCotacao>${DATE.getNowISO()}</DatCotacao>
-                                <DatEntrega i:nil="true" />
+                                <DatEntrega>${dataLimiteDeEntrega}</DatEntrega>
                                 <DatLimRespta>${dataLimiteDeResposta}</DatLimRespta>
                                 <Descricao>${DESCRICAO}</Descricao>
                                 <DispFornClicbusiness>false</DispFornClicbusiness>
