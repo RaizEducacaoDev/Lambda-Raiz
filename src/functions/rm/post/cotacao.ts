@@ -22,9 +22,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             : campos.codigoDaFilial || '';
 
         const DESCRICAO = campos.tipoDeSolicitacao === 'P'
-            ? `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}`
-            : `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}
-            DESCRIÇÃO DO SERVIÇO: ${campos.descricaoDoServico}`;
+            ? `${campos.motivoDaSolicitacao}`
+            : `${campos.descricaoDoServico}`;
         
         const cotacao = campos.cotacao as string;
         console.log('[cotacao] Contexto:', { CODCOLIGADA, CODFILIAL, SC: campos.solicitacaoDeCompra, cotacao });
@@ -33,8 +32,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             return formatResponse(200, { message: 'Cotacao já existe, retornando sucesso sem criar nova cotação' });
         }
         
-        const dataLimiteDeResposta = DATE.toISO(campos.dataLimiteDeResposta as string)
-        const dataLimiteDeEntrega = DATE.toISO(campos.dataLimiteDeEntrega as string)
+        const dataLimiteDeResposta = DATE.toISOSimple(campos.dataLimiteDeResposta as string)
+        const dataLimiteDeEntrega = DATE.toISOSimple(campos.dataLimiteDeEntrega as string)
 
         const listaDeItens = campos.listaDeItens as object[];
         const listaDeFornecedores = campos.fornecedores as object[];

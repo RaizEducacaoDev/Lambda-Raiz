@@ -28,3 +28,7 @@ junit.xml
 # Sistema
 temp/
 .DS_Store
+
+# Outros
+ECOSSISTEMA.md
+credenciaisAWS.txt
