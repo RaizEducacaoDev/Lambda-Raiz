@@ -12,6 +12,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     // console.log('[cotacao] DATE exports:', Object.keys(DATE));
     try {
         const campos = JSON.parse(event.body as string);
+        console.log('[cotacao] Payload recebido:', JSON.stringify(campos));
 
         const CODCOLIGADA = campos.codigoDaColigada === '1'
             ? campos.codigoDaColigada2 || ''
