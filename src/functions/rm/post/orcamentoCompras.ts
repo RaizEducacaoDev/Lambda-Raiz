@@ -94,8 +94,8 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('CODCOLIGADA', CODCOLIGADA) +
         montaTag('CODCFO', codCfo) +
         montaTag('CODCOLCFO', '0') +
-        montaTag('VALPRAZOENTREGA', primeiroItem.VALPRAZOENTREGA) +
-        montaTag('DATENTREGA', toISOSimple(dados.DATACOTACAO)) +
+        montaTag('VALPRAZOENTREGA', primeiroItem.PRAZOENTREGA) +
+        montaTag('DATENTREGA', addDaysToDate(dados.DATACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('VALPRAZOVALIDADE', primeiroItem.VALPRAZOVALIDADE) +
         montaTag('CODCPG', dados.CODCPG) +
         montaTag('CODCPGNEGOCIADA', dados.CODCPG) +
@@ -116,7 +116,7 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('VALORDESCNEG', formatBRCurrency(primeiroItem.DESCONTO)) +
         montaTag('PERCDESCNEG', '0,0000') +
         montaTag('VALICMSST', '0,0000') +
-        montaTag('DATAENTREGAORC', addDaysToDate(dados.DATACOTACAO, primeiroItem.VALPRAZOENTREGA)) +
+        montaTag('DATAENTREGAORC', addDaysToDate(dados.DATACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('ALIQFIXADIFERENCIAL', '0') +
         montaTag('DECLINADO', '0') +
         '</TCORCAMENTO>';
@@ -151,7 +151,7 @@ function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number,
         montaTag('VALORDESPITMORC', '0,0000') +
         montaTag('VALORDESPITMNEG', '0,0000') +
         montaTag('PERCDESPITMNEG', '0,0000') +
-        montaTag('PRAZOENTREGA', '-1') +
+        montaTag('PRAZOENTREGA', orcamento.PRAZOENTREGA) +
         montaTag('PERCICMSITMORC', '0,0000') +
         montaTag('VALTOTCOTACAONEG', '0,0000') +
         montaTag('VALICMSST', '0,00') +
@@ -200,7 +200,7 @@ function gerarTCITMORCAMENTOAGRUPADO(dados: any, orcamento: OrcamentoItem, nseq:
         montaTag('VALORDESPITMORC', '0,0000') +
         montaTag('VALORDESPITMNEG', '0,0000') +
         montaTag('PERCDESPITMNEG', '0,0000') +
-        montaTag('PRAZOENTREGA', '-1') +
+        montaTag('PRAZOENTREGA', orcamento.PRAZOENTREGA) +
         montaTag('PERCICMSITMORC', '0,0000') +
         montaTag('VALTOTCOTACAONEG', '0,0000') +
         montaTag('VALICMSST', '0,00') +
