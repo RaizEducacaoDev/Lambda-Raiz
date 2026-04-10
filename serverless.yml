@@ -98,6 +98,13 @@ functions:
           path: /cotacao
           method: post
           cors: true
+  orcamentoCompras:
+    handler: src/functions/rm/post/orcamentoCompras.handler
+    events:
+      - http:
+          path: /orcamentoCompras
+          method: post
+          cors: true
 
   geraQuadroComparativo:
     handler: src/functions/rm/post/geraQuadroComparativo.handler
