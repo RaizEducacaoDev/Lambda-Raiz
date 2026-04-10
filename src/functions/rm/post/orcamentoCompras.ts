@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as wsDataserver from '../../../utils/wsDataserver';
-import { toISOSimple, getNow } from '../../../utils/date';
+import { getToday } from '../../../utils/date';
 import { montaTag } from '../../../utils/xml';
 
 const dataServer = new wsDataserver.wsDataserver();
@@ -18,7 +18,7 @@ function addDaysToDate(dateStr: string, days: string): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}T23:59:59`;
+    return `${year}-${month}-${day}T00:00:00`;
 }
 
 interface Produto {
@@ -100,7 +100,7 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('CODCPG', dados.CODCPG) +
         montaTag('CODCPGNEGOCIADA', dados.CODCPG) +
         montaTag('TELCONTATO', '') +
-        montaTag('DTHULTENVIO', getNow()) +
+        montaTag('DTHULTENVIO', getToday()) +
         montaTag('VALTRB', '-1,00') +
         montaTag('VALFRETE', '0,0000') +
         montaTag('FRETECIFOUFOB', primeiroItem.FRETECIFOUFOB) +
