@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandler } from 'aws-lambda';
 import { formatResponse } from '../../../utils/response';
 import * as wsDataserver from '../../../utils/wsDataserver';
-import { getToday } from '../../../utils/date';
+import { getNow } from '../../../utils/date';
 import { montaTag } from '../../../utils/xml';
 
 const dataServer = new wsDataserver.wsDataserver();
@@ -10,7 +10,7 @@ function formatBRCurrency(value: string): string {
     return !value ? '0,00' : value.includes(',') ? value : value.replace('.', ',');
 }
 
-function addDaysToDate(dateStr: string, days: string): string {
+function addDaysToDate(dateStr: string, horaStr: string, days: string): string {
     if (!dateStr || !days) return dateStr;
     const [dia, mes, ano] = dateStr.split('/').map(Number);
     const date = new Date(ano, mes - 1, dia);
@@ -18,7 +18,7 @@ function addDaysToDate(dateStr: string, days: string): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}T00:00:00`;
+    return `${year}-${month}-${day}T${horaStr}`;
 }
 
 interface Produto {
@@ -95,12 +95,12 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('CODCFO', codCfo) +
         montaTag('CODCOLCFO', '0') +
         montaTag('VALPRAZOENTREGA', primeiroItem.PRAZOENTREGA) +
-        montaTag('DATENTREGA', addDaysToDate(dados.DATACOTACAO, primeiroItem.PRAZOENTREGA)) +
+        montaTag('DATENTREGA', addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('VALPRAZOVALIDADE', primeiroItem.VALPRAZOVALIDADE) +
         montaTag('CODCPG', dados.CODCPG) +
         montaTag('CODCPGNEGOCIADA', dados.CODCPG) +
         montaTag('TELCONTATO', '') +
-        montaTag('DTHULTENVIO', getToday()) +
+        montaTag('DTHULTENVIO', getNow()) +
         montaTag('VALTRB', '-1,00') +
         montaTag('VALFRETE', '0,0000') +
         montaTag('FRETECIFOUFOB', primeiroItem.FRETECIFOUFOB) +
@@ -116,14 +116,14 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('VALORDESCNEG', formatBRCurrency(primeiroItem.DESCONTO)) +
         montaTag('PERCDESCNEG', '0,0000') +
         montaTag('VALICMSST', '0,0000') +
-        montaTag('DATAENTREGAORC', addDaysToDate(dados.DATACOTACAO, primeiroItem.PRAZOENTREGA)) +
+        montaTag('DATAENTREGAORC', addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('ALIQFIXADIFERENCIAL', '0') +
         montaTag('DECLINADO', '0') +
         '</TCORCAMENTO>';
 }
 
 function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string): string {
-    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, orcamento.PRAZOENTREGA);
+    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
     return '<TCITMORCAMENTO>' +
         montaTag('CODCOTACAO', dados.CODCOTACAO) +
         montaTag('CODCOLIGADA', CODCOLIGADA) +
@@ -174,7 +174,7 @@ function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number,
 }
 
 function gerarTCITMORCAMENTOAGRUPADO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string): string {
-    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, orcamento.PRAZOENTREGA);
+    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
     return '<TCITMORCAMENTOAGRUPADO>' +
         montaTag('CODCOTACAO', dados.CODCOTACAO) +
         montaTag('CODCOLIGADA', CODCOLIGADA) +
