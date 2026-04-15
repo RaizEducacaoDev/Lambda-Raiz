@@ -433,19 +433,105 @@ export class ConfigManagerRm {
 
   async defineGanhador(CODCOLIGADA: string, CODCOTACAO: string, CODFILIAL: string) {
     try {
-      const apiURL = `${this.getBaseUrl8051()}/wsProcess/IwsProcess`;
+      const apiURL = `${this.getUrl()}:8051/wsProcess/IwsProcess`;
 
-      // (mantive seu envelope original, só melhorando a robustez do erro)
-      // ... seu XML aqui permanece igual ...
-      // ✅ dica: esse trecho já está OK para multi-coligada.
+      let soapEnvelope =
+        `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
+                <soapenv:Header/>
+                <soapenv:Body>
+                    <tot:ExecuteWithXmlParams>
+                        <tot:ProcessServerName>CmpCotCalculoQuadroComparativoProc</tot:ProcessServerName>
+                        <tot:strXmlParams>
+                            <![CDATA[<CmpCotCalculoQuadroComparativoParams xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:z="http://schemas.microsoft.com/2003/10/Serialization/" xmlns="http://www.totvs.com.br/RM/">
+                                <Context xmlns:d2p1="http://www.totvs.com.br/RM/" xmlns="http://www.totvs.com/">
+                                    <d2p1:_params xmlns:d3p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$EXERCICIOFISCAL</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODLOCPRT</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODTIPOCURSO</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$EDUTIPOUSR</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODUNIDADEBIB</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODCOLIGADA</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">${CODCOLIGADA}</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$RHTIPOUSR</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODIGOEXTERNO</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODSISTEMA</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">T</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODUSUARIO</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">p_heflo</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$IDPRJ</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CHAPAFUNCIONARIO</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">-1</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                        <d3p1:KeyValueOfanyTypeanyType>
+                                            <d3p1:Key xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:string">$CODFILIAL</d3p1:Key>
+                                            <d3p1:Value xmlns:d5p1="http://www.w3.org/2001/XMLSchema" i:type="d5p1:int">${CODFILIAL}</d3p1:Value>
+                                        </d3p1:KeyValueOfanyTypeanyType>
+                                    </d2p1:_params>
+                                    <d2p1:Environment>WebServices</d2p1:Environment>
+                                </Context>
+                                <CmpCotCalculoQuadroComparativo xmlns:d2p1="http://www.totvs.com/">
+                                    <d2p1:CmpCotCalculoQuadroComparativoPar>
+                                        <d2p1:InternalId i:nil="true"/>
+                                        <AAlistModified xmlns:d4p1="http://schemas.microsoft.com/2003/10/Serialization/Arrays"/>
+                                        <CodColigada>${CODCOLIGADA}</CodColigada>
+                                        <CodCotacao>${CODCOTACAO}</CodCotacao>
+                                        <CodUsuarioLogado>p_heflo</CodUsuarioLogado>
+                                    </d2p1:CmpCotCalculoQuadroComparativoPar>
+                                </CmpCotCalculoQuadroComparativo>
+                            </CmpCotCalculoQuadroComparativoParams>]]>
+                        </tot:strXmlParams>
+                    </tot:ExecuteWithXmlParams>
+                </soapenv:Body>
+            </soapenv:Envelope>`;
 
-      // ATENÇÃO: para não colar mais 300 linhas aqui de novo,
-      // você pode manter o seu envelope atual exatamente como está.
-      // Só garanta que CODCOLIGADA e CODFILIAL estejam vindo corretos.
+      const response = await axios.post(apiURL, soapEnvelope, {
+        headers: {
+          'Authorization': `Basic ${this.getCredentials()}`,
+          'Content-Type': 'text/xml;charset=UTF-8',
+          'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParams',
+        }
+      });
 
-      return true;
-    } catch (error: any) {
-      throw new Error(error instanceof Error ? error.message : String(error));
+      let result = await FUNCTIONS.buscaResultadoCotacao(response.data)
+
+      if (result.includes('=')) {
+        throw new Error('Resposta da API inválida ou vazia.');
+      }
+
+      return true
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'An unknown error occurred');
     }
   }
 
