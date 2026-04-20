@@ -3,8 +3,10 @@ import { formatResponse } from '../../../utils/response';
 import { montaTag } from '../../../utils/xml';
 import { wsDataserver } from '../../../utils/wsDataserver';
 import { toISOSimple } from '../../../utils/date';
+import * as CLASSES from '../../../utils/classRm';
 
 const dataServer = new wsDataserver();
+const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 
 export const handler = async (event: any) => {
   try {
@@ -18,6 +20,7 @@ export const handler = async (event: any) => {
 
     const CODCOLIGADA = campos.codigoDaColigada === "1" ? campos.codigoDaColigada2 : campos.codigoDaColigada || "";
     const CODFILIAL = campos.codigoDaColigada === "1" ? campos.codigoDaFilial2 : campos.codigoDaFilial || "";
+    const ESTOQUE = await ConfigManagerRm.getLOC(CODCOLIGADA, CODFILIAL);
 
     const codigos = {
       AD: "1.2.06",
@@ -128,7 +131,7 @@ export const handler = async (event: any) => {
       ["CODCOLIGADA", CODCOLIGADA],
       ["IDMOV", "-1"],
       ["CODFILIAL", CODFILIAL],
-      ["CODLOC", campos.localDeEstoque],
+      ["CODLOC", ESTOQUE],
       ["CODCFO", campos.atividadeAtual === "validarPrestacaoContas" && CODTMV !== "1.2.28"
         ? campos.codigoDoFornecedor2
         : campos.codigoDoFornecedor],
