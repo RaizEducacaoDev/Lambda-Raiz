@@ -99,8 +99,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
             const gruposArray = Object.values(grupos) as any[];
             
-            // Processar grupos em paralelo
-            await Promise.all(gruposArray.map(async (grupo) => {
+            // Processar grupos em paralelo e atualizar com IDs
+            const gruposProcessados = await Promise.all(gruposArray.map(async (grupo) => {
                 let idOrcamento = grupo.IDORCAMENTO;
                 if (!idOrcamento) {
                     const objResult = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${grupo.CODNATUREZA}`);
@@ -118,10 +118,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                         if (mov.VALOR) mov.VALOR = formatVal(mov.VALOR);
                     });
                 }
+                
+                return { ...grupo, IDORCAMENTO: idOrcamento };
             }));
 
             // Usar último grupo processado
-            const ultimoGrupo = gruposArray[gruposArray.length - 1];
+            const ultimoGrupo = gruposProcessados[gruposProcessados.length - 1];
             novaMovimentacao.ID = (obj.PRJ3873536.ZMDORCAMENTO?.length || 0) + 1;
             novaMovimentacao.IDORC = ultimoGrupo.IDORCAMENTO;
             novaMovimentacao.TIPO = "E";
