@@ -86,21 +86,25 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 const key = item.IDORCAMENTO;
                 if (!acc[key]) {
                     acc[key] = {
-                        ...item,
+                        IDORCAMENTO: key,
                         VALOR: 0,
                         SOLICITACAO: item.SOLICITACAO,
-                        DESCRICAO: item.DESCRICAO
+                        DESCRICAO: item.DESCRICAO,
+                        CODNATUREZA: item.CODNATUREZA
                     };
                 }
                 acc[key].VALOR += parseFloat(item.VALOR.replace(/\./g, '').replace(/\,/g, '.'));
                 return acc;
             }, {});
 
-            for (const grupo of Object.values(grupos)) {
-                var idOrcamento = (grupo as { IDORCAMENTO: string }).IDORCAMENTO;
-                if(!idOrcamento) {
-                    let objResult = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${(grupo as { CODNATUREZA: string }).CODNATUREZA}`);
-                    idOrcamento = (await objResult)[0].ID;
+            const gruposArray = Object.values(grupos) as any[];
+            
+            // Processar grupos em paralelo
+            await Promise.all(gruposArray.map(async (grupo) => {
+                let idOrcamento = grupo.IDORCAMENTO;
+                if (!idOrcamento) {
+                    const objResult = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${grupo.CODNATUREZA}`);
+                    idOrcamento = objResult[0].ID;
                 }
 
                 record = await dataServer.readReacord(idOrcamento, 'RMSPRJ3873536Server', ``);
@@ -108,27 +112,22 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
                 if (obj.PRJ3873536.ZMDORCAMENTO) {
                     obj.PRJ3873536.ZMDORCAMENTO.forEach((mov: any) => {
-                        if (mov.SALDO) {
-                            mov.SALDO = mov.SALDO.toString().replace(/\./g, ',');
-                        }
-                        if (mov.ORCAMENTO) {
-                            mov.ORCAMENTO = mov.ORCAMENTO.toString().replace(/\./g, ',');
-                        }
-                        if (mov.VALOR) {
-                            mov.VALOR = mov.VALOR.toString().replace(/\./g, ',');
-                        }
+                        const formatVal = (v: any) => v.toString().replace(/\./g, ',');
+                        if (mov.SALDO) mov.SALDO = formatVal(mov.SALDO);
+                        if (mov.ORCAMENTO) mov.ORCAMENTO = formatVal(mov.ORCAMENTO);
+                        if (mov.VALOR) mov.VALOR = formatVal(mov.VALOR);
                     });
                 }
+            }));
 
-                const movimentacoes = obj.PRJ3873536.ZMDORCAMENTO;
-
-                novaMovimentacao.ID = movimentacoes.length + 1;
-                novaMovimentacao.IDORC = idOrcamento;
-                novaMovimentacao.TIPO = "E";
-                novaMovimentacao.SOLICITACAO = (grupo as { SOLICITACAO: string }).SOLICITACAO;
-                novaMovimentacao.DESCRICAO = ((grupo as { DESCRICAO: string }).DESCRICAO).slice(0, 254);
-                novaMovimentacao.VALOR = ((grupo as { VALOR: string }).VALOR.toString()).replace(/\./g, ',');
-            }
+            // Usar último grupo processado
+            const ultimoGrupo = gruposArray[gruposArray.length - 1];
+            novaMovimentacao.ID = (obj.PRJ3873536.ZMDORCAMENTO?.length || 0) + 1;
+            novaMovimentacao.IDORC = ultimoGrupo.IDORCAMENTO;
+            novaMovimentacao.TIPO = "E";
+            novaMovimentacao.SOLICITACAO = ultimoGrupo.SOLICITACAO;
+            novaMovimentacao.DESCRICAO = ultimoGrupo.DESCRICAO.slice(0, 254);
+            novaMovimentacao.VALOR = ultimoGrupo.VALOR.toString().replace(/\./g, ',');
 
         }
 
