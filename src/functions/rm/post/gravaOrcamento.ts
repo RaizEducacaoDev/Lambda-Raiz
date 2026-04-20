@@ -99,7 +99,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             for (const grupo of Object.values(grupos)) {
                 var idOrcamento = (grupo as { IDORCAMENTO: string }).IDORCAMENTO;
                 if(!idOrcamento) {
-                    let objResult = parseStringPromise(await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${(grupo as { CODNATUREZA: string }).CODNATUREZA}`))
+                    let objResult = await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${(grupo as { CODNATUREZA: string }).CODNATUREZA}`);
                     idOrcamento = (await objResult)[0].ID;
                 }
 
