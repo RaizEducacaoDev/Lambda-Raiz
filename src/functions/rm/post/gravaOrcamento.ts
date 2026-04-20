@@ -97,7 +97,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             }, {});
 
             for (const grupo of Object.values(grupos)) {
-                record = await dataServer.readReacord((grupo as { IDORCAMENTO: string }).IDORCAMENTO, 'RMSPRJ3873536Server', ``);
+                let idOrcamento = (grupo as { IDORCAMENTO: string }).IDORCAMENTO || await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${(grupo as { CODNATUREZA: string }).CODNATUREZA}`);
+                record = await dataServer.readReacord(idOrcamento, 'RMSPRJ3873536Server', ``);
                 obj = await parseStringPromise(record);
 
                 if (obj.PRJ3873536.ZMDORCAMENTO) {
