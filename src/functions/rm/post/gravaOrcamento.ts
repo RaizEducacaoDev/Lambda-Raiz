@@ -123,10 +123,9 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 const movimentacoes = obj.PRJ3873536.ZMDORCAMENTO;
 
                 novaMovimentacao.ID = movimentacoes.length + 1;
-                novaMovimentacao.IDORC = result[0].ID;
+                novaMovimentacao.IDORC = idOrcamento;
                 novaMovimentacao.TIPO = "E";
                 novaMovimentacao.SOLICITACAO = (grupo as { SOLICITACAO: string }).SOLICITACAO;
-                novaMovimentacao.IDORC = (grupo as { IDORCAMENTO: string }).IDORCAMENTO || await ConfigManagerRm.consultaSQL('TICKET.RAIZ.0039', 'T', `CODCOLIGADA=${CODCOLIGADA};CODFILIAL=${CODFILIAL};CODTBORCAMENTO=${(grupo as { CODNATUREZA: string }).CODNATUREZA}`);
                 novaMovimentacao.DESCRICAO = ((grupo as { DESCRICAO: string }).DESCRICAO).slice(0, 254);
                 novaMovimentacao.VALOR = ((grupo as { VALOR: string }).VALOR.toString()).replace(/\./g, ',');
             }
