@@ -180,7 +180,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                 headers: {
                     'Authorization': `Basic ${ConfigManagerRm.getCredentials()}`,
                     'Content-Type': 'text/xml;charset=UTF-8',
-                    'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParams',
+                    'SOAPAction': 'http://www.totvs.com/IwsProcess/ExecuteWithXmlParamsAsync',
                 },
                 timeout: 30000, // Aumenta o timeout para 30 segundos
             }
@@ -188,6 +188,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         let result = respostas.data
         result = await XML.buscaResultadoCotacao(result)
+
+        console.log('resultado ', result)
 
         if (result == '1') {
             return formatResponse(200, { message: 'Comunicação realizada com sucesso' });
