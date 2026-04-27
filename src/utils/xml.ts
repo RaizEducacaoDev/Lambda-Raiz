@@ -80,6 +80,10 @@ export async function buscaResultadoCotacao(xmlString: string): Promise<any> {
     return parseXML(xmlString, 'ExecuteWithXmlParamsResponse', 'ExecuteWithXmlParamsResult');
 }
 
+export async function buscaResultadoCotacaoAsync(xmlString: string): Promise<any> {
+    return parseXML(xmlString, 'ExecuteWithXmlParamsAsyncResponse', 'ExecuteWithXmlParamsAsyncResult');
+}
+
 export async function buscaUID(xmlString: string): Promise<any> {
     return parseXML(xmlString, 'GenerateReportResponse', 'GenerateReportResult');
 }

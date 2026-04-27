@@ -47,7 +47,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tot="http://www.totvs.com/">
             <soapenv:Header />
             <soapenv:Body>
-                <tot:ExecuteWithXmlParams>
+                <tot:ExecuteWithXmlParamsAsync>
                     <tot:ProcessServerName>CmpCotacaoComunicarFornecedoresProc</tot:ProcessServerName>
                     <tot:strXmlParams>
                         <![CDATA[
@@ -167,7 +167,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
                             </CmpCotacaoComunicarFornecedoresParams>
                         ]]>
                     </tot:strXmlParams>
-                </tot:ExecuteWithXmlParams>
+                </tot:ExecuteWithXmlParamsAsync>
             </soapenv:Body>
         </soapenv:Envelope>`;
 
@@ -187,12 +187,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         );
 
         let result = respostas.data
-        result = await XML.buscaResultadoCotacao(result)
+        result = await XML.buscaResultadoCotacaoAsync(result)
 
         console.log('resultado ', result)
 
-        if (result == '1') {
-            return formatResponse(200, { message: 'Comunicação realizada com sucesso' });
+        if (result.includes('JobID')) {
+            return formatResponse(200, { message: 'Comunicação agendada com sucesso', job: result });
         } else {
             let error = result.match(/^[^\r\n]+/)[0];
             console.error('Erro na comunicação com o RM:', error);
