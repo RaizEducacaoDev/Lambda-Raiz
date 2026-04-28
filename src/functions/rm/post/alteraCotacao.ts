@@ -9,22 +9,22 @@ function parsePtBrDecimal(value) {
     if (!value || value.trim() === "") return 0;
     return parseFloat(value.replace(/\./g, "").replace(",", ".")) || 0;
 }
-function parseDateBr(dateStr) {
+function parseDateBr(dateStr, horaStr) {
     if (!dateStr || !dateStr.trim()) return "";
     const parts = dateStr.trim().split("/");
     if (parts.length !== 3) return "";
     const [dia, mes, ano] = parts;
-    return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}T00:00:00`;
+    return `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}T${horaStr}`;
 }
-function addDaysToDateBr(dataBr, days) {
+function addDaysToDateBr(dataBr, days, horaStr) {
     const parts = dataBr.split("/");
-    if (parts.length !== 3) return parseDateBr(dataBr);
+    if (parts.length !== 3) return parseDateBr(dataBr, horaStr);
     const [dia, mes, ano] = parts.map(Number);
     const date = new Date(ano, mes - 1, dia);
     date.setDate(date.getDate() + days);
     const d = String(date.getDate()).padStart(2, "0");
     const m = String(date.getMonth() + 1).padStart(2, "0");
-    return `${date.getFullYear()}-${m}-${d}T00:00:00`;
+    return `${date.getFullYear()}-${m}-${d}T${horaStr}`;
 }
 function getField(xml, field) {
     const m = xml.match(new RegExp(`<${field}>(.*?)</${field}>`, "s"));
@@ -62,7 +62,7 @@ function buildTccotacao(inner) {
     }).join("");
     return `<TCCOTACAO>${tags}</TCCOTACAO>`;
 }
-function buildTcorcamento(inner, orcForn) {
+function buildTcorcamento(inner, orcForn, horaStr) {
     const fields = [
         "CODCOTACAO",
         "CODCOLIGADA",
@@ -102,8 +102,8 @@ function buildTcorcamento(inner, orcForn) {
     ]);
     const valfrete = orcForn ? parsePtBrDecimal(orcForn.VALORFRETE) : parseFloat(getField(inner, "VALFRETE")) || 0;
     const prazo = orcForn ? parseInt(orcForn.PRAZOENTREGA ?? "0") || 0 : 0;
-    const datentrega = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA) : getField(inner, "DATENTREGA");
-    const dataentregaorc = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA) : getField(inner, "DATAENTREGAORC");
+    const datentrega = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
+    const dataentregaorc = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATAENTREGAORC");
     let xml = "<TCORCAMENTO>";
     fields.forEach((f) => {
         let value;
@@ -132,7 +132,7 @@ function buildTcorcamento(inner, orcForn) {
     xml += "</TCORCAMENTO>";
     return xml;
 }
-function buildTcitmorcamento(inner, orc, dataCotacao) {
+function buildTcitmorcamento(inner, orc, dataCotacao, horaStr) {
     const fields = [
         "CODCOTACAO",
         "CODCOLIGADA",
@@ -210,9 +210,9 @@ function buildTcitmorcamento(inner, orc, dataCotacao) {
         descontoNeg = desconto;
         prazo = parseInt(orc.PRAZOENTREGA ?? "-1") || -1;
         if (prazo > 0) {
-            dataEntrega = addDaysToDateBr(dataCotacao, prazo);
+            dataEntrega = addDaysToDateBr(dataCotacao, prazo, horaStr);
         } else if (orc.DATENTREGA) {
-            dataEntrega = parseDateBr(orc.DATENTREGA);
+            dataEntrega = parseDateBr(orc.DATENTREGA, horaStr);
         }
     }
     const valtotcotacao = valCotacao * qtdOrc;
@@ -268,7 +268,7 @@ var handler = async (event) => {
         console.log('[START]', JSON.stringify({ fn: process.env.AWS_LAMBDA_FUNCTION_NAME, instanceId: INSTANCE_ID, ts: new Date().toISOString() }));
         const body = JSON.parse(event.body);
         const data = Array.isArray(body) ? body[0] : body;
-        const { CODCOTACAO, CODCOLIGADA, DATACOTACAO, orcamentos } = data;
+        const { CODCOTACAO, CODCOLIGADA, DATACOTACAO, HORACOTACAO, orcamentos } = data;
         if (!CODCOTACAO || !CODCOLIGADA || !orcamentos?.length) {
             return formatResponse(400, {
                 message: "Campos obrigat\xF3rios ausentes: CODCOTACAO, CODCOLIGADA, orcamentos"
@@ -324,7 +324,7 @@ var handler = async (event) => {
         tcorcamentos.forEach((inner) => {
             const codcfo = getField(inner, "CODCFO");
             const orcForn = primeiroOrcPorForn.get(codcfo);
-            xmlBody += buildTcorcamento(inner, orcForn);
+            xmlBody += buildTcorcamento(inner, orcForn, HORACOTACAO);
         });
 
         // --- LOG 3: alterações aplicadas por item ---
@@ -343,7 +343,7 @@ var handler = async (event) => {
             } else {
                 console.log(`[alteraCotacao] SEM ALTERACAO (mantido do TOTVS) CODCFO=${codcfo} IDPRD=${idprd}`);
             }
-            xmlBody += buildTcitmorcamento(inner, orc, DATACOTACAO);
+            xmlBody += buildTcitmorcamento(inner, orc, DATACOTACAO, HORACOTACAO);
         });
 
         // --- LOG 4: XML final enviado ao TOTVS ---
