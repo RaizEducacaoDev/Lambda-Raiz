@@ -265,7 +265,6 @@ function buildTcitmorcamento(inner, orc, dataCotacao, horaStr) {
 var INSTANCE_ID = Math.random().toString(36).slice(2, 9);
 var handler = async (event) => {
     try {
-        console.log('[START]', JSON.stringify({ fn: process.env.AWS_LAMBDA_FUNCTION_NAME, instanceId: INSTANCE_ID, ts: new Date().toISOString() }));
         const body = JSON.parse(event.body);
         const data = Array.isArray(body) ? body[0] : body;
         const { CODCOTACAO, CODCOLIGADA, DATACOTACAO, HORACOTACAO, orcamentos } = data;
@@ -277,7 +276,7 @@ var handler = async (event) => {
         console.log(`[alteraCotacao] Iniciando \u2014 CODCOTACAO: ${CODCOTACAO} | Or\xE7amentos: ${orcamentos.length}`);
 
         // --- LOG 1: payload recebido do Zeev ---
-        console.log("[alteraCotacao] PAYLOAD RECEBIDO:", JSON.stringify({ CODCOTACAO, CODCOLIGADA, DATACOTACAO, orcamentos }, null, 2));
+        console.log("[alteraCotacao] PAYLOAD RECEBIDO:", JSON.stringify({ CODCOTACAO, CODCOLIGADA, DATACOTACAO, HORACOTACAO, orcamentos }, null, 2));
 
         const contexto = `CODCOLIGADA=${CODCOLIGADA};CODSISTEMA=T;CODUSUARIO=p_heflo`;
         const primaryKey = `${CODCOTACAO};${CODCOLIGADA}`;
