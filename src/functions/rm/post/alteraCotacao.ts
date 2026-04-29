@@ -1,6 +1,7 @@
 
-
-import * as wsDataserver from '../../../utils/wsDataserver';
+import { APIGatewayProxyHandler } from 'aws-lambda';
+import { wsDataserver } from '../../../utils/wsDataserver';
+import { formatResponse } from '../../../utils/response';
 var dataServer = new wsDataserver();
 
 function toTotvsDecimal(value) {
@@ -263,10 +264,9 @@ function buildTcitmorcamento(inner, orc, dataCotacao, horaStr) {
     xml += "</TCITMORCAMENTO>";
     return xml;
 }
-var INSTANCE_ID = Math.random().toString(36).slice(2, 9);
-var handler = async (event) => {
+export const handler: APIGatewayProxyHandler = async (event) => {
     try {
-        const body = JSON.parse(event.body);
+        const body = JSON.parse(event.body as string);
         const data = Array.isArray(body) ? body[0] : body;
         const { CODCOTACAO, CODCOLIGADA, DATACOTACAO, HORACOTACAO, orcamentos } = data;
         if (!CODCOTACAO || !CODCOLIGADA || !orcamentos?.length) {
