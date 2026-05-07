@@ -18,8 +18,8 @@ export const handler = async (event: any) => {
       return formatResponse(200, { PG });
     }
 
-    const CODCOLIGADA = campos.codigoDaColigada === "1" ? campos.codigoDaColigada2 : campos.codigoDaColigada || "";
-    const CODFILIAL = campos.codigoDaColigada === "1" ? campos.codigoDaFilial2 : campos.codigoDaFilial || "";
+    const CODCOLIGADA = campos.codigoDaColigada2 || campos.codigoDaColigada || "";
+    const CODFILIAL = campos.codigoDaFilial2 || campos.codigoDaFilial || "";
     const ESTOQUE = await ConfigManagerRm.getLOC(CODCOLIGADA, CODFILIAL);
 
     const codigos = {
