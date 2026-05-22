@@ -132,9 +132,7 @@ export const handler = async (event: any) => {
       ["IDMOV", "-1"],
       ["CODFILIAL", CODFILIAL],
       ["CODLOC", ESTOQUE],
-      ["CODCFO", campos.atividadeAtual === "validarPrestacaoContas" && CODTMV !== "1.2.28"
-        ? campos.codigoDoFornecedor2
-        : campos.codigoDoFornecedor],
+      ["CODCFO", campos.codigoDoFornecedor],
       ...tagIf(!isMovimentoSimples, ["NUMEROMOV", campos.numeroDaNF.slice(0, 9)]),
       ...tagIf(isMovimentoComFrete, ["SERIE", campos.serie]),
       ["CODTMV", CODTMV],
