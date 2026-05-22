@@ -44,7 +44,7 @@ function getAllSections(xml, tagName) {
 function xmlTag(field, value) {
     return `<${field}>${value}</${field}>`;
 }
-function buildTccotacao(inner) {
+function buildTccotacao(inner, datacotacao?, horacotacao?) {
     const fields = [
         "CODCOTACAO",
         "CODCOLIGADA",
@@ -59,12 +59,15 @@ function buildTccotacao(inner) {
         "TIPOJULGAMENTO"
     ];
     const tags = fields.map((f) => {
+        if (f === "DATCOTACAO" && datacotacao) {
+            return xmlTag(f, parseDateBr(datacotacao, horacotacao ?? "00:00:00"));
+        }
         const v = getField(inner, f);
         return v !== "" ? xmlTag(f, v) : "";
     }).join("");
     return `<TCCOTACAO>${tags}</TCCOTACAO>`;
 }
-function buildTcorcamento(inner, orcForn, horaStr, datcotacaoBr?) {
+function buildTcorcamento(inner, orcForn, horaStr) {
     const fields = [
         "CODCOTACAO",
         "CODCOLIGADA",
@@ -104,10 +107,8 @@ function buildTcorcamento(inner, orcForn, horaStr, datcotacaoBr?) {
     ]);
     const valfrete = orcForn ? parsePtBrDecimal(orcForn.VALORFRETE) : parseFloat(getField(inner, "VALFRETE")) || 0;
     const prazo = orcForn ? parseInt(orcForn.PRAZOENTREGA ?? "0") || 0 : 0;
-    const datentrega = (prazo > 0 && datcotacaoBr)
-        ? addDaysToDateBr(datcotacaoBr, prazo, horaStr)
-        : (orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA"));
-    const dataentregaorc = datentrega;
+    const datentrega = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
+    const dataentregaorc = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATAENTREGAORC");
     let xml = "<TCORCAMENTO>";
     fields.forEach((f) => {
         let value;
@@ -322,18 +323,13 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             if (!primeiroOrcPorForn.has(o.CODCFO)) primeiroOrcPorForn.set(o.CODCFO, o);
         });
 
-        // Usa DATCOTACAO do registro TOTVS como base para calcular DATENTREGA,
-        // evitando inconsistência quando o payload traz uma data diferente da gravada.
-        const datcotacaoIso = getField(tccotacaoInner, "DATCOTACAO");
-        const datcotacaoBr = datcotacaoIso
-            ? datcotacaoIso.substring(0, 10).split("-").reverse().join("/")
-            : DATACOTACAO;
-
-        let xmlBody = buildTccotacao(tccotacaoInner);
+        // Atualiza DATCOTACAO no TCCOTACAO com a data do payload para manter consistência
+        // com o cálculo de DATENTREGA (DATCOTACAO + PRAZOENTREGA = DATENTREGA).
+        let xmlBody = buildTccotacao(tccotacaoInner, DATACOTACAO, HORACOTACAO);
         tcorcamentos.forEach((inner) => {
             const codcfo = getField(inner, "CODCFO");
             const orcForn = primeiroOrcPorForn.get(codcfo);
-            xmlBody += buildTcorcamento(inner, orcForn, HORACOTACAO, datcotacaoBr);
+            xmlBody += buildTcorcamento(inner, orcForn, HORACOTACAO);
         });
 
         // --- LOG 3: alterações aplicadas por item ---
@@ -352,7 +348,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             } else {
                 console.log(`[alteraCotacao] SEM ALTERACAO (mantido do TOTVS) CODCFO=${codcfo} IDPRD=${idprd}`);
             }
-            xmlBody += buildTcitmorcamento(inner, orc, datcotacaoBr, HORACOTACAO);
+            xmlBody += buildTcitmorcamento(inner, orc, DATACOTACAO, HORACOTACAO);
         });
 
         // --- LOG 4: XML final enviado ao TOTVS ---
