@@ -9,6 +9,7 @@ const ConfigManagerRm = new CLASSES.ConfigManagerRm();
 export const handler: APIGatewayProxyHandler = async (event) => {
     try {
         const campos = JSON.parse(event.body as string);
+        console.info('[RM-INFO] Dados recebidos:', JSON.stringify(campos, null, 2));
 
         const ESTOQUE = campos.codigoDaColigada === '1'
             ? `${(campos.filialDeEntrega as string).split(" - ")[0]}.001`
@@ -238,7 +239,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             </soapenv:Body>
         </soapenv:Envelope>`;
 
-        //console.log(soapEnvelope)
+        console.info('[RM-INFO] SOAP Envelope enviado ao TOTVS:', soapEnvelope);
 
         let respostas = await axios.post(
             `${ConfigManagerRm.getUrl()}:8051/wsDataServer/IwsDataServer`,
@@ -253,6 +254,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         );
 
         let result = respostas.data
+        console.info('[RM-INFO] Resposta TOTVS (status HTTP):', respostas.status);
+        console.info('[RM-INFO] Resposta TOTVS (body):', typeof result === 'string' ? result.substring(0, 500) : JSON.stringify(result).substring(0, 500));
         result = await XML.buscaResultado(result)
 
         if (!result.includes('=')) {
@@ -263,6 +266,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             return formatResponse(400, { message: 'Internal Server Error', error: error });
         }
     } catch (error) {
+        console.error('[RM-ERRO] Erro inesperado:', error instanceof Error ? error.message : String(error));
         return formatResponse(500, {  message: 'Internal Server Error',  error: error instanceof Error ? error.message : String(error) });
     }
 };
