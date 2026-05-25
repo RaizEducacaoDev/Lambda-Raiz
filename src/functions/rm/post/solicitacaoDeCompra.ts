@@ -11,9 +11,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const campos = JSON.parse(event.body as string);
         console.info('[RM-INFO] Dados recebidos:', JSON.stringify(campos, null, 2));
 
-        const ESTOQUE = campos.codigoDaColigada === '1'
-            ? `${(campos.filialDeEntrega as string).split(" - ")[0]}.001`
-            : `${(campos.unidadeFilial as string).split(" - ")[0]}.001`;
+        const ESTOQUE = campos.localDeEstoque as string;
 
         const HISTORICOCURTO = campos.tipoDeSolicitacao === 'P'
             ? `MOTIVO DA SOLICITAÇÃO: ${campos.motivoDaSolicitacao}`
