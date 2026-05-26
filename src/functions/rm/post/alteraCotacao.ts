@@ -318,8 +318,6 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         console.log("[alteraCotacao] ESTADO ANTES (TCITMORCAMENTO):", JSON.stringify(estadoAntes, null, 2));
         console.log("[alteraCotacao] ESTADO ANTES (TCORCAMENTO - frete/despesa):", JSON.stringify(freteAntes, null, 2));
 
-        const orcMap = new Map();
-        orcamentos.forEach((o) => orcMap.set(`${o.CODCFO}|${o.IDPRD}`, o));
         const primeiroOrcPorForn = new Map();
         orcamentos.forEach((o) => {
             if (!primeiroOrcPorForn.has(o.CODCFO)) primeiroOrcPorForn.set(o.CODCFO, o);
@@ -339,10 +337,10 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         });
 
         // --- LOG 3: alterações aplicadas por item ---
-        tcitmorcamentos.forEach((inner) => {
+        tcitmorcamentos.forEach((inner, index) => {
             const codcfo = getField(inner, "CODCFO");
             const idprd = getField(inner, "IDPRD");
-            const orc = orcMap.get(`${codcfo}|${idprd}`);
+            const orc = orcamentos[index] ?? null;
             if (orc) {
                 const alteracoes = {};
                 if (orc.VALCOTACAO !== undefined && orc.VALCOTACAO !== getField(inner, "VALCOTACAO")) alteracoes.VALCOTACAO = { antes: getField(inner, "VALCOTACAO"), depois: orc.VALCOTACAO };
