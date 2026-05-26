@@ -67,7 +67,7 @@ function buildTccotacao(inner, datacotacao?, horacotacao?) {
     }).join("");
     return `<TCCOTACAO>${tags}</TCCOTACAO>`;
 }
-function buildTcorcamento(inner, orcForn, horaStr) {
+function buildTcorcamento(inner, orcForn, horaStr, dataCotacaoBase?) {
     const fields = [
         "CODCOTACAO",
         "CODCOLIGADA",
@@ -107,8 +107,10 @@ function buildTcorcamento(inner, orcForn, horaStr) {
     ]);
     const valfrete = orcForn ? parsePtBrDecimal(orcForn.VALORFRETE) : parseFloat(getField(inner, "VALFRETE")) || 0;
     const prazo = orcForn ? parseInt(orcForn.PRAZOENTREGA ?? "0") || 0 : 0;
-    const datentrega = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
-    const dataentregaorc = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATAENTREGAORC");
+    const datentrega = (dataCotacaoBase && prazo > 0)
+        ? addDaysToDateBr(dataCotacaoBase, prazo, horaStr)
+        : orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
+    const dataentregaorc = datentrega;
     let xml = "<TCORCAMENTO>";
     fields.forEach((f) => {
         let value;
@@ -333,7 +335,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         tcorcamentos.forEach((inner) => {
             const codcfo = getField(inner, "CODCFO");
             const orcForn = primeiroOrcPorForn.get(codcfo);
-            xmlBody += buildTcorcamento(inner, orcForn, HORACOTACAO);
+            xmlBody += buildTcorcamento(inner, orcForn, HORACOTACAO, dataCotacaoBase);
         });
 
         // --- LOG 3: alterações aplicadas por item ---
