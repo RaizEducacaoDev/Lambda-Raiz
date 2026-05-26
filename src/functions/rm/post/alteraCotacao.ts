@@ -323,8 +323,12 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             if (!primeiroOrcPorForn.has(o.CODCFO)) primeiroOrcPorForn.set(o.CODCFO, o);
         });
 
-        // Atualiza DATCOTACAO no TCCOTACAO com a data do payload para manter consistência
-        // com o cálculo de DATENTREGA (DATCOTACAO + PRAZOENTREGA = DATENTREGA).
+        // Usa a DATCOTACAO já gravada no TOTVS como base para calcular DATAENTREGA dos itens,
+        // evitando divergência quando o payload chega em um dia diferente da criação da cotação.
+        const dataCotacaoTotvsRaw = getField(tccotacaoInner, "DATCOTACAO"); // ex: "2026-05-25T14:27:19"
+        const [anoT, mesT, diaT] = dataCotacaoTotvsRaw.substring(0, 10).split("-");
+        const dataCotacaoBase = `${diaT}/${mesT}/${anoT}`; // converte para "25/05/2026"
+
         let xmlBody = buildTccotacao(tccotacaoInner, DATACOTACAO, HORACOTACAO);
         tcorcamentos.forEach((inner) => {
             const codcfo = getField(inner, "CODCFO");
@@ -348,7 +352,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
             } else {
                 console.log(`[alteraCotacao] SEM ALTERACAO (mantido do TOTVS) CODCFO=${codcfo} IDPRD=${idprd}`);
             }
-            xmlBody += buildTcitmorcamento(inner, orc, DATACOTACAO, HORACOTACAO);
+            xmlBody += buildTcitmorcamento(inner, orc, dataCotacaoBase, HORACOTACAO);
         });
 
         // --- LOG 4: XML final enviado ao TOTVS ---
