@@ -88,14 +88,14 @@ function gerarTCCOTACAOITMMOV(dados: any, produto: Produto, nseq: number, CODCOL
         '</TCCOTACAOITMMOV>';
 }
 
-function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoItem, CODCOLIGADA: string): string {
+function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoItem, CODCOLIGADA: string, dataCotacaoBase: string): string {
     return '<TCORCAMENTO>' +
         montaTag('CODCOTACAO', dados.CODCOTACAO) +
         montaTag('CODCOLIGADA', CODCOLIGADA) +
         montaTag('CODCFO', codCfo) +
         montaTag('CODCOLCFO', '0') +
         montaTag('VALPRAZOENTREGA', primeiroItem.PRAZOENTREGA) +
-        montaTag('DATENTREGA', addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
+        montaTag('DATENTREGA', addDaysToDate(dataCotacaoBase, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('VALPRAZOVALIDADE', primeiroItem.VALPRAZOVALIDADE) +
         montaTag('CODCPG', dados.CODCPG) +
         montaTag('CODCPGNEGOCIADA', dados.CODCPG) +
@@ -116,14 +116,14 @@ function gerarTCORCAMENTO(dados: any, codCfo: string, primeiroItem: OrcamentoIte
         montaTag('VALORDESCNEG', formatBRCurrency(primeiroItem.DESCONTO)) +
         montaTag('PERCDESCNEG', '0,0000') +
         montaTag('VALICMSST', '0,0000') +
-        montaTag('DATAENTREGAORC', addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
+        montaTag('DATAENTREGAORC', addDaysToDate(dataCotacaoBase, dados.HORACOTACAO, primeiroItem.PRAZOENTREGA)) +
         montaTag('ALIQFIXADIFERENCIAL', '0') +
         montaTag('DECLINADO', '0') +
         '</TCORCAMENTO>';
 }
 
-function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string): string {
-    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
+function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string, dataCotacaoBase: string): string {
+    const dataEntregaCalculada = addDaysToDate(dataCotacaoBase, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
     return '<TCITMORCAMENTO>' +
         montaTag('CODCOTACAO', dados.CODCOTACAO) +
         montaTag('CODCOLIGADA', CODCOLIGADA) +
@@ -173,8 +173,8 @@ function gerarTCITMORCAMENTO(dados: any, orcamento: OrcamentoItem, nseq: number,
         '</TCITMORCAMENTO>';
 }
 
-function gerarTCITMORCAMENTOAGRUPADO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string): string {
-    const dataEntregaCalculada = addDaysToDate(dados.DATACOTACAO, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
+function gerarTCITMORCAMENTOAGRUPADO(dados: any, orcamento: OrcamentoItem, nseq: number, CODCOLIGADA: string, dataCotacaoBase: string): string {
+    const dataEntregaCalculada = addDaysToDate(dataCotacaoBase, dados.HORACOTACAO, orcamento.PRAZOENTREGA);
     return '<TCITMORCAMENTOAGRUPADO>' +
         montaTag('CODCOTACAO', dados.CODCOTACAO) +
         montaTag('CODCOLIGADA', CODCOLIGADA) +
@@ -233,6 +233,23 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         const CODFILIAL = dados.CODCOLIGADA === "1" ? dados.CODFILIALENTREGA : dados.CODFILIAL;
         const CODTMV = dados.TIPOSOLICITACAO === "Material" ? "1.1.03" : "1.1.04";
 
+        // Lê DATCOTACAO do TOTVS para usar como base no cálculo de DATENTREGA,
+        // evitando rejeição quando o payload chega num dia diferente da criação da cotação.
+        let dataCotacaoBase = dados.DATACOTACAO;
+        try {
+            const contextoLeitura = `CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
+            const primaryKey = `${dados.CODCOTACAO};${CODCOLIGADA}`;
+            const xmlAtual = await dataServer.readReacord(primaryKey, 'CmpCotacaoData', contextoLeitura);
+            const datcotacaoRaw = xmlAtual.match(/<DATCOTACAO>(.*?)<\/DATCOTACAO>/)?.[1] ?? '';
+            if (datcotacaoRaw) {
+                const [ano, mes, dia] = datcotacaoRaw.substring(0, 10).split('-');
+                dataCotacaoBase = `${dia}/${mes}/${ano}`;
+                console.info(`[RM-INFO] DATCOTACAO lida do TOTVS: ${dataCotacaoBase}`);
+            }
+        } catch (e) {
+            console.warn('[RM-WARN] Não foi possível ler DATCOTACAO do TOTVS, usando data do payload:', e);
+        }
+
         const produtoSeqMap = new Map<string, number>();
         dados.produtos.forEach((produto, index) => produtoSeqMap.set(produto.IDPRD, index + 1));
 
@@ -254,18 +271,18 @@ export const handler: APIGatewayProxyHandler = async (event) => {
 
         orcamentosPorFornecedor.forEach((itensFornecedor, codcfo) => {
             const primeiroItem = itensFornecedor[0];
-            cData += gerarTCORCAMENTO(dados, codcfo, primeiroItem, CODCOLIGADA);
+            cData += gerarTCORCAMENTO(dados, codcfo, primeiroItem, CODCOLIGADA, dataCotacaoBase);
 
             itensFornecedor.forEach(orcamento => {
                 const nseq = produtoSeqMap.get(orcamento.IDPRD) || 1;
-                cData += gerarTCITMORCAMENTO(dados, orcamento, nseq, CODCOLIGADA);
+                cData += gerarTCITMORCAMENTO(dados, orcamento, nseq, CODCOLIGADA, dataCotacaoBase);
             });
         });
 
         orcamentosPorFornecedor.forEach((itensFornecedor) => {
             itensFornecedor.forEach(orcamento => {
                 const nseq = produtoSeqMap.get(orcamento.IDPRD) || 1;
-                cData += gerarTCITMORCAMENTOAGRUPADO(dados, orcamento, nseq, CODCOLIGADA);
+                cData += gerarTCITMORCAMENTOAGRUPADO(dados, orcamento, nseq, CODCOLIGADA, dataCotacaoBase);
             });
         });
 
