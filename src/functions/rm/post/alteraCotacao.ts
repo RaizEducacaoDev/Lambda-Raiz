@@ -107,9 +107,17 @@ function buildTcorcamento(inner, orcForn, horaStr, dataCotacaoBase?) {
     ]);
     const valfrete = orcForn ? parsePtBrDecimal(orcForn.VALORFRETE) : parseFloat(getField(inner, "VALFRETE")) || 0;
     const prazo = orcForn ? parseInt(orcForn.PRAZOENTREGA ?? "0") || 0 : 0;
-    const datentrega = (dataCotacaoBase && prazo > 0)
-        ? addDaysToDateBr(dataCotacaoBase, prazo, horaStr)
-        : orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
+    let datentrega: string;
+    if (dataCotacaoBase && prazo > 0) {
+        const calculada = addDaysToDateBr(dataCotacaoBase, prazo, horaStr);
+        const calcMs = new Date(calculada.substring(0, 10)).getTime();
+        const hojeMs = new Date().setHours(0, 0, 0, 0);
+        datentrega = calcMs < hojeMs && orcForn?.DATENTREGA
+            ? parseDateBr(orcForn.DATENTREGA, horaStr)
+            : calculada;
+    } else {
+        datentrega = orcForn?.DATENTREGA ? parseDateBr(orcForn.DATENTREGA, horaStr) : getField(inner, "DATENTREGA");
+    }
     const dataentregaorc = datentrega;
     let xml = "<TCORCAMENTO>";
     fields.forEach((f) => {
@@ -217,7 +225,14 @@ function buildTcitmorcamento(inner, orc, dataCotacao, horaStr) {
         descontoNeg = desconto;
         prazo = parseInt(orc.PRAZOENTREGA ?? "-1") || -1;
         if (prazo > 0) {
-            dataEntrega = addDaysToDateBr(dataCotacao, prazo, horaStr);
+            const calculada = addDaysToDateBr(dataCotacao, prazo, horaStr);
+            // Se a data calculada ficou no passado (DATCOTACAO antigo + prazo pequeno),
+            // usa a data enviada pelo n8n — calculada a partir do DATACOTACAO do payload (hoje).
+            const calcMs = new Date(calculada.substring(0, 10)).getTime();
+            const hojeMs = new Date().setHours(0, 0, 0, 0);
+            dataEntrega = calcMs < hojeMs && orc.DATENTREGA
+                ? parseDateBr(orc.DATENTREGA, horaStr)
+                : calculada;
         } else if (orc.DATENTREGA) {
             dataEntrega = parseDateBr(orc.DATENTREGA, horaStr);
         }
