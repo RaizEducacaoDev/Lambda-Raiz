@@ -36,6 +36,11 @@ Resources:
           - Effect: Allow
             Action: [dynamodb:PutItem, dynamodb:GetItem, dynamodb:UpdateItem]
             Resource: !GetAtt Pagamentos.Arn
+            # A role do servico pode ser compartilhada por outras funcoes.
+            # Somente o codigo desta Lambda recebe a nova permissao.
+            Condition:
+              ArnEquals:
+                lambda:SourceFunctionArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:lambda-raiz-${Stage}-solicitacaoDePagamento
 Outputs:
   TableName:
     Value: !Ref Pagamentos

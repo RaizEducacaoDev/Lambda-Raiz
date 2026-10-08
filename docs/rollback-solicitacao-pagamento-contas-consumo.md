@@ -53,6 +53,14 @@ O template é separado do deploy e não foi executado. Validar a role da funçã
 provisionar a tabela do stage e conceder somente GetItem/PutItem/UpdateItem nela.
 Não habilitar Global Tables: o protocolo assume escrita numa única região.
 
+A política preparada restringe a origem por `lambda:SourceFunctionArn` ao ARN
+sem alias/versão de `solicitacaoDePagamento` no stage. Isso é necessário porque
+a role atual é compartilhada pelo serviço: anexar acesso à tabela sem essa
+condição concederia o mesmo acesso às demais funções. A condição segue a
+[documentação AWS](https://docs.aws.amazon.com/lambda/latest/dg/permissions-source-function-arn.html).
+Antes de provisionar, simular permissão para a função correta e negação para
+outra função/ausência da chave. Essa simulação não substitui teste real de IAM.
+
 Chave lógica: stage + PG + coligada + ticket. O digest inclui a intenção inteira
 canonicalizada; IDMOV devolvido posteriormente não muda o digest. Payload
 financeiro alterado no mesmo ticket exige reconciliação; não apagar a reserva

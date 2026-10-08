@@ -39,7 +39,16 @@ dos segredos e a adequação do conteúdo ao repositório público.
   financeiros históricos. Fixtures usam valores sintéticos.
 - `git diff --check` aprovado.
 
-O CI em Node.js 22 deve confirmar o ambiente de execução após a abertura do PR.
+O CI do PR confirmou a execução em Node.js 22.
 Emulação local não confirma IAM, rede ou latência de produção. A integração
 Zeev, o provisionamento e o canário seguem pendentes; nenhum deploy ou teste
 com gravação financeira foi realizado.
+
+## Revisão complementar — origem da permissão DynamoDB
+
+Após confirmar no console que a execution role é compartilhada, foi adicionada
+condição `ArnEquals/lambda:SourceFunctionArn` à política de acesso à tabela.
+A revisão independente aprovou o delta sem bloqueios: ARN sem qualificador,
+mesma região/conta/stage e apenas GetItem/PutItem/UpdateItem na tabela específica.
+YAML e diff verificados. Simulação IAM e teste em ambiente real continuam
+pendentes antes do provisionamento; nenhuma política foi aplicada na AWS.

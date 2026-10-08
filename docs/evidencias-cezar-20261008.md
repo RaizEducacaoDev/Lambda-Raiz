@@ -21,8 +21,12 @@ incluídos e `fast-xml-parser 5.7.3` por igualdade dos nove fontes incluídos co
 os tarballs oficiais do npm. O parser do lock antigo (`5.0.9`) não corresponde
 ao runtime recuperado.
 
-A configuração e o hash atualmente ativos ainda precisam ser reconsultados.
-O ZIP é backup de código da observação anterior, não backup de configuração.
+O console AWS foi reconsultado em 08/10/2026: o hash ativo permanece idêntico
+ao backup. Runtime Node.js 22, arquitetura arm64, memória 1024 MB, limite 30s,
+armazenamento temporário 512 MB e ausência de layers/VPC foram confirmados.
+As variáveis foram preservadas privadamente; stage prod e flags V2 ausentes.
+Os registros do console não substituem uma exportação completa de configuração:
+a exportação SAM não foi concluída e o CloudShell apresentou falha de acesso.
 O artefato, seus metadados operacionais e dados financeiros reais permanecem
 em armazenamento local privado e não fazem parte deste repositório público.
 
@@ -64,7 +68,7 @@ não comprova ausência de gravação.
 
 ## Condições ainda necessárias para ativar
 
-- Revalidar pacote/configuração AWS e analisar logs.
+- Completar exportação de configuração e conferir API Gateway antes de publicar.
 - Confirmar o payload e a seleção bancária no Zeev.
 - Garantir que a TS03 permaneça pendente em falha ou status não final.
 - Provisionar e testar o armazenamento durável de idempotência.
@@ -72,3 +76,25 @@ não comprova ausência de gravação.
 
 Nenhum deploy, provisionamento, atualização de cadastro ou reprocessamento
 financeiro foi realizado durante a coleta dessas evidências.
+
+## CloudWatch e contrato Zeev — conferência de 08/10
+
+A leitura direta dos eventos, autorizada pela conta atual, permitiu correlacionar
+os quatro requests. A pesquisa avançada `StartQuery` foi negada, mas não impediu
+a coleta direta. Os quatro registros contêm o aviso de IPTE inválido seguido da
+tentativa de salvar somente código de barras e da rejeição do RM. O movimento
+já havia sido criado. As execuções duraram aproximadamente 5,6 a 9,3 segundos,
+sem timeout nesses quatro casos. O sucesso da criação não comprova sucesso bancário.
+
+O payload histórico continha `atividadeAtual=aprovacaoDoGestor`, não `TS03`;
+`idPagamento` estava ausente e `CODCOLCFO` não era enviado. O `idpgto` estava
+vazio em dois casos e nos outros dois apontava para registros de forma I.
+O campo atual no formulário pode diferir do que foi enviado na execução histórica.
+
+A API de design confirmou duas tarefas de gravação de pagamento e uma de
+prestação de contas compartilhando a integração de gravação. Não fixar TS03
+globalmente nessa integração: o contrato precisa ser isolado no ramo PG/CC.
+O desenho do formulário e a exportação do processo foram preservados localmente.
+
+Preparado ZIP local exclusivo da função, com handler e alvo Node.js 22
+preservados; não foi publicado. O pacote não inclui configurações/segredos.
