@@ -124,6 +124,9 @@ functions:
 
   solicitacaoDePagamento:
     handler: src/functions/rm/post/solicitacaoDePagamento.handler
+    environment:
+      PAGAMENTO_V2_ENABLED: ${env:PAGAMENTO_V2_ENABLED, 'N'}
+      PAGAMENTO_V2_TABLE: ${env:PAGAMENTO_V2_TABLE, ''}
     events:
       - http:
           path: /solicitacaoDePagamento
