@@ -55,6 +55,16 @@ aprovação; `Activity_0srdonk` tem saída, mas nenhuma entrada no desenho
 exportado. Confirmar o caminho efetivo antes de configurar ambas. Backup
 privado da automação completa e do BPMN foi preservado nessa data.
 
+No BPMN publicado, as três entradas da `Activity_1rwfdkq` vêm de
+`Gateway_173xdj8` (fiscal aprovado), `Gateway_14yz7sb` (pular análise fiscal)
+e `Gateway_11bw6q3` (adiantamento aprovado). O destino atual é
+`Activity_0quuoe6` (Parcelas pagas). O desenho candidato deve reunir essas
+entradas e decidir por `tipoDaSolicitacao=PG` **e** `tipoDoPagamento=CC`:
+nesse caso usar uma nova tarefa com a integração 1639; nos demais, manter a
+tarefa e integração 1209. Ambos os caminhos voltam ao destino atual somente
+após resultado final válido. Conferir no editor Zeev as condições e o
+comportamento em falha antes de publicar a versão do processo.
+
 A integração 1639, `AWS: Grava pagamento PG/CC TS03 V2 (preparo)`, já envia
 `atividadeAtual=TS03`, `CODCOLCFO=0` e `integracaoBancariaV2=N`, sem `idpgto`.
 Ela ainda não está associada a tarefas. O cache da integração dedicada foi
