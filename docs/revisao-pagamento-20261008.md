@@ -67,6 +67,12 @@ com gravação financeira foi realizado.
 - Na integração dedicada 1639, cache da consulta foi desativado e a alteração
   foi conferida após recarregar a página. Ela segue sem dependências e com a
   flag N. A configuração da integração original 1209 não foi alterada.
+- A integração original 1209 exibe cache de `999.999` horas. A
+  [documentação do Zeev](https://kb.stoque.com.br/zeev/integracoes/como-criar-integracoes/como-utilizar-o-cache-em-integracoes)
+  explica que um retorno em cache pode dispensar nova chamada externa, mas não
+  esclarece o efeito específico nessa tarefa POST. Não atribuir a falha ao cache
+  sem evidência de execução; tampouco alterar a integração compartilhada sem
+  proteger as tentativas financeiras de repetição.
 
 ## Revisão complementar — origem da permissão DynamoDB
 
