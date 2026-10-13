@@ -82,3 +82,19 @@ A revisão independente aprovou o delta sem bloqueios: ARN sem qualificador,
 mesma região/conta/stage e apenas GetItem/PutItem/UpdateItem na tabela específica.
 YAML e diff verificados. Simulação IAM e teste em ambiente real continuam
 pendentes antes do provisionamento; nenhuma política foi aplicada na AWS.
+
+## Retomada de 13/10 — contrato da integração e bloqueio AWS
+
+- A integração dedicada Zeev 1639, ainda sem dependências, envia `idPagamento`
+  numérico, `CODCOLPGTO={Form.codigoDaColigada2}` e `CODCOLCFO=0`. Sua flag
+  `integracaoBancariaV2` permanece `N`; a tarefa TS03 publicada ainda usa a
+  integração compartilhada 1209.
+- O contrato numérico acima foi exercitado de ponta a ponta na suíte local com
+  RM e DynamoDB emulados: criação, atualização e confirmação retornaram sucesso.
+  `npm run verify:pagamento` passou com 23 testes, typecheck e bundle Node 22.
+- No console AWS da conta de produção, `cloudformation:ValidateTemplate` e
+  `cloudformation:CreateUploadBucket` foram negados ao usuário atual. O editor
+  do CloudFormation aceitou a sintaxe, mas não houve validação de serviço,
+  upload do template, criação de stack/tabela ou anexação de política IAM.
+- A sessão de navegador usada para tentar o console DynamoDB pediu login IAM;
+  sua existência e o acesso efetivo da Lambda continuam sem confirmação.

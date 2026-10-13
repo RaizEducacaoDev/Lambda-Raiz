@@ -76,6 +76,14 @@ test('criação + confirmação + replay durável atravessando instância nova d
  assert.equal(second.statusCode,200);assert.equal(body(second).integracaoBancaria,'ja_gravada');
  assert.deepEqual(x.stats,{create:1,update:1,lookup:1,read:4});
 });
+test('payload numérico da integração Zeev 1639 usa coligada e CODCOLCFO explícitos',async()=>{
+ const x=await setup();
+ const response=await x.run({idPagamento:'6',idpgto:'',CODCOLPGTO:'8',CODCOLCFO:'0'});
+ assert.equal(response.statusCode,200);
+ assert.equal(body(response).integracaoBancaria,'gravada');
+ assert.equal(x.stats.create,1);
+ assert.equal(x.stats.update,1);
+});
 test('duas execuções concorrentes criam e atualizam uma única vez',async()=>{
  const x=await setup();const results=await Promise.all([x.run(),x.run()]);
  assert.equal(results.filter(r=>r.statusCode===200).length,1);
