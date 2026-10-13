@@ -64,6 +64,9 @@ com gravação financeira foi realizado.
 - Gerado ZIP candidato isolado da função, com handler Node 22/CommonJS e source
   map. Importação e resposta 503 com flag de servidor N foram verificadas
   offline; o pacote ainda não foi publicado na AWS.
+- Na integração dedicada 1639, cache da consulta foi desativado e a alteração
+  foi conferida após recarregar a página. Ela segue sem dependências e com a
+  flag N. A configuração da integração original 1209 não foi alterada.
 
 ## Revisão complementar — origem da permissão DynamoDB
 

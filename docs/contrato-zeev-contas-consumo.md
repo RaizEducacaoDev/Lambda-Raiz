@@ -27,8 +27,9 @@ privado da automação completa e do BPMN foi preservado nessa data.
 
 A integração 1639, `AWS: Grava pagamento PG/CC TS03 V2 (preparo)`, já envia
 `atividadeAtual=TS03`, `CODCOLCFO=0` e `integracaoBancariaV2=N`, sem `idpgto`.
-Ela ainda não está associada a tarefas. Validar o mapeamento de resposta e o
-bloqueio de avanço antes de associá-la ao ramo PG + CC.
+Ela ainda não está associada a tarefas. O cache da integração dedicada foi
+desligado em 13/10, para não reutilizar retorno de gravação. Validar o
+mapeamento de resposta e o bloqueio de avanço antes de associá-la ao ramo PG + CC.
 
 ## Mapeamentos de entrada
 
