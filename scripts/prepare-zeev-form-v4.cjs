@@ -18,9 +18,18 @@ function prepare(source) {
   }
 
   replaceOnce(
-    '"inpcodigoDoFornecedor", "inpcodigoDaColigada2", "inpcoligada2", "inpfornecedor",',
-    '"inpcodigoDoFornecedor", "inpcodigoDaColigada2", "inpcoligada2", "inpfornecedor", "inptipoDoPagamento",',
-    'atualização ao trocar tipo de pagamento',
+    `        tipoDoPagamento.addEventListener("change", function () {
+          Zeev.Controller.CustomerRules.changePaymentCode(novaFormaDePagamento?.value || "");
+        });`,
+    `        tipoDoPagamento.addEventListener("change", function () {
+          Zeev.Controller.CustomerRules.changePaymentCode(novaFormaDePagamento?.value || "");
+          const solicitacao = String(document.querySelector('[xname="inptipoDaSolicitacao"]')?.value || "").trim().toUpperCase();
+          const tipo = String(this.value || "").trim().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase();
+          if (solicitacao === "PG" && ["CC", "CONTA DE CONSUMO", "CONTAS DE CONSUMO"].includes(tipo)) {
+            Zeev.Controller.CustomerRules.buscarDadosBancarios();
+          }
+        });`,
+    'atualização bancária apenas ao selecionar PG/CC',
   );
 
   replaceOnce(
@@ -28,8 +37,9 @@ function prepare(source) {
       const mesmoContexto = regras._contextoDadosBancarios === contextoConsulta;`,
     `      const tipoPagamento = String(document.querySelector('[xname="inptipoDoPagamento"]')?.value || "")
         .trim().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase();
-      const contaDeConsumo = tipoPagamento === "CC" || tipoPagamento === "CONTAS DE CONSUMO";
-      const contextoConsulta = [codigoFornecedor, codigoColigadaDestino, tipoPagamento].join("|");
+      const tipoSolicitacao = String(document.querySelector('[xname="inptipoDaSolicitacao"]')?.value || "").trim().toUpperCase();
+      const contaDeConsumo = tipoSolicitacao === "PG" && ["CC", "CONTA DE CONSUMO", "CONTAS DE CONSUMO"].includes(tipoPagamento);
+      const contextoConsulta = [codigoFornecedor, codigoColigadaDestino, ...(contaDeConsumo ? ["PG/CC"] : [])].join("|");
       const mesmoContexto = regras._contextoDadosBancarios === contextoConsulta;`,
     'contexto por tipo de pagamento',
   );
@@ -42,8 +52,10 @@ function prepare(source) {
       // Em toda nova leitura, a chave antiga fica inválida até o cadastro ser reconfirmado.
       const idPagamento = document.querySelector('[xname="inpidPagamento"]');
       const contasCadastradas = document.querySelector('[xname="inpcontasCadastradas"]');
-      if (idPagamento) idPagamento.value = "";
-      if (contasCadastradas) contasCadastradas.innerHTML = '<option value="">Selecione</option>';`,
+      if (contaDeConsumo) {
+        if (idPagamento) idPagamento.value = "";
+        if (contasCadastradas) contasCadastradas.innerHTML = '<option value="">Selecione</option>';
+      }`,
     'invalidação de seleção antiga',
   );
 
@@ -82,6 +94,15 @@ function prepare(source) {
         return;
       }`,
     `      if (valorSelecionado === "Boleto") {
+        const tipoPagamento = String(document.querySelector('[xname="inptipoDoPagamento"]')?.value || "")
+          .trim().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase();
+        const tipoSolicitacao = String(document.querySelector('[xname="inptipoDaSolicitacao"]')?.value || "").trim().toUpperCase();
+        const contaDeConsumo = tipoSolicitacao === "PG" && ["CC", "CONTA DE CONSUMO", "CONTAS DE CONSUMO"].includes(tipoPagamento);
+        if (!contaDeConsumo) {
+          if (selectContas) selectContas.innerHTML = '<option value="">Selecione</option>';
+          preencherIdPagamento({});
+          return;
+        }
         const boletos = contasDoTipo.filter((conta) => String(conta.codigoPagamento).trim() === "N");
         const selecionarBoleto = (conta) => {
           preencherIdPagamento(conta || {});

@@ -98,3 +98,7 @@ pendentes antes do provisionamento; nenhuma política foi aplicada na AWS.
   upload do template, criação de stack/tabela ou anexação de política IAM.
 - A sessão de navegador usada para tentar o console DynamoDB pediu login IAM;
   sua existência e o acesso efetivo da Lambda continuam sem confirmação.
+- O gerador do script Zeev foi limitado a `PG + CC`: a nova seleção de cadastro
+  N, a invalidação do ID antigo e a nova consulta ao trocar o tipo não se aplicam
+  aos outros pagamentos. Candidato privado regenerado; sintaxe e cenários locais
+  de CC e não CC passaram. O script publicado não foi alterado.
