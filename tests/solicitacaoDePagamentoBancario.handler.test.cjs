@@ -63,7 +63,7 @@ async function setup(options={}) {
  const run=(overrides={})=>executarPagamentoV2({...payload,...overrides},{getRemainingTimeInMillis:()=>restante},create,{repositorio:repo,rm});
  const record=async()=> (await doc.send(new ScanCommand({TableName:tabela,ConsistentRead:true}))).Items[0];
  const expire=async()=>{const op=await record();await doc.send(new UpdateCommand({TableName:tabela,Key:{pk:op.pk},UpdateExpression:'SET lockUntil=:old',ExpressionAttributeValues:{':old':Date.now()-1}}));restante=30000;};
- return {run,stats,record,expire,get repo(){return repo;},newRepository(){repo=new DynamoPagamento(tabela,DynamoDBDocumentClient.from(client));},setLan(v){lan={...lan,...v};},setTime(ms){restante=ms;}};
+ return {run,stats,record,expire,get repo(){return repo;},newRepository(){repo=new DynamoPagamento(tabela,DynamoDBDocumentClient.from(client));},setLan(v){lan={...lan,...v};},setFormaI(v){options.formaI=v;},setTime(ms){restante=ms;}};
 }
 
 test('criação + confirmação + replay durável atravessando instância nova de repositório',async()=>{
@@ -71,6 +71,7 @@ test('criação + confirmação + replay durável atravessando instância nova d
  assert.equal(first.statusCode,200);assert.equal(body(first).integracaoBancaria,'gravada');
  assert.equal((await x.record()).state,'COMPLETE');
  x.newRepository();
+ x.setFormaI(true);
  const second=await x.run({idDoMovimento:'9001'});
  assert.equal(second.statusCode,200);assert.equal(body(second).integracaoBancaria,'ja_gravada');
  assert.deepEqual(x.stats,{create:1,update:1,lookup:1,read:4});
@@ -127,6 +128,8 @@ test('campo ausente, parcelas, forma I, fornecedor/ticket incorretos e status fe
   const x=await setup();assert.equal((await x.run(overrides)).statusCode,422);assert.equal(x.stats.create,0);assert.equal(x.stats.read,0);
  }
  const i=await setup({formaI:true});assert.equal((await i.run()).statusCode,422);assert.equal(i.stats.create,0);
+ assert.equal(await i.record(),undefined);i.setFormaI(false);
+ assert.equal((await i.run()).statusCode,200);assert.equal(i.stats.create,1);
  for(const status of ['1','2','']){
   const x=await setup({lookup:['9001']});x.setLan({STATUSLAN:status});assert.notEqual((await x.run()).statusCode,200);assert.equal(x.stats.update,0);
  }
@@ -156,11 +159,14 @@ test('consulta de estoque com erro ou consumindo orçamento impede criar antes d
 test('aliases de boleto/chave/coligada por parcela e no topo não podem sobrescrever dados validados',async()=>{
  const parcela={valorDaParcela:'10',vencimentoDaParcela:'2026-10-20'};
  for(const campo of [{codigoDeBarrasBoleto:'12345'},{linhaDigitavel:'838700000001100000000007000000000000000000000000'},
-  {idpgto:'7'},{idPgto:'0'},{CODCOLPGTO:'9'},{codColPgto:'0'},{idPagamento:'8$_$0$_$0000000002$_$6'}]) {
+  {idpgto:'7'},{idPgto:'0'},{CODCOLPGTO:'9'},{codColPgto:'0'},{CODCOLCFO:'1'},
+  {idPagamento:'8$_$0$_$0000000002$_$6'}]) {
   const x=await setup();assert.equal((await x.run({listaDeParcelas:[{...parcela,...campo}]})).statusCode,422);assert.equal(x.stats.create,0);assert.equal(await x.record(),undefined);
  }
  for(const alias of ['codigoDeBarras','linhaDigitavel','linhaDigitavelBoleto']){
   const x=await setup();assert.equal((await x.run({[alias]:'12345'})).statusCode,422);assert.equal(await x.record(),undefined);
  }
+ const divergente=await setup();assert.equal((await divergente.run({CODCOLCFO:'1'})).statusCode,422);
+ assert.equal(await divergente.record(),undefined);
  const x=await setup();assert.equal((await x.run({listaDeParcelas:[{...parcela,codigoDeBarrasBoleto:linha,idpgto:'6',CODCOLPGTO:'8'}]})).statusCode,200);
 });

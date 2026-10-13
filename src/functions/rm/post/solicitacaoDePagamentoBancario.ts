@@ -96,4 +96,10 @@ export const validarAliasesBancarios = (campos: Record<string, unknown>, chave: 
       throw new Error(`Alias bancário divergente: ${nome}`);
     }
   }
+  for (const nome of ['CODCOLCFO', 'codcolcfo', 'codColCfo']) {
+    if (texto(campos[nome]) && (!/^\d+$/.test(texto(campos[nome])) ||
+        String(Number(campos[nome])) !== chave.codColCfo)) {
+      throw new Error(`Alias bancário divergente: ${nome}`);
+    }
+  }
 };

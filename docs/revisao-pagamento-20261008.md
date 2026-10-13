@@ -44,6 +44,27 @@ Emulação local não confirma IAM, rede ou latência de produção. A integraç
 Zeev, o provisionamento e o canário seguem pendentes; nenhum deploy ou teste
 com gravação financeira foi realizado.
 
+## Revisão de 13/10/2026
+
+- Cadastro bancário ativo/forma N agora é validado antes de criar a reserva.
+  Uma rejeição sem efeito no RM não bloqueia a correção dos dados no mesmo ticket.
+- Repetição de operação já concluída consulta o estado durável e retorna o PG
+  confirmado mesmo se o cadastro bancário foi desativado depois da conclusão.
+- `CODCOLCFO` explícito, no topo ou na parcela, deve coincidir com a chave
+  bancária selecionada. Divergência retorna 422 antes de reservar.
+- `npm run verify:pagamento` passou com 22 testes, typecheck e bundle Node 22.
+- O hash ativo da Lambda ainda coincide com o backup anterior; a V2 segue sem
+  implantação. Na conta AWS atual, `dynamodb:ListTables` foi negado, portanto a
+  existência da tabela e o acesso efetivo da função ainda não foram validados.
+- Exportados para evidência privada a automação completa e o BPMN da versão 4
+  publicada em 13/10. A tarefa `Activity_1rwfdkq` recebe três caminhos; a outra
+  tarefa TS03 de pagamento no desenho não tem entrada. A integração 1209 é
+  compartilhada também com prestação de contas; a 1639 continua sem dependência
+  e com flag N. O roteamento PG/CC segue pendente.
+- Gerado ZIP candidato isolado da função, com handler Node 22/CommonJS e source
+  map. Importação e resposta 503 com flag de servidor N foram verificadas
+  offline; o pacote ainda não foi publicado na AWS.
+
 ## Revisão complementar — origem da permissão DynamoDB
 
 Após confirmar no console que a execution role é compartilhada, foi adicionada

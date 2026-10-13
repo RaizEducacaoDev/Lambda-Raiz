@@ -51,3 +51,16 @@
 
 Os identificadores, dados bancários, logs brutos e configuração de ambiente ficam
 somente no registro privado da sessão; este arquivo é adequado ao repositório público.
+
+## 2026-10-13 — revisão da retomada
+
+- **Causa adicional:** o cadastro bancário era lido depois da reserva. Rejeitar
+  forma I ou titularidade incorreta deixava `RESERVED` fixando o digest, mesmo
+  sem escrita no RM, e impedia corrigir a seleção bancária do ticket.
+- **Correção:** leitura e validação do cadastro antes da reserva; estado
+  `COMPLETE` é consultado primeiro para preservar replay confirmado sem depender
+  da situação atual do cadastro. `CODCOLCFO` explícito divergente é rejeitado.
+- **Verificação:** regressão com cadastro inválido e correção no mesmo ticket,
+  replay após desativação, aliases no topo/parcela e suite de pagamento verde.
+- **Dependência:** provisionamento DynamoDB/IAM e contrato da TS03 no Zeev ainda
+  pendentes; a versão de produção não recebeu esta mudança.

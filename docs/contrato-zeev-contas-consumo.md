@@ -1,7 +1,8 @@
 # Contrato preparado para TS03 de contas de consumo
 
-Estado: especificação baseada no design e nos logs reais; ainda não aplicada
-ao Zeev. Manter ativação desligada até validar interface, infraestrutura e canário.
+Estado em 13/10/2026: integração dedicada 1639 criada com flag N, sem dependências;
+roteamento do processo e ativação ainda não aplicados. Manter a flag desligada
+até validar interface, infraestrutura e canário.
 
 ## Isolamento do ramo
 
@@ -16,6 +17,18 @@ Nesse ramo, enviar `atividadeAtual=TS03` de forma explícita e
 `integracaoBancariaV2=S` somente durante o canário liberado. Demais rotas
 continuam na integração original. Conferir todos os pontos de uso antes de
 alterar o desenho; há mais de uma tarefa TS03 de pagamento no processo.
+
+Na versão 4 publicada, a integração 1209 também atende a tarefa de prestação de
+contas e versões anteriores/posteriores do aplicativo. O BPMN exportado em
+13/10 mostra a tarefa de pagamento `Activity_1rwfdkq` com três entradas de
+aprovação; `Activity_0srdonk` tem saída, mas nenhuma entrada no desenho
+exportado. Confirmar o caminho efetivo antes de configurar ambas. Backup
+privado da automação completa e do BPMN foi preservado nessa data.
+
+A integração 1639, `AWS: Grava pagamento PG/CC TS03 V2 (preparo)`, já envia
+`atividadeAtual=TS03`, `CODCOLCFO=0` e `integracaoBancariaV2=N`, sem `idpgto`.
+Ela ainda não está associada a tarefas. Validar o mapeamento de resposta e o
+bloqueio de avanço antes de associá-la ao ramo PG + CC.
 
 ## Mapeamentos de entrada
 
@@ -70,7 +83,7 @@ repetir. Reservas CREATING/UPDATING incertas exigem reconciliação conforme o
 
 ## Validações pendentes na interface
 
-1. Backup da integração original, scripts e configuração das tarefas.
+1. Conferir backup atualizado da integração original, scripts e tarefas.
 2. Campo selecionado e retorno de cadastro associados à chave N correta.
 3. Payload dedicado com os mapeamentos acima e parcela coerente.
 4. Respostas finais e de erro mapeadas, com TS03 bloqueada em falha.

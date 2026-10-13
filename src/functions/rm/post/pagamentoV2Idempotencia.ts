@@ -7,6 +7,7 @@ export type OperacaoPagamento = {
   pk: string; digest: string; owner: string; lockUntil: number; state: EstadoPagamento; pg?: string;
 };
 export interface RepositorioPagamento {
+  concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
   avancar(operacao: OperacaoPagamento, estado: EstadoPagamento, pg?: string): Promise<OperacaoPagamento>;
 }
@@ -16,6 +17,20 @@ export class ConflitoPagamento extends Error {}
 export class DynamoPagamento implements RepositorioPagamento {
   constructor(private readonly tabela: string,
     private readonly cliente = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 1 }))) {}
+  async concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined> {
+    const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
+      { abortSignal: AbortSignal.timeout(2000) });
+    const existente = resposta.Item as OperacaoPagamento | undefined;
+    if (!existente) return undefined;
+    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
+      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
+    }
+    if (existente.state !== 'COMPLETE') return undefined;
+    if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) {
+      throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
+    }
+    return existente;
+  }
   async reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento> {
     const agora = Date.now();
     const novo: OperacaoPagamento = { pk, digest, owner: randomUUID(), lockUntil: agora + duracao + 60000,

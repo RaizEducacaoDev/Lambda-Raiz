@@ -63,10 +63,13 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
     const repositorio = dependencias?.repositorio || new DynamoPagamento(process.env.PAGAMENTO_V2_TABLE!);
     const rm = dependencias?.rm || new TransportePagamentoV2(prazo);
     const pk = `${process.env.STAGE || 'dev'}#PG#${Number(coligada)}#${Number(ticket)}`;
-    op = await repositorio.reservar(pk, digestPagamento(campos), pgEntrada, prazo.disponivel());
-    if (op.state === 'COMPLETE') return formatResponse(200, { PG: op.pg, integracaoBancaria: 'ja_gravada' });
+    const digest = digestPagamento(campos);
+    const concluida = await repositorio.concluida(pk, digest, pgEntrada);
+    if (concluida) return formatResponse(200, { PG: concluida.pg, integracaoBancaria: 'ja_gravada' });
     const contextoF = `CODSISTEMA=F;CODCOLIGADA=${coligada};CODUSUARIO=p_heflo`;
     const contextoT = `CODSISTEMA=T;CODCOLIGADA=${coligada};CODUSUARIO=p_heflo`;
+    // Validar o cadastro antes da reserva. Uma rejeição de forma/titularidade
+    // não pode fixar para sempre o digest de um ticket ainda sem efeito no RM.
     prazo.exigir(8000);
     const dado = registroUnico(await rm.readReacord(
       `${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`, 'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
@@ -74,6 +77,8 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
       dado.IDPGTO !== String(chave.idPgto) || dado.ATIVO !== '1' || dado.FORMAPAGAMENTO !== 'N') {
       throw new EntradaInvalida('FDADOSPGTO exige chave correta, registro ativo e forma N');
     }
+    op = await repositorio.reservar(pk, digest, pgEntrada, prazo.disponivel());
+    if (op.state === 'COMPLETE') return formatResponse(200, { PG: op.pg, integracaoBancaria: 'ja_gravada' });
     if (!op.pg) {
       // Protege também tickets anteriores à criação da tabela DynamoDB.
       prazo.exigir(10000);
