@@ -13,17 +13,20 @@ As quatro instâncias CC examinadas (212989, 216412, 216999 e 217891) tinham
 `idPagamento` vazio. Essa combinação impede fornecer a chave exigida pelo RM.
 
 O candidato preparado por `node scripts/prepare-zeev-form-v4.cjs <backup.js>
-<candidato.js>` altera apenas esses pontos: inclui N ativo para CC quando seu
-identificador é válido, mantém I fora da lista, preenche a chave do cadastro
-selecionado e limpa a chave antiga ao trocar fornecedor, coligada ou tipo.
+<candidato.js>` inclui N ativo somente em PG + CC quando seu identificador é
+válido, mantém I fora da lista, preenche o ID do cadastro selecionado e invalida
+o ID anterior nas novas consultas desse ramo. Os demais tipos preservam a
+seleção de boleto publicada.
 Quando existem vários N ativos, a lista exige escolha explícita. O candidato
 privado passou na verificação de sintaxe e nos cenários locais de N único,
-múltiplos N, N sem ID, I e troca de fornecedor. Ainda não foi publicado.
+múltiplos N, N sem ID, I, troca de fornecedor e outros tipos de solicitação.
+Ainda não foi publicado.
 
 A automação `08 - Nova transferencia Bancaria` da versão 4 exibe
 `contasCadastradas` apenas para Transferência Bancária e a oculta nos demais
 casos. Sua condição precisa contemplar também `formaDePagamento=Boleto` **e**
-`tipoDoPagamento=CC`, mantendo a exibição nos casos existentes de transferência.
+`tipoDaSolicitacao=PG` **e** `tipoDoPagamento=CC`, mantendo a exibição nos casos
+existentes de transferência.
 Sem isso, um fornecedor com vários cadastros N não consegue escolher o registro.
 Conferir o resultado no formulário real antes de publicar.
 
@@ -66,7 +69,10 @@ após resultado final válido. Conferir no editor Zeev as condições e o
 comportamento em falha antes de publicar a versão do processo.
 
 A integração 1639, `AWS: Grava pagamento PG/CC TS03 V2 (preparo)`, já envia
-`atividadeAtual=TS03`, `CODCOLCFO=0` e `integracaoBancariaV2=N`, sem `idpgto`.
+`atividadeAtual=TS03`, `idPagamento={Form.idPagamento}`,
+`CODCOLPGTO={Form.codigoDaColigada2}`, `CODCOLCFO=0` e
+`integracaoBancariaV2=N`, sem `idpgto`. O contrato numérico passou em teste
+local de criação e confirmação, com RM e DynamoDB emulados.
 Ela ainda não está associada a tarefas. O cache da integração dedicada foi
 desligado em 13/10, para não reutilizar retorno de gravação. Validar o
 mapeamento de resposta e o bloqueio de avanço antes de associá-la ao ramo PG + CC.
