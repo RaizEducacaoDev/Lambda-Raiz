@@ -7,7 +7,10 @@
     "debug": "set Stage=dev && set SLS_DEBUG=* && npx --yes serverless offline --stage dev",
     "deploy": "serverless deploy",
     "deploy:prod": "serverless deploy --stage prod",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.cjs",
+    "typecheck:pagamento": "tsc -p tsconfig.pagamento.json",
+    "build:pagamento": "esbuild src/functions/rm/post/solicitacaoDePagamento.ts --bundle --platform=node --target=node22 --outfile=.build/solicitacaoDePagamento.cjs",
+    "verify:pagamento": "npm test && npm run typecheck:pagamento && npm run build:pagamento"
   },
   "keywords": [],
   "author": "",
@@ -17,16 +20,21 @@
     "@serverless/typescript": "^3.38.0",
     "@types/aws-lambda": "^8.10.147",
     "@types/node": "^22.13.10",
+    "dynalite": "4.0.0",
     "esbuild": "^0.25.1",
-    "fast-xml-parser": "^5.0.9",
     "serverless": "^4.9.0",
     "serverless-dotenv-plugin": "^6.0.0",
     "serverless-offline": "^14.4.0",
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1147.0",
+    "@aws-sdk/lib-dynamodb": "3.1147.0",
+    "axios": "1.8.3",
     "dotenv": "^16.4.7",
+    "fast-xml-parser": "5.7.3",
     "google-auth-library": "^9.10.0",
-    "googleapis": "^129.0.0"
+    "googleapis": "^129.0.0",
+    "xml2js": "0.6.2"
   }
 }
