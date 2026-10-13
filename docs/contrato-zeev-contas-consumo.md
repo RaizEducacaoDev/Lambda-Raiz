@@ -4,6 +4,36 @@ Estado em 13/10/2026: integração dedicada 1639 criada com flag N, sem dependê
 roteamento do processo e ativação ainda não aplicados. Manter a flag desligada
 até validar interface, infraestrutura e canário.
 
+## Formulário da versão 4 publicada
+
+O script publicado foi salvo em backup privado em 13/10. Na função
+`buscarDadosBancarios`, ele descartava todos os cadastros com forma I ou N.
+Na função `preencherDadosPagamento`, selecionar Boleto limpava `idPagamento`.
+As quatro instâncias CC examinadas (212989, 216412, 216999 e 217891) tinham
+`idPagamento` vazio. Essa combinação impede fornecer a chave exigida pelo RM.
+
+O candidato preparado por `node scripts/prepare-zeev-form-v4.cjs <backup.js>
+<candidato.js>` altera apenas esses pontos: inclui N ativo para CC quando seu
+identificador é válido, mantém I fora da lista, preenche a chave do cadastro
+selecionado e limpa a chave antiga ao trocar fornecedor, coligada ou tipo.
+Quando existem vários N ativos, a lista exige escolha explícita. O candidato
+privado passou na verificação de sintaxe e nos cenários locais de N único,
+múltiplos N, N sem ID, I e troca de fornecedor. Ainda não foi publicado.
+
+A automação `08 - Nova transferencia Bancaria` da versão 4 exibe
+`contasCadastradas` apenas para Transferência Bancária e a oculta nos demais
+casos. Sua condição precisa contemplar também `formaDePagamento=Boleto` **e**
+`tipoDoPagamento=CC`, mantendo a exibição nos casos existentes de transferência.
+Sem isso, um fornecedor com vários cadastros N não consegue escolher o registro.
+Conferir o resultado no formulário real antes de publicar.
+
+A integração de leitura 1529 (`Totvs : Dados bancarios de fornecedor V2`) mapeia
+`idPagamento` de `$.data.id`. O teste sem parâmetros retorna `data: null` e não
+comprova o valor de um registro N. Validar uma resposta real de leitura, sem
+gravação, para confirmar que ela fornece um ID numérico ou a chave composta
+coerente com coligada e fornecedor. Caso o campo venha vazio, corrigir o
+JSONPath antes de associar a integração de gravação dedicada.
+
 ## Isolamento do ramo
 
 O campo de formulário `atividadeAtual` conserva a etapa humana anterior nas
