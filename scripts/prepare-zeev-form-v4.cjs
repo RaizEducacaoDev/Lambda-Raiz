@@ -67,6 +67,13 @@ function prepare(source) {
   );
 
   replaceOnce(
+    `      console.log(contasDoTipo);
+`,
+    '',
+    'não registrar dados bancários no console',
+  );
+
+  replaceOnce(
     `      if (valorSelecionado === "Boleto") {
         if (selectContas) {
           selectContas.innerHTML = '<option value="">Selecione</option>';
