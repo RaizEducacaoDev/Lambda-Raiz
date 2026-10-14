@@ -96,6 +96,7 @@ jobs:
           PAGAMENTO_V2_ENABLED: ${{ vars.PAGAMENTO_V2_ENABLED_PROD || 'N' }}
           PAGAMENTO_V2_TABLE: ${{ vars.PAGAMENTO_V2_TABLE_PROD || '' }}
           PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED: ${{ vars.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED_PROD || 'N' }}
+          PAGAMENTO_V2_NUMEROMOV_TICKET: ${{ vars.PAGAMENTO_V2_NUMEROMOV_TICKET_PROD || '' }}
         run: npx serverless deploy --stage prod
 
       - name: Deploy to AWS (Dev)
@@ -108,4 +109,5 @@ jobs:
           PAGAMENTO_V2_ENABLED: ${{ vars.PAGAMENTO_V2_ENABLED_DEV || 'N' }}
           PAGAMENTO_V2_TABLE: ${{ vars.PAGAMENTO_V2_TABLE_DEV || '' }}
           PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED: ${{ vars.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED_DEV || 'N' }}
+          PAGAMENTO_V2_NUMEROMOV_TICKET: ${{ vars.PAGAMENTO_V2_NUMEROMOV_TICKET_DEV || '' }}
         run: npx serverless deploy --stage dev

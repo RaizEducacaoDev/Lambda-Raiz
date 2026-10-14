@@ -28,9 +28,10 @@ tarefas ou flag ausente mantêm o handler AWS legado.
 Mesmo com o gate do payload, o servidor exige `PAGAMENTO_V2_ENABLED=S` e
 `PAGAMENTO_V2_TABLE` configurada. Ausência retorna HTTP 503 sem gravar no RM.
 Referências de `numeroDaNF` acima de 9 dígitos exigem ainda a flag de servidor
-`PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=S` e o campo de payload
-`numeroMovimentoCompletoCC=S`. O default da flag é N; sem ambos, a V2 retorna
-422 antes de qualquer efeito no RM. Não ativar até homologar tipo de movimento,
+`PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=S`, o ticket exato em
+`PAGAMENTO_V2_NUMEROMOV_TICKET` e o campo de payload
+`numeroMovimentoCompletoCC=S`. Os defaults são N e ticket vazio; sem as três
+condições, a V2 retorna 422 antes de qualquer efeito no RM. Não ativar até homologar tipo de movimento,
 efeitos fiscais e conciliação por referência completa.
 Os defaults de Serverless são N e vazio. GitHub Actions obtém os valores de
 `PAGAMENTO_V2_ENABLED_PROD`, `PAGAMENTO_V2_TABLE_PROD` e correspondentes `_DEV`

@@ -44,8 +44,10 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
     }
     catch (e) { throw new EntradaInvalida(e instanceof Error ? e.message : 'Dados bancários inválidos'); }
     if (numeroMovimento.length > 9 &&
-      (process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED !== 'S' || texto(entrada.numeroMovimentoCompletoCC).toUpperCase() !== 'S')) {
-      throw new EntradaInvalida('Número do documento acima de 9 dígitos exige canário homologado e habilitação específica');
+      (process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED !== 'S' || texto(entrada.numeroMovimentoCompletoCC).toUpperCase() !== 'S' ||
+        !idPositivo(process.env.PAGAMENTO_V2_NUMEROMOV_TICKET) ||
+        texto(process.env.PAGAMENTO_V2_NUMEROMOV_TICKET) !== texto(entrada.ticketRaiz))) {
+      throw new EntradaInvalida('Número do documento acima de 9 dígitos exige canário homologado e ticket autorizado');
     }
     const coligada = texto(entrada.codigoDaColigada2 || entrada.codigoDaColigada);
     const ticket = texto(entrada.ticketRaiz);

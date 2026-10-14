@@ -110,10 +110,11 @@ exigir uma nova seleção válida no ramo de consumo.
 
 No ticket 220854, `numeroDaNF=463806702092026` virou `NUMEROMOV=463806702`
 no legado e colidiu com dois movimentos de 2025. O candidato V2 mantém o
-número completo apenas quando `PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=S`
-**e** `numeroMovimentoCompletoCC=S` no payload; sem ambos, rejeita referências
+número completo apenas quando `PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=S`,
+`PAGAMENTO_V2_NUMEROMOV_TICKET` corresponde ao ticket atual **e**
+`numeroMovimentoCompletoCC=S` no payload; sem os três, rejeita referências
 acima de 9 dígitos antes de ler ou gravar no RM. A configuração de servidor
-nasce `N`. O schema ao vivo do DataServer permite até 35 caracteres, mas a
+nasce `N` e sem ticket autorizado. O schema ao vivo do DataServer permite até 35 caracteres, mas a
 consulta à coligada 2 não encontrou precedente acima de 9 caracteres no tipo
 1.2.11. Confirmar em homologação a aceitação funcional e o reflexo fiscal do
 número completo antes de autorizar qualquer canário em produção.

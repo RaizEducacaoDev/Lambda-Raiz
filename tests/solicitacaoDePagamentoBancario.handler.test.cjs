@@ -82,7 +82,9 @@ test('criação + confirmação + replay durável atravessando instância nova d
 test('número longo exige flag de servidor e autorização específica do payload antes de criar',async()=>{
  const x=await setup();
  const anterior=process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
+ const ticketAnterior=process.env.PAGAMENTO_V2_NUMEROMOV_TICKET;
  delete process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
+ delete process.env.PAGAMENTO_V2_NUMEROMOV_TICKET;
  try {
   const longo={numeroDaNF:'463806702092026',numeroMovimentoCompletoCC:'S'};
   assert.equal((await x.run(longo)).statusCode,422);
@@ -90,11 +92,17 @@ test('número longo exige flag de servidor e autorização específica do payloa
   process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED='S';
   assert.equal((await x.run({numeroDaNF:longo.numeroDaNF})).statusCode,422);
   assert.equal(x.stats.create,0);
+  assert.equal((await x.run(longo)).statusCode,422);
+  process.env.PAGAMENTO_V2_NUMEROMOV_TICKET='9004';
+  assert.equal((await x.run(longo)).statusCode,422);
+  process.env.PAGAMENTO_V2_NUMEROMOV_TICKET='9003';
   assert.equal((await x.run(longo)).statusCode,200);
   assert.match(x.movimentoXml,/<NUMEROMOV>463806702092026<\/NUMEROMOV>/);
  } finally {
   if(anterior===undefined)delete process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
   else process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=anterior;
+  if(ticketAnterior===undefined)delete process.env.PAGAMENTO_V2_NUMEROMOV_TICKET;
+  else process.env.PAGAMENTO_V2_NUMEROMOV_TICKET=ticketAnterior;
  }
 });
 test('payload numérico da integração Zeev 1639 usa coligada e CODCOLCFO explícitos',async()=>{
