@@ -75,6 +75,23 @@ export const montarCamposDadoPagamento = (c: ChaveDadoPagamento): Array<[string,
   ['CODCOLPGTO', c.codColPgto], ['CODCOLCFO', c.codColCfo], ['CODCFO', c.codCfo], ['IDPGTO', String(c.idPgto)],
 ];
 
+// O legado corta numeroDaNF após 9 caracteres. Em CC isso pode descartar
+// competência/referência e colidir com um movimento de outro período.
+export const numeroMovimentoContaConsumo = (valor: unknown): string => {
+  const numero = texto(valor);
+  if (!/^\d{1,35}$/.test(numero)) throw new Error('Número do documento de conta de consumo inválido');
+  return numero;
+};
+
+export const preservarNumeroMovimentoContaConsumo = (xml: string, numero: string): string => {
+  const encontrados = xml.match(/<NUMEROMOV>[^<]*<\/NUMEROMOV>/g) || [];
+  const truncado = `<NUMEROMOV>${numero.slice(0, 9)}</NUMEROMOV>`;
+  if (encontrados.length !== 1 || encontrados[0] !== truncado) {
+    throw new Error('NUMEROMOV do movimento diverge do documento validado');
+  }
+  return xml.replace(truncado, `<NUMEROMOV>${numero}</NUMEROMOV>`);
+};
+
 export const validarAliasesBancarios = (campos: Record<string, unknown>, chave: ChaveDadoPagamento, boleto: DadosBoleto): void => {
   for (const nome of ['codigoDeBarrasBoleto', 'codigoDeBarras', 'linhaDigitavelBoleto', 'linhaDigitavel']) {
     const valor = texto(campos[nome]);

@@ -3,7 +3,7 @@ import type { Context } from 'aws-lambda';
 import axios from 'axios';
 import { formatResponse } from '../../../utils/response';
 import { montaTag } from '../../../utils/xml';
-import { idPositivo, montarCamposDadoPagamento, obterDadosBoleto, resolverChaveDadoPagamento, texto, validarAliasesBancarios } from './solicitacaoDePagamentoBancario';
+import { idPositivo, montarCamposDadoPagamento, numeroMovimentoContaConsumo, obterDadosBoleto, preservarNumeroMovimentoContaConsumo, resolverChaveDadoPagamento, texto, validarAliasesBancarios } from './solicitacaoDePagamentoBancario';
 import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagamento } from './pagamentoV2Idempotencia';
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
 
@@ -31,9 +31,10 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
     if (!context) throw new Error('Contexto de prazo da Lambda obrigatório');
     const prazo = new PrazoPagamento(() => context.getRemainingTimeInMillis());
     prazo.exigir(10000);
-    let chave, boleto;
+    let chave, boleto, numeroMovimento;
     try {
       chave = resolverChaveDadoPagamento(entrada); boleto = obterDadosBoleto(entrada.codigoDeBarrasBoleto);
+      numeroMovimento = numeroMovimentoContaConsumo(entrada.numeroDaNF);
       validarAliasesBancarios(entrada, chave, boleto);
       if (entrada.listaDeParcelas != null && !Array.isArray(entrada.listaDeParcelas)) throw new Error('Lista de parcelas inválida');
       for (const parcela of (entrada.listaDeParcelas || []) as Campos[]) {
@@ -59,7 +60,7 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
     const codTmv = ({ A: '1.2.09', E: '1.2.10', T: '1.2.11', G: '1.2.12' } as Record<string, string>)[conta];
     if (!codTmv) throw new EntradaInvalida('Tipo de conta de consumo inválido');
     const campos: Campos = { ...entrada, tipoDoPagamento: 'CC', atividadeAtual: 'TS03', integracaoBancariaV2: 'S',
-      codigoDeBarrasBoleto: boleto.ipte };
+      numeroDaNF: numeroMovimento, codigoDeBarrasBoleto: boleto.ipte };
     const repositorio = dependencias?.repositorio || new DynamoPagamento(process.env.PAGAMENTO_V2_TABLE!);
     const rm = dependencias?.rm || new TransportePagamentoV2(prazo);
     const pk = `${process.env.STAGE || 'dev'}#PG#${Number(coligada)}#${Number(ticket)}`;
@@ -95,9 +96,10 @@ export const executarPagamentoV2 = async (entrada: Campos, context: Pick<Context
         saveRecord: async (xml, servidor, contexto) => {
           prazo.exigir(14000);
           if (servidor !== 'MovMovimentoTBCData' || op!.state !== 'RESERVED') throw new Error('Criação fora do estado esperado');
+          const xmlMovimento = preservarNumeroMovimentoContaConsumo(xml, numeroMovimento);
           // O estado irreversível vem ANTES do efeito externo. Timeout nunca reabre criação.
           op = await repositorio.avancar(op!, 'CREATING');
-          const retorno = await rm.saveRecord(xml, servidor, contexto);
+          const retorno = await rm.saveRecord(xmlMovimento, servidor, contexto);
           const match = retorno.trim().match(/^(\d+);([1-9]\d*)$/);
           if (!match || Number(match[1]) !== Number(coligada) || !idPositivo(match[2])) throw new Error('Resultado de criação RM incerto; reconciliar ticket');
           op = await repositorio.avancar(op!, 'CREATED', match[2]);

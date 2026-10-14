@@ -14,7 +14,7 @@ const {lerResultadoSoap,registroUnico}=load(path.join(base,'pagamentoV2Rm.ts'));
 const linha='836500000002100000000008000000000000000000000000';
 const payload={tipoDaSolicitacao:'PG',atividadeAtual:'TS03',tipoDoPagamento:'CC',contasDeConsumo:'T',integracaoBancariaV2:'S',
  codigoDaColigada2:'8',codigoDaFilial2:'4',codigoDoFornecedor:'0000000001',ticketRaiz:'9003',
- idPagamento:'8$_$0$_$0000000001$_$6',idpgto:'6',codigoDeBarrasBoleto:linha};
+ idPagamento:'8$_$0$_$0000000001$_$6',idpgto:'6',codigoDeBarrasBoleto:linha,numeroDaNF:'463806702092026'};
 const fixture=name=>lerResultadoSoap(fs.readFileSync(path.join(__dirname,'fixtures/rm',name+'.soap.xml'),'utf8'),'ReadRecord');
 const toXml=(name,row)=>`<DataSet><${name}>${Object.entries(row).map(([k,v])=>`<${k}>${v}</${k}>`).join('')}</${name}></DataSet>`;
 const body=r=>JSON.parse(r.body);
@@ -32,6 +32,7 @@ async function setup(options={}) {
  const stats={create:0,update:0,lookup:0,read:0};
  let restante=30000;
  let lan=registroUnico(fixture('lan-vazio'),'FLAN');
+ let movimentoXml='';
  const rm={
   async buscarEstoque(){if(options.stockError)throw Error('timeout consulta estoque');if(options.stockSlow)restante=10000;return '01';},
   async buscarMovimentosPorTicket(){stats.lookup++;if(options.lookupError)throw Error('lookup indisponível');return options.lookup??[];},
@@ -44,6 +45,7 @@ async function setup(options={}) {
   async saveRecord(xml,servidor){
    if(servidor==='MovMovimentoTBCData'){
     stats.create++;
+    movimentoXml=xml;
     if(options.createError)throw Error('socket hang up');
     if(options.afterCreate)restante=6000;
     return options.createResult??'8;9001';
@@ -57,18 +59,19 @@ async function setup(options={}) {
  };
  const create=async(campos,transporte)=>{
    assert.equal(campos.tipoDoPagamento,'CC');
-   try {await transporte.buscarEstoque('8','4');const result=await transporte.saveRecord('<xml/>','MovMovimentoTBCData','ctx');return {statusCode:200,body:JSON.stringify({PG:result.split(';')[1]})};}
+   try {await transporte.buscarEstoque('8','4');const xml=`<MovMovimento><TMOV><NUMEROMOV>${campos.numeroDaNF.slice(0,9)}</NUMEROMOV></TMOV></MovMovimento>`;const result=await transporte.saveRecord(xml,'MovMovimentoTBCData','ctx');return {statusCode:200,body:JSON.stringify({PG:result.split(';')[1]})};}
    catch{return {statusCode:500,body:'{}'};}
  };
  const run=(overrides={})=>executarPagamentoV2({...payload,...overrides},{getRemainingTimeInMillis:()=>restante},create,{repositorio:repo,rm});
  const record=async()=> (await doc.send(new ScanCommand({TableName:tabela,ConsistentRead:true}))).Items[0];
  const expire=async()=>{const op=await record();await doc.send(new UpdateCommand({TableName:tabela,Key:{pk:op.pk},UpdateExpression:'SET lockUntil=:old',ExpressionAttributeValues:{':old':Date.now()-1}}));restante=30000;};
- return {run,stats,record,expire,get repo(){return repo;},newRepository(){repo=new DynamoPagamento(tabela,DynamoDBDocumentClient.from(client));},setLan(v){lan={...lan,...v};},setFormaI(v){options.formaI=v;},setTime(ms){restante=ms;}};
+ return {run,stats,record,expire,get repo(){return repo;},get movimentoXml(){return movimentoXml;},newRepository(){repo=new DynamoPagamento(tabela,DynamoDBDocumentClient.from(client));},setLan(v){lan={...lan,...v};},setFormaI(v){options.formaI=v;},setTime(ms){restante=ms;}};
 }
 
 test('criação + confirmação + replay durável atravessando instância nova de repositório',async()=>{
  const x=await setup();const first=await x.run({tipoDoPagamento:'Contas de consumo'});
  assert.equal(first.statusCode,200);assert.equal(body(first).integracaoBancaria,'gravada');
+ assert.match(x.movimentoXml,/<NUMEROMOV>463806702092026<\/NUMEROMOV>/);
  assert.equal((await x.record()).state,'COMPLETE');
  x.newRepository();
  x.setFormaI(true);
@@ -132,7 +135,8 @@ test('dados mudados no mesmo ticket ou IDMOV diferente nunca furam reserva',asyn
  assert.equal(x.stats.create,1);
 });
 test('campo ausente, parcelas, forma I, fornecedor/ticket incorretos e status fechado bloqueiam',async()=>{
- for(const overrides of [{ticketRaiz:''},{codigoDeBarrasBoleto:linha.slice(0,44)},{listaDeParcelas:[{},{}]},{idPagamento:'0'}]){
+ for(const overrides of [{ticketRaiz:''},{codigoDeBarrasBoleto:linha.slice(0,44)},{numeroDaNF:'123-456'},
+  {numeroDaNF:'1'.repeat(36)},{listaDeParcelas:[{},{}]},{idPagamento:'0'}]){
   const x=await setup();assert.equal((await x.run(overrides)).statusCode,422);assert.equal(x.stats.create,0);assert.equal(x.stats.read,0);
  }
  const i=await setup({formaI:true});assert.equal((await i.run()).statusCode,422);assert.equal(i.stats.create,0);

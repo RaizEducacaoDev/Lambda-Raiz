@@ -92,6 +92,7 @@ mapeamento de resposta e o bloqueio de avanço antes de associá-la ao ramo PG +
 | `CODCOLCFO` | Coligada do fornecedor confirmada; a criação atual suporta 0 |
 | `codigoDoFornecedor` | Fornecedor da chave bancária e do movimento |
 | `codigoDeBarrasBoleto` | Linha de arrecadação válida com 48 dígitos |
+| `numeroDaNF` | Referência numérica integral da conta, de 1 a 35 dígitos; não cortar a competência no 9º dígito |
 | `codigoDaColigada2`, `codigoDaFilial2` | Coligada/filial de destino do movimento |
 | `idDoMovimento`, `movimentoExistente` | Preservar o ID já retornado; ambos devem coincidir quando presentes |
 
@@ -105,6 +106,13 @@ O registro selecionado deve estar ativo e ter forma N. Não reaproveitar o
 ID de boleto I nem escolher automaticamente um registro N quando existem
 vários. Ao trocar fornecedor/coligada/forma, invalidar a seleção anterior e
 exigir uma nova seleção válida no ramo de consumo.
+
+No ticket 220854, `numeroDaNF=463806702092026` virou `NUMEROMOV=463806702`
+no legado e colidiu com dois movimentos de 2025. O candidato V2 mantém o
+número completo apenas na criação de movimentos PG/TS03/CC ativados. O schema
+ao vivo do DataServer permite até 35 caracteres; confirmar em canário a
+aceitação funcional do tipo de movimento e a ausência de colisão antes de
+liberar novos pagamentos.
 
 A V2 aceita parcela única. Omitir `listaDeParcelas`/enviar lista vazia quando
 o fluxo utiliza apenas vencimento e valor do topo. Se enviar uma parcela,

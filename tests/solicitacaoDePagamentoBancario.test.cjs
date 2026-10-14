@@ -45,6 +45,18 @@ test('arrecadação exige 48 dígitos, DV dos quatro blocos e geral', () => {
  assert.throws(() => h.obterDadosBoleto(geralInvalido), /geral/);
  for (const bad of [linha.slice(0,44),linha.slice(0,47),'',linha+'A','000000000000000000000000000000000000000000000000']) assert.throws(() => h.obterDadosBoleto(bad));
 });
+test('conta de consumo preserva a referência completa do documento no movimento', () => {
+ const antigo='463806702092025', atual='463806702092026';
+ assert.equal(h.numeroMovimentoContaConsumo(atual),atual);
+ assert.equal(h.preservarNumeroMovimentoContaConsumo('<TMOV><NUMEROMOV>463806702</NUMEROMOV></TMOV>',atual),
+  '<TMOV><NUMEROMOV>463806702092026</NUMEROMOV></TMOV>');
+ assert.notEqual(h.numeroMovimentoContaConsumo(antigo),h.numeroMovimentoContaConsumo(atual));
+ assert.equal(h.preservarNumeroMovimentoContaConsumo('<NUMEROMOV>000032937</NUMEROMOV>','000032937'),
+  '<NUMEROMOV>000032937</NUMEROMOV>');
+ for(const invalido of ['', '123-456', '1'.repeat(36), '<123>']) assert.throws(()=>h.numeroMovimentoContaConsumo(invalido));
+ assert.throws(()=>h.preservarNumeroMovimentoContaConsumo('<NUMEROMOV>999999999</NUMEROMOV>',atual));
+ assert.throws(()=>h.preservarNumeroMovimentoContaConsumo('<TMOV/>',atual));
+});
 test('parser lê envelopes reais sanitizados e respeita case FDadosPgto', () => {
  for (const [fixture,row] of [['dado-n','FDadosPgto'],['dado-i','FDadosPgto'],['movimento','TMOV'],['lan-vazio','FLAN']]) {
    const soap=fs.readFileSync(path.join(__dirname,'fixtures/rm',fixture+'.soap.xml'),'utf8');
