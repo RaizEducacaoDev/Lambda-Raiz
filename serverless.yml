@@ -127,6 +127,7 @@ functions:
     environment:
       PAGAMENTO_V2_ENABLED: ${env:PAGAMENTO_V2_ENABLED, 'N'}
       PAGAMENTO_V2_TABLE: ${env:PAGAMENTO_V2_TABLE, ''}
+      PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED: ${env:PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED, 'N'}
     events:
       - http:
           path: /solicitacaoDePagamento

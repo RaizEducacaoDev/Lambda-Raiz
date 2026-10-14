@@ -92,7 +92,8 @@ mapeamento de resposta e o bloqueio de avanço antes de associá-la ao ramo PG +
 | `CODCOLCFO` | Coligada do fornecedor confirmada; a criação atual suporta 0 |
 | `codigoDoFornecedor` | Fornecedor da chave bancária e do movimento |
 | `codigoDeBarrasBoleto` | Linha de arrecadação válida com 48 dígitos |
-| `numeroDaNF` | Referência numérica integral da conta, de 1 a 35 dígitos; não cortar a competência no 9º dígito |
+| `numeroDaNF` | Referência numérica integral da conta, de 1 a 35 dígitos; acima de 9, requer validação específica |
+| `numeroMovimentoCompletoCC` | `S` somente no canário autorizado para referência acima de 9 dígitos |
 | `codigoDaColigada2`, `codigoDaFilial2` | Coligada/filial de destino do movimento |
 | `idDoMovimento`, `movimentoExistente` | Preservar o ID já retornado; ambos devem coincidir quando presentes |
 
@@ -109,10 +110,13 @@ exigir uma nova seleção válida no ramo de consumo.
 
 No ticket 220854, `numeroDaNF=463806702092026` virou `NUMEROMOV=463806702`
 no legado e colidiu com dois movimentos de 2025. O candidato V2 mantém o
-número completo apenas na criação de movimentos PG/TS03/CC ativados. O schema
-ao vivo do DataServer permite até 35 caracteres; confirmar em canário a
-aceitação funcional do tipo de movimento e a ausência de colisão antes de
-liberar novos pagamentos.
+número completo apenas quando `PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=S`
+**e** `numeroMovimentoCompletoCC=S` no payload; sem ambos, rejeita referências
+acima de 9 dígitos antes de ler ou gravar no RM. A configuração de servidor
+nasce `N`. O schema ao vivo do DataServer permite até 35 caracteres, mas a
+consulta à coligada 2 não encontrou precedente acima de 9 caracteres no tipo
+1.2.11. Confirmar em homologação a aceitação funcional e o reflexo fiscal do
+número completo antes de autorizar qualquer canário em produção.
 
 A V2 aceita parcela única. Omitir `listaDeParcelas`/enviar lista vazia quando
 o fluxo utiliza apenas vencimento e valor do topo. Se enviar uma parcela,

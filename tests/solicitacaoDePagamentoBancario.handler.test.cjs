@@ -14,7 +14,7 @@ const {lerResultadoSoap,registroUnico}=load(path.join(base,'pagamentoV2Rm.ts'));
 const linha='836500000002100000000008000000000000000000000000';
 const payload={tipoDaSolicitacao:'PG',atividadeAtual:'TS03',tipoDoPagamento:'CC',contasDeConsumo:'T',integracaoBancariaV2:'S',
  codigoDaColigada2:'8',codigoDaFilial2:'4',codigoDoFornecedor:'0000000001',ticketRaiz:'9003',
- idPagamento:'8$_$0$_$0000000001$_$6',idpgto:'6',codigoDeBarrasBoleto:linha,numeroDaNF:'463806702092026'};
+ idPagamento:'8$_$0$_$0000000001$_$6',idpgto:'6',codigoDeBarrasBoleto:linha,numeroDaNF:'000032937'};
 const fixture=name=>lerResultadoSoap(fs.readFileSync(path.join(__dirname,'fixtures/rm',name+'.soap.xml'),'utf8'),'ReadRecord');
 const toXml=(name,row)=>`<DataSet><${name}>${Object.entries(row).map(([k,v])=>`<${k}>${v}</${k}>`).join('')}</${name}></DataSet>`;
 const body=r=>JSON.parse(r.body);
@@ -71,13 +71,31 @@ async function setup(options={}) {
 test('criação + confirmação + replay durável atravessando instância nova de repositório',async()=>{
  const x=await setup();const first=await x.run({tipoDoPagamento:'Contas de consumo'});
  assert.equal(first.statusCode,200);assert.equal(body(first).integracaoBancaria,'gravada');
- assert.match(x.movimentoXml,/<NUMEROMOV>463806702092026<\/NUMEROMOV>/);
+ assert.match(x.movimentoXml,/<NUMEROMOV>000032937<\/NUMEROMOV>/);
  assert.equal((await x.record()).state,'COMPLETE');
  x.newRepository();
  x.setFormaI(true);
  const second=await x.run({idDoMovimento:'9001'});
  assert.equal(second.statusCode,200);assert.equal(body(second).integracaoBancaria,'ja_gravada');
  assert.deepEqual(x.stats,{create:1,update:1,lookup:1,read:4});
+});
+test('número longo exige flag de servidor e autorização específica do payload antes de criar',async()=>{
+ const x=await setup();
+ const anterior=process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
+ delete process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
+ try {
+  const longo={numeroDaNF:'463806702092026',numeroMovimentoCompletoCC:'S'};
+  assert.equal((await x.run(longo)).statusCode,422);
+  assert.equal(x.stats.create,0); assert.equal(x.stats.read,0); assert.equal(await x.record(),undefined);
+  process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED='S';
+  assert.equal((await x.run({numeroDaNF:longo.numeroDaNF})).statusCode,422);
+  assert.equal(x.stats.create,0);
+  assert.equal((await x.run(longo)).statusCode,200);
+  assert.match(x.movimentoXml,/<NUMEROMOV>463806702092026<\/NUMEROMOV>/);
+ } finally {
+  if(anterior===undefined)delete process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED;
+  else process.env.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED=anterior;
+ }
 });
 test('payload numérico da integração Zeev 1639 usa coligada e CODCOLCFO explícitos',async()=>{
  const x=await setup();

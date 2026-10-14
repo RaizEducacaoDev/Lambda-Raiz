@@ -95,6 +95,7 @@ jobs:
           AWS_REGION: 'sa-east-1'
           PAGAMENTO_V2_ENABLED: ${{ vars.PAGAMENTO_V2_ENABLED_PROD || 'N' }}
           PAGAMENTO_V2_TABLE: ${{ vars.PAGAMENTO_V2_TABLE_PROD || '' }}
+          PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED: ${{ vars.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED_PROD || 'N' }}
         run: npx serverless deploy --stage prod
 
       - name: Deploy to AWS (Dev)
@@ -106,4 +107,5 @@ jobs:
           AWS_REGION: 'sa-east-1'
           PAGAMENTO_V2_ENABLED: ${{ vars.PAGAMENTO_V2_ENABLED_DEV || 'N' }}
           PAGAMENTO_V2_TABLE: ${{ vars.PAGAMENTO_V2_TABLE_DEV || '' }}
+          PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED: ${{ vars.PAGAMENTO_V2_NUMEROMOV_COMPLETO_ENABLED_DEV || 'N' }}
         run: npx serverless deploy --stage dev
