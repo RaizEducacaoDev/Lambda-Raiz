@@ -18,9 +18,17 @@
   `numeroMovimentoCompletoCC=S`, exigido para a referência de 12 dígitos quando
   o servidor autorizar especificamente o ticket. Seu payload contém
   `listaDeParcelas=[]`; nenhuma chamada POST de teste foi executada.
-- A AWS abriu login IAM na conta esperada; código ativo, infraestrutura e
-  permissões ainda precisam ser relidos após autenticação. Não há canário
-  liberado nem evidência de gravação da 221169 no RM.
+- Após autenticação, o ZIP anterior da função de pagamento coincidiu com o
+  backup preservado. Em 19/10, foi publicado **somente o código dessa função**
+  a partir do head `d4f23eb`; a AWS confirmou o novo hash
+  `ofqFJgmd43lv8DMejsbld0+S1IfcBX4Wvsv2ZJ1q2k0=`. As 19 variáveis de
+  ambiente não incluem `PAGAMENTO_V2_*`. Uma invocação com ticket sintético e
+  V2 solicitada retornou HTTP 503/pendente antes de qualquer chamada ao RM.
+- A role compartilhada mostra apenas permissões de logs. A conta IAM usada não
+  possui `dynamodb:DescribeTable`, `dynamodb:ListTables` nem
+  `cloudformation:ListStacks`; não se pode afirmar se a tabela já existe.
+  CloudShell também não conseguiu criar o ambiente. Não há canário liberado
+  nem evidência de gravação da 221169 no RM.
 
 Estado em 13/10/2026: integração dedicada 1639 criada com flag N, sem dependências;
 roteamento do processo e ativação ainda não aplicados. Manter a flag desligada

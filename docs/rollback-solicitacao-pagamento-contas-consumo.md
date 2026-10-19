@@ -1,6 +1,7 @@
 # Contas de consumo — implantação, reconciliação e rollback
 
-Estado: preparação local; **NO-GO de ativação** até concluir dependências abaixo.
+Estado: código publicado apenas na função de pagamento, com V2 desligada;
+**NO-GO de ativação** até concluir dependências abaixo.
 Este documento público não contém tickets, dados bancários nem configuração privada.
 
 ## Baseline e escopo
@@ -14,9 +15,11 @@ usados pela V2. Axios 1.8.3, XML2JS 0.6.2 e parser 5.7.3 foram preservados para
 não promover atualizações transversais de dependências nesta correção.
 
 O hash do ZIP identifica o artefato preservado; sozinho não prova quando, por
-quem ou por qual pipeline foi publicado. É obrigatório reconfirmar o pacote
-atualmente ativo antes de publicar. Não tratar `main` nem um commit histórico
-como rollback equivalente à AWS.
+quem ou por qual pipeline foi publicado. Em 19/10, o hash ativo foi relido e
+coincidiu com o backup anterior antes de publicar o novo código apenas na
+função `lambda-raiz-prod-solicitacaoDePagamento`. O hash após upload coincidiu
+com o ZIP novo; o gate de servidor permanece desligado. Não tratar `main` nem
+um commit histórico como rollback equivalente à AWS.
 
 ## Contrato e ativação
 
@@ -51,11 +54,13 @@ seções 07–10](https://cmsarquivos.febraban.org.br/Arquivos/documentos/PDF/La
 Parcela única; todos os aliases bancários no topo e na parcela devem coincidir
 antes de reservar o ticket. A criação recebe apenas o código validado.
 
-## Dependência durável nova, ainda não provisionada
+## Dependência durável nova, provisionamento não confirmado
 
 `infra/pagamento-v2.yml` prepara DynamoDB em região única com chave `pk`,
 escritas condicionais, criptografia, PITR e retenção. Não há TTL nem DeleteItem.
-O template é separado do deploy e não foi executado. Validar a role da função,
+O template é separado do deploy e não foi executado nesta entrega. A conta IAM
+atual não possui `dynamodb:DescribeTable` nem `dynamodb:ListTables`; portanto
+a existência da tabela é desconhecida. Validar a role da função,
 provisionar a tabela do stage e conceder somente GetItem/PutItem/UpdateItem nela.
 Não habilitar Global Tables: o protocolo assume escrita numa única região.
 
@@ -134,10 +139,12 @@ configurado e verificado antes de ativar. Não abrir novo ticket para repetir.
 7. Conferir ausência de duplicação, IDPGTO, código de 44 dígitos, IPTE de 48 e
    associação correta no RM antes de ampliação.
 
-Testes locais não substituem DynamoDB real, IAM, rede, latência de produção,
+Testes locais e a invocação de gate desligado não substituem DynamoDB real, IAM,
+rede, latência de produção,
 contrato SaveRecord real e confirmação de avanço TS03. O typecheck é restrito à
 árvore de pagamento: o repositório contém erros TypeScript prévios em módulos
-não relacionados. Sem deploy ou teste canário nesta entrega.
+não relacionados. O ZIP da função foi publicado em 19/10, com hash pós-upload
+confirmado; não houve teste canário nem gravação da solicitação 221169 no RM.
 
 ## Rollback seguro
 
