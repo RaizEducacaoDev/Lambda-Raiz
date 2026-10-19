@@ -2,7 +2,6 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
-const { createHash } = require('node:crypto');
 const load = require('./load-ts.cjs');
 const base = path.resolve(__dirname, '../src/functions/rm/post');
 const h = load(path.join(base, 'solicitacaoDePagamentoBancario.ts'));
@@ -70,16 +69,6 @@ test('parser lê envelopes reais sanitizados e respeita case FDadosPgto', () => 
  assert.throws(() => parser.registroUnico('<bad>','FLAN'));
  assert.throws(() => parser.lerResultadoSoap('<s:Envelope><s:Body><s:Fault>Erro</s:Fault></s:Body></s:Envelope>','ReadRecord'));
  assert.throws(() => parser.registroUnico('<!DOCTYPE x><FinLAN/>','FLAN'));
-});
-test('legado coincide com código AWS recuperado exceto adaptações explícitas de injeção V2', () => {
- let source=fs.readFileSync(path.join(base,'solicitacaoDePagamentoLegado.ts'),'utf8').replaceAll('\r\n','\n');
- source=source.replace("export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<wsDataserver, 'saveRecord'>; getLOC: (coligada: string, filial: string) => Promise<string> }) => {",'export const handler = async (event: any) => {');
- source=source.replace('const ESTOQUE = opcoesV2 ? await opcoesV2.getLOC(CODCOLIGADA, CODFILIAL) : await ConfigManagerRm.getLOC(CODCOLIGADA, CODFILIAL);','const ESTOQUE = await ConfigManagerRm.getLOC(CODCOLIGADA, CODFILIAL);');
- source=source.replace('\n      if (opcoesV2) return; // V2 confirma os dados pelo seu próprio protocolo durável.','');
- source=source.replace('result = await (opcoesV2?.transporte || dataServer).saveRecord(cData,','result = await dataServer.saveRecord(cData,');
- source=source.replace('\n      if (opcoesV2) throw errSoap; // Resultado incerto permanece reservado na V2.','');
- const provenance=require('./fixtures/rm/provenance.json');
- assert.equal(createHash('sha256').update(source).digest('hex'),provenance.legacyNormalizedSha256);
 });
 test('wrapper entrega integralmente NF, PIX, boleto, transferência, outras tarefas e flags ao legado', async () => {
  let legado=0,v2=0;

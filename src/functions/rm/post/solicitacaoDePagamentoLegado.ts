@@ -4,6 +4,8 @@ import { montaTag } from '../../../utils/xml';
 import { wsDataserver } from '../../../utils/wsDataserver';
 import { toISOSimple } from '../../../utils/date';
 import * as CLASSES from '../../../utils/classRm';
+import { numeroMovimentoContaConsumo, obterDadosBoleto as validarBoletoContaConsumo, resolverChaveDadoPagamento, validarAliasesBancarios } from './solicitacaoDePagamentoBancario';
+import { PrazoPagamento, registroUnico, TransportePagamentoV2 } from './pagamentoV2Rm';
 const { parseStringPromise } = require("xml2js");
 
 const dataServer = new wsDataserver();
@@ -126,13 +128,53 @@ const aguardar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms
 export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<wsDataserver, 'saveRecord'>; getLOC: (coligada: string, filial: string) => Promise<string> }) => {
   try {
     const campos = JSON.parse(event.body);
-    console.info("[RM-INFO] Campos recebidos:", JSON.stringify(campos, null, 2));
+    if (obterTexto(campos.ticketRaiz) === '221169') {
+      console.info('[RM-INFO] Canário de conta de consumo recebido:', { ticket: '221169', atividade: campos.atividadeAtual });
+    } else {
+      console.info("[RM-INFO] Campos recebidos:", JSON.stringify(campos, null, 2));
+    }
 
     const CODCOLIGADA = campos.codigoDaColigada2 || campos.codigoDaColigada || "";
     const CODFILIAL = campos.codigoDaFilial2 || campos.codigoDaFilial || "";
-    const PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
+    // Canário do ticket autorizado. A integração 1209 já envia idpgto e idPagamento.
+    const canarioContaConsumo = obterTexto(campos.ticketRaiz) === '221169' &&
+      campos.tipoDaSolicitacao === 'PG' && campos.atividadeAtual === 'TS03' &&
+      ['CC', 'Contas de consumo'].includes(obterTexto(campos.tipoDoPagamento));
+    let PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
     const contextoMovimento = `CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
     const contextoFinanceiro = `CODSISTEMA=F;CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
+    let chaveCanario: ReturnType<typeof resolverChaveDadoPagamento> | undefined;
+    let boletoCanario: ReturnType<typeof validarBoletoContaConsumo> | undefined;
+    let numeroMovimentoCanario: string | undefined;
+    if (canarioContaConsumo) {
+      if (!['T', 'I', 'Internet'].includes(obterTexto(campos.contasDeConsumo))) {
+        throw new Error('Canário 221169 exige conta de Internet');
+      }
+      if (campos.listaDeParcelas && (!Array.isArray(campos.listaDeParcelas) || campos.listaDeParcelas.length > 1)) {
+        throw new Error('Canário 221169 exige parcela única');
+      }
+      chaveCanario = resolverChaveDadoPagamento({ ...campos, CODCOLCFO: campos.CODCOLCFO || '0' });
+      boletoCanario = validarBoletoContaConsumo(campos.codigoDeBarrasBoleto);
+      numeroMovimentoCanario = numeroMovimentoContaConsumo(campos.numeroDaNF);
+      validarAliasesBancarios(campos, chaveCanario, boletoCanario);
+      if (chaveCanario.codColPgto !== String(Number(CODCOLIGADA)) || chaveCanario.codColCfo !== '0') {
+        throw new Error('Dado bancário incompatível com a coligada/fornecedor do movimento');
+      }
+      const dado = registroUnico(await dataServer.readReacord(
+        `${chaveCanario.codColPgto};${chaveCanario.codColCfo};${chaveCanario.codCfo};${chaveCanario.idPgto}`,
+        'FinDadosPgtoDataBR', contextoFinanceiro), 'FDadosPgto');
+      if (dado.CODCOLIGADA !== chaveCanario.codColPgto || dado.CODCOLCFO !== chaveCanario.codColCfo ||
+        dado.CODCFO !== chaveCanario.codCfo || dado.IDPGTO !== String(chaveCanario.idPgto) ||
+        dado.ATIVO !== '1' || dado.FORMAPAGAMENTO !== 'N') {
+        throw new Error('IDPGTO não corresponde a um dado bancário Boleto ativo do fornecedor');
+      }
+      const movimentos = await new TransportePagamentoV2(new PrazoPagamento(() => 30000))
+        .buscarMovimentosPorTicket(String(Number(CODCOLIGADA)), '221169', '1.2.11');
+      if (movimentos.length > 1 || (PG && (movimentos.length !== 1 || PG !== movimentos[0]))) {
+        throw new Error('Movimento do ticket 221169 ambíguo; conciliação necessária');
+      }
+      if (movimentos.length === 1) PG = movimentos[0];
+    }
     const tipoChavePix = obterTexto(campos.codigoTipoChavePIX);
     const qrCodePix = tipoChavePix === "6" ? obterTexto(campos.chavePIX) : "";
 
@@ -263,7 +305,10 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         })
       );
 
-      if (!possuiIntegracaoBancaria) return;
+      if (!possuiIntegracaoBancaria) {
+        if (canarioContaConsumo) throw new Error('IDPGTO/código de barras ausentes no pagamento de conta de consumo');
+        return;
+      }
 
       let pagamentos: any[] = [];
 
@@ -276,6 +321,16 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
           contextoMovimento
         );
         const movObj = await parseStringPromise(movXml, { explicitArray: false });
+        if (canarioContaConsumo) {
+          const tmov = registroUnico(movXml, 'TMOV');
+          const compl = registroUnico(movXml, 'TMOVCOMPL');
+          if (tmov.CODCOLIGADA !== String(Number(CODCOLIGADA)) || tmov.IDMOV !== IDMOV ||
+            tmov.CODCFO !== chaveCanario!.codCfo || tmov.CODCOLCFO !== '0' ||
+            tmov.CODFILIAL !== String(Number(CODFILIAL)) || tmov.CODTMV !== '1.2.11' ||
+            compl.TICKET !== '221169' || compl.IDMOV !== IDMOV) {
+            throw new Error(`Movimento ${IDMOV} não pertence à conta de Internet do ticket 221169`);
+          }
+        }
         pagamentos = comoArray(movObj?.MovMovimento?.TMOVPAGTO)
           .filter((pagamento) => {
             const idLan = obterTexto(pagamento?.IDLAN);
@@ -285,7 +340,12 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         if (pagamentos.length > 0) break;
       }
 
+      if (canarioContaConsumo && pagamentos.length > 1) {
+        throw new Error(`Movimento ${IDMOV} possui mais de um IDLAN; conciliação necessária`);
+      }
+
       if (pagamentos.length === 0) {
+        if (canarioContaConsumo) throw new Error(`IDLAN ainda não disponível para vincular IDPGTO. IDMOV=${IDMOV}`);
         console.warn(`[RM-WARN] Nenhum IDLAN encontrado para gravar integração bancária. IDMOV=${IDMOV}`);
         return;
       }
@@ -295,8 +355,30 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         const dadosBoleto = obterDadosBoleto(campos, parcelas[index]) || dadosPadrao;
         const codigoBarras = dadosBoleto.codigoBarras || dadosPadrao.codigoBarras;
         const ipte = dadosBoleto.ipte || dadosPadrao.ipte;
-        const idPgto = obterIdPgto(campos, parcelas[index]) ?? idPgtoPadrao;
-        const codColPgto = obterCodColPgto(campos, parcelas[index]) ?? codColPgtoPadrao;
+        const idPgto = chaveCanario?.idPgto ?? obterIdPgto(campos, parcelas[index]) ?? idPgtoPadrao;
+        const codColPgto = chaveCanario ? Number(chaveCanario.codColPgto) : obterCodColPgto(campos, parcelas[index]) ?? codColPgtoPadrao;
+
+        const lerLancamentoCanario = async () => {
+          const flan = registroUnico(await dataServer.readReacord(
+            `${CODCOLIGADA};${idLan}`, 'FinLanDataBR', contextoFinanceiro), 'FLAN');
+          if (flan.CODCOLIGADA !== String(Number(CODCOLIGADA)) || flan.IDLAN !== idLan ||
+            flan.IDMOV !== IDMOV || flan.CODCFO !== chaveCanario!.codCfo ||
+            flan.CODCOLCFO !== chaveCanario!.codColCfo || flan.STATUSLAN !== '0') {
+            throw new Error(`FLAN ${idLan} não pertence ao movimento/fornecedor aberto esperado`);
+          }
+          return flan;
+        };
+        const esperadoCanario = chaveCanario && boletoCanario ? {
+          CODCOLPGTO: chaveCanario.codColPgto, IDPGTO: String(chaveCanario.idPgto),
+          CODIGOBARRA: boletoCanario.codigoBarras, IPTE: boletoCanario.ipte,
+        } : undefined;
+        if (esperadoCanario) {
+          const antes = await lerLancamentoCanario();
+          for (const [campo, esperado] of Object.entries(esperadoCanario)) {
+            if (antes[campo] && antes[campo] !== esperado) throw new Error(`FLAN ${idLan} já contém ${campo} divergente`);
+          }
+          if (Object.entries(esperadoCanario).every(([campo, esperado]) => antes[campo] === esperado)) continue;
+        }
 
         if (!qrCodePix && !codigoBarras && idPgto === undefined && codColPgto === undefined) {
           console.warn(`[RM-WARN] Dados bancários vazios para IDLAN=${idLan}`);
@@ -307,6 +389,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
           const tagsFlan = [
             ["CODCOLIGADA", CODCOLIGADA],
             ["IDLAN", idLan],
+            ...(chaveCanario ? [["CODCOLCFO", chaveCanario.codColCfo], ["CODCFO", chaveCanario.codCfo]] : []),
             ...(codColPgto !== undefined ? [["CODCOLPGTO", String(codColPgto)]] : []),
             ...(idPgto !== undefined ? [["IDPGTO", String(idPgto)]] : []),
             ...(codigoBarras ? [["CODIGOBARRA", codigoBarras]] : []),
@@ -335,11 +418,18 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         }
 
         console.info(`[RM-INFO] Integração bancária gravada no lançamento financeiro IDLAN=${idLan}`);
+        if (esperadoCanario) {
+          const depois = await lerLancamentoCanario();
+          if (!Object.entries(esperadoCanario).every(([campo, esperado]) => depois[campo] === esperado)) {
+            throw new Error(`IDPGTO/dados de boleto não confirmados no FLAN ${idLan}`);
+          }
+        }
       }
     };
 
     const tentarAtualizarCodigoBarrasFinanceiro = async (IDMOV: string): Promise<void> => {
       if (opcoesV2) return; // V2 confirma os dados pelo seu próprio protocolo durável.
+      if (canarioContaConsumo) return atualizarCodigoBarrasFinanceiro(IDMOV);
       try {
         await atualizarCodigoBarrasFinanceiro(IDMOV);
       } catch (erroCodigoBarras) {
@@ -349,7 +439,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
 
     if (PG && campos.atividadeAtual != "validarPrestacaoContas") {
       await atualizarVencimentoMovimentoExistente(PG);
-      if (qrCodePix) {
+      if (qrCodePix || canarioContaConsumo) {
         await tentarAtualizarCodigoBarrasFinanceiro(PG);
       }
       return formatResponse(200, { PG });
@@ -479,7 +569,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       ["CODFILIAL", CODFILIAL],
       ["CODLOC", ESTOQUE],
       ["CODCFO", campos.codigoDoFornecedor],
-      ...tagIf(!isMovimentoSimples, ["NUMEROMOV", campos.numeroDaNF.slice(0, 9)]),
+      ...tagIf(!isMovimentoSimples, ["NUMEROMOV", canarioContaConsumo ? numeroMovimentoCanario : campos.numeroDaNF.slice(0, 9)]),
       ...tagIf(isMovimentoComFrete, ["SERIE", campos.serie]),
       ["CODTMV", CODTMV],
       ["DATAEMISSAO", ["1.2.06", "1.2.07", "1.2.29", "1.2.28"].includes(CODTMV)

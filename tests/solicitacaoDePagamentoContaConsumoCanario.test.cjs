@@ -1,0 +1,115 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const loadTs = require('./load-ts.cjs');
+
+const base = path.resolve(__dirname, '../src/functions/rm/post');
+const { lerResultadoSoap, registroUnico } = loadTs(path.join(base, 'pagamentoV2Rm.ts'));
+const fixture = name => lerResultadoSoap(fs.readFileSync(path.join(__dirname, 'fixtures/rm', `${name}.soap.xml`), 'utf8'), 'ReadRecord');
+const toXml = (name, row) => `<DataSet><${name}>${Object.entries(row).map(([key, value]) => `<${key}>${value}</${key}>`).join('')}</${name}></DataSet>`;
+const linha = '836500000002100000000008000000000000000000000000';
+const payload = {
+  ticketRaiz: '221169', tipoDaSolicitacao: 'PG', atividadeAtual: 'TS03',
+  tipoDoPagamento: 'CC', contasDeConsumo: 'Internet', codigoDaColigada2: '8',
+  codigoDaFilial2: '4', codigoDoFornecedor: '0000000001', CODCOLPGTO: '8',
+  idpgto: '6', idPagamento: '', codigoDeBarrasBoleto: linha,
+  numeroDaNF: '656781102026', idDoMovimento: '9001',
+};
+
+function setup(options = {}) {
+  const stats = { reads: 0, saves: 0, lookups: 0 };
+  let movimentoCriado = '';
+  let lan = registroUnico(fixture('lan-vazio'), 'FLAN');
+  const movimento = fixture('movimento').replace('<TICKET>9003</TICKET>', '<TICKET>221169</TICKET>');
+  const mocks = {
+    '../../../utils/wsDataserver': {
+      wsDataserver: class {
+        async readReacord(_key, server) {
+          stats.reads++;
+          if (server === 'FinDadosPgtoDataBR') return fixture(options.formaI ? 'dado-i' : 'dado-n');
+          if (server === 'MovMovimentoTBCData') return movimento;
+          return toXml('FLAN', lan);
+        }
+        async saveRecord(xml, server) {
+          stats.saves++;
+          if (server === 'MovMovimentoTBCData') {
+            movimentoCriado = xml;
+            return '8;9001';
+          }
+          assert.equal(server, 'FinLanDataBR');
+          if (!options.writeNoEffect) lan = { ...lan, ...registroUnico(xml.slice(9, -3), 'FLAN') };
+          return '8;9002';
+        }
+      },
+    },
+    '../../../utils/classRm': { ConfigManagerRm: class { async getLOC() { return '01'; } } },
+    './pagamentoV2Rm': {
+      registroUnico,
+      PrazoPagamento: class { constructor() {} },
+      TransportePagamentoV2: class {
+        async buscarMovimentosPorTicket() { stats.lookups++; return options.lookup ?? ['9001']; }
+      },
+    },
+  };
+  const { handlerLegado } = loadTs(path.join(base, 'solicitacaoDePagamentoLegado.ts'), mocks);
+  return { run: fields => handlerLegado({ body: JSON.stringify({ ...payload, ...fields }) }), stats,
+    get lan() { return lan; }, get movimentoCriado() { return movimentoCriado; } };
+}
+
+test('221169 vincula IDPGTO ao FLAN e confirma os campos por leitura do RM', async () => {
+  const x = setup();
+  const response = await x.run();
+  assert.equal(response.statusCode, 200);
+  assert.equal(JSON.parse(response.body).PG, '9001');
+  assert.equal(x.lan.IDPGTO, '6');
+  assert.equal(x.lan.CODCOLPGTO, '8');
+  assert.equal(x.lan.IPTE, linha);
+  assert.equal(x.stats.saves, 1);
+  assert.equal(x.stats.lookups, 1);
+});
+
+test('221169 sem IDPGTO válido falha antes de alterar o RM', async () => {
+  const x = setup();
+  const response = await x.run({ idpgto: '', idPagamento: '' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.reads, 0);
+  assert.equal(x.stats.saves, 0);
+});
+
+test('221169 não devolve sucesso se o RM não persistir o vínculo', async () => {
+  const x = setup({ writeNoEffect: true });
+  const response = await x.run();
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.saves, 1);
+  assert.equal(x.lan.IDPGTO, undefined);
+});
+
+test('221169 bloqueia pagamento cadastrado em forma diferente de boleto', async () => {
+  const x = setup({ formaI: true });
+  const response = await x.run();
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.saves, 0);
+});
+
+test('221169 cria movimento com a referência completa e só confirma após vincular o FLAN', async () => {
+  const x = setup({ lookup: [] });
+  const response = await x.run({
+    idDoMovimento: '', dataDeEmissao: '19/10/2026', dataDeEntrada: '19/10/2026',
+    dataDeVencimento: '21/10/2026', valorTotal: '10,00', informacoes: 'Conta de Internet',
+    codigoDoCentroDeCusto: '01', chaveDeAcesso: '', tributos: [], itens: [],
+  });
+  assert.equal(response.statusCode, 200);
+  assert.match(x.movimentoCriado, /<NUMEROMOV>656781102026<\/NUMEROMOV>/);
+  assert.equal(x.lan.IDPGTO, '6');
+  assert.equal(x.stats.saves, 2);
+});
+
+test('outras instâncias seguem o caminho legado existente', async () => {
+  const x = setup({ lookup: [] });
+  const response = await x.run({ ticketRaiz: '221170', idpgto: '', idPagamento: '' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(x.stats.reads, 0);
+  assert.equal(x.stats.saves, 0);
+  assert.equal(x.stats.lookups, 0);
+});
