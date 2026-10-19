@@ -133,6 +133,14 @@ componentes são obrigatórios no payload. Confirmar o retorno real da integraç
 de cadastro e a gravação do campo no formulário: renomear o identificador da
 resposta, sozinho, não prova que o campo foi preenchido.
 
+Exceção temporária: a integração 1209 já envia `idpgto`, `idPagamento` e
+`CODCOLPGTO`, mas omite `CODCOLCFO`. Apenas no canário `PG + TS03 + CC +
+ticket 221169`, a Lambda usa `CODCOLCFO=0`, que é o valor fixo do movimento
+legado, e confirma a chave inteira em `FinDadosPgtoDataBR` antes de criar ou
+atualizar. Esse canário lê o FLAN após a escrita e retorna 200 com `PG` somente
+se `IDPGTO`, coligada, código de barras e IPTE persistirem. Ele não usa a
+reserva DynamoDB da V2; não ampliar sua condição para outros tickets.
+
 O registro selecionado deve estar ativo e ter forma N. Não reaproveitar o
 ID de boleto I nem escolher automaticamente um registro N quando existem
 vários. Ao trocar fornecedor/coligada/forma, invalidar a seleção anterior e

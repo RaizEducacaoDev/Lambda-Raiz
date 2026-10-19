@@ -146,6 +146,17 @@ contrato SaveRecord real e confirmação de avanço TS03. O typecheck é restrit
 não relacionados. O ZIP da função foi publicado em 19/10, com hash pós-upload
 confirmado; não houve teste canário nem gravação da solicitação 221169 no RM.
 
+Após a publicação inicial, entrou um ZIP restrito ao canário 221169, hash
+`/k5fZftfaXGkIn6DIBPrvrWi7eBRO/uTV3EmR5Ws+cg=`. Ele valida FDADOSPGTO,
+usa o número completo da conta e confirma o FLAN antes de retornar sucesso.
+Uma invocação sintética sem IDPGTO retornou erro antes de acessar o RM. Isso
+não comprova o resultado do lançamento real. O ZIP anterior, hash
+`ofqFJgmd43lv8DMejsbld0+S1IfcBX4Wvsv2ZJ1q2k0=`, está preservado como
+rollback imediato da correção canário; o backup original de 07/10 também está
+preservado. Antes de restaurar, reconciliar qualquer movimento já criado para
+221169 por coligada, ticket e IDMOV. A consulta de ticket do canário não é uma
+reserva durável contra invocações concorrentes.
+
 ## Rollback seguro
 
 1. Pausar novas execuções TS03/CC. **Não remover somente a flag Zeev de tickets
