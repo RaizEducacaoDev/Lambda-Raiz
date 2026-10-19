@@ -1,5 +1,27 @@
 # Contrato preparado para TS03 de contas de consumo
 
+## Conferência em 19/10/2026 — instância 221169
+
+- O candidato Lambda do PR #26 recebeu a proteção do `NUMEROMOV` completo
+  (`d9a65e5`) e passou `npm run verify:pagamento` e a CI. O PR permanece draft;
+  a CI não implanta branches de PR.
+- A instância 221169 está em Aprovação do Diretor, com destino 17/1,
+  fornecedor `0000017361`, referência `656781102026` (12 dígitos) e vencimento
+  21/10/2026. Ainda não chegou a Gravar IDPGTO ou TS03; os campos ocultos
+  `idpgto` e `idPagamento` seguem vazios na auditoria.
+- O script publicado do formulário v4 foi baixado novamente. Ele difere do
+  backup de 13/10 apenas por uma rotina de data das aprovações. O candidato de
+  seleção do cadastro N foi regenerado a partir dessa versão e passou nos
+  cenários locais; ainda não foi publicado.
+- A integração dedicada 1639 continua sem dependências e com
+  `integracaoBancariaV2=N`. Foi acrescentado e relido
+  `numeroMovimentoCompletoCC=S`, exigido para a referência de 12 dígitos quando
+  o servidor autorizar especificamente o ticket. Seu payload contém
+  `listaDeParcelas=[]`; nenhuma chamada POST de teste foi executada.
+- A AWS abriu login IAM na conta esperada; código ativo, infraestrutura e
+  permissões ainda precisam ser relidos após autenticação. Não há canário
+  liberado nem evidência de gravação da 221169 no RM.
+
 Estado em 13/10/2026: integração dedicada 1639 criada com flag N, sem dependências;
 roteamento do processo e ativação ainda não aplicados. Manter a flag desligada
 até validar interface, infraestrutura e canário.
