@@ -154,6 +154,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     let chaveCanario: ReturnType<typeof resolverChaveDadoPagamento> | undefined;
     let boletoCanario: ReturnType<typeof validarBoletoContaConsumo> | undefined;
     let numeroMovimentoCanario: string | undefined;
+    let descricaoDadoCanario: string | undefined;
     if (canarioContaConsumo) {
       if (!['T', 'I', 'Internet'].includes(obterTexto(campos.contasDeConsumo))) {
         throw new Error(`Canário ${ticketCanario} exige conta de Internet`);
@@ -176,6 +177,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         dado.ATIVO !== '1' || dado.FORMAPAGAMENTO !== 'N') {
         throw new Error('IDPGTO não corresponde a um dado bancário Boleto ativo do fornecedor');
       }
+      descricaoDadoCanario = dado.DESCRICAO;
       const movimentos = await new TransportePagamentoV2(new PrazoPagamento(() => 30000))
         .buscarMovimentosPorTicket(String(Number(CODCOLIGADA)), ticketCanario as string, '1.2.11');
       if (PG && !movimentos.includes(PG)) {
@@ -420,8 +422,28 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         } : undefined;
         if (esperadoCanario) {
           const antes = await lerLancamentoCanario();
+          let substituirDadoPadrao = false;
+          // O RM atribuiu o cadastro padrão 1 ao criar o FLAN da 223399.
+          // Só o substituímos enquanto o título está aberto, sem baixa nem boleto.
+          if (ticketCanario === '223399' && antes.IDPGTO === '1' &&
+            esperadoCanario.IDPGTO === '9' && antes.CODCOLPGTO === esperadoCanario.CODCOLPGTO &&
+            antes.NUMERODOCUMENTO === `${numeroMovimentoCanario}/01` &&
+            /^0+(?:[.,]0+)?$/.test(antes.VALORBAIXADO || '') && antes.BAIXAPENDENTE === '0' &&
+            !antes.CODIGOBARRA && !antes.IPTE && descricaoDadoCanario === 'CONCESSIONÁRIA') {
+            const dadoPadrao = registroUnico(await dataServer.readReacord(
+              `${chaveCanario!.codColPgto};${chaveCanario!.codColCfo};${chaveCanario!.codCfo};1`,
+              'FinDadosPgtoDataBR', contextoFinanceiro), 'FDadosPgto');
+            substituirDadoPadrao = dadoPadrao.CODCOLIGADA === chaveCanario!.codColPgto &&
+              dadoPadrao.CODCOLCFO === chaveCanario!.codColCfo &&
+              dadoPadrao.CODCFO === chaveCanario!.codCfo && dadoPadrao.IDPGTO === '1' &&
+              dadoPadrao.ATIVO === '1' && dadoPadrao.FORMAPAGAMENTO === 'N' &&
+              dadoPadrao.DESCRICAO === descricaoDadoCanario;
+          }
           for (const [campo, esperado] of Object.entries(esperadoCanario)) {
-            if (antes[campo] && antes[campo] !== esperado) throw new Error(`FLAN ${idLan} já contém ${campo} divergente`);
+            if (antes[campo] && antes[campo] !== esperado &&
+              !(campo === 'IDPGTO' && substituirDadoPadrao)) {
+              throw new Error(`FLAN ${idLan} já contém ${campo} divergente`);
+            }
           }
           if (Object.entries(esperadoCanario).every(([campo, esperado]) => antes[campo] === esperado)) continue;
         }

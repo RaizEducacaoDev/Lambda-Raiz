@@ -20,7 +20,7 @@ const payload = {
 function setup(options = {}) {
   const stats = { reads: 0, saves: 0, lookups: 0 };
   let movimentoCriado = '';
-  let lan = registroUnico(fixture('lan-vazio'), 'FLAN');
+  let lan = { ...registroUnico(fixture('lan-vazio'), 'FLAN'), ...options.initialLan };
   const movimento = fixture('movimento').replace('<TICKET>9003</TICKET>', `<TICKET>${options.ticket || '221169'}</TICKET>`);
   const movimentoCancelado = movimento.replaceAll('<IDMOV>9001</IDMOV>', '<IDMOV>9000</IDMOV>')
     .replace('<TMOV>', '<TMOV><STATUS>C</STATUS><DATACANCELAMENTOMOV>2026-10-20T00:00:00</DATACANCELAMENTOMOV>')
@@ -33,7 +33,15 @@ function setup(options = {}) {
       wsDataserver: class {
         async readReacord(key, server) {
           stats.reads++;
-          if (server === 'FinDadosPgtoDataBR') return fixture(options.formaI ? 'dado-i' : 'dado-n');
+          if (server === 'FinDadosPgtoDataBR') {
+            if (options.dadoPadrao) {
+              const id = key.endsWith(';1') ? '1' : '9';
+              return toXml('FDadosPgto', { CODCOLIGADA: '8', CODCOLCFO: '0',
+                CODCFO: '0000000001', IDPGTO: id, FORMAPAGAMENTO: 'N',
+                DESCRICAO: 'CONCESSIONÁRIA', ATIVO: '1' });
+            }
+            return fixture(options.formaI ? 'dado-i' : 'dado-n');
+          }
           if (key === '8;9000' && server === 'MovMovimentoTBCData') return movimentoCancelado;
           if (key === '8;9004' && server === 'FinLanDataBR') return lanCancelado;
           if (server === 'MovMovimentoTBCData') return movimento;
@@ -86,6 +94,34 @@ test('223399 confirma o IDPGTO no FLAN antes de devolver sucesso ao Zeev', async
   assert.equal(x.lan.IDPGTO, '6');
   assert.equal(x.lan.CODCOLPGTO, '8');
   assert.equal(x.stats.lookups, 1);
+});
+
+test('223399 substitui o cadastro padrão do RM somente no lançamento novo e sem baixa', async () => {
+  const x = setup({ ticket: '223399', dadoPadrao: true, initialLan: {
+    CODCOLPGTO: '8', IDPGTO: '1', NUMERODOCUMENTO: '223399001/01',
+    VALORBAIXADO: '0.0000', BAIXAPENDENTE: '0',
+  } });
+  const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+    idpgto: '9', idPagamento: '8$_$0$_$0000000001$_$9', numeroDaNF: '223399001' });
+  assert.equal(response.statusCode, 200);
+  assert.equal(x.lan.IDPGTO, '9');
+  assert.equal(x.lan.CODCOLPGTO, '8');
+  assert.equal(x.lan.IPTE, linha);
+  assert.equal(x.stats.saves, 1);
+});
+
+test('223399 preserva o bloqueio quando o cadastro anterior não é o padrão vazio', async () => {
+  const baseLan = { CODCOLPGTO: '8', IDPGTO: '1', NUMERODOCUMENTO: '223399001/01',
+    VALORBAIXADO: '0.0000', BAIXAPENDENTE: '0' };
+  for (const alteracao of [{ CODIGOBARRA: 'outro' }, { VALORBAIXADO: '1.0000' },
+    { IDPGTO: '2' }, { NUMERODOCUMENTO: 'outro/01' }]) {
+    const x = setup({ ticket: '223399', dadoPadrao: true,
+      initialLan: { ...baseLan, ...alteracao } });
+    const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+      idpgto: '9', idPagamento: '8$_$0$_$0000000001$_$9', numeroDaNF: '223399001' });
+    assert.notEqual(response.statusCode, 200);
+    assert.equal(x.stats.saves, 0);
+  }
 });
 
 test('223399 bloqueia IDPGTO ausente antes de gravar o RM', async () => {
