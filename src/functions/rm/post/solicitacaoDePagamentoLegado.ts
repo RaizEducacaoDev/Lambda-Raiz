@@ -137,9 +137,15 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     const CODCOLIGADA = campos.codigoDaColigada2 || campos.codigoDaColigada || "";
     const CODFILIAL = campos.codigoDaFilial2 || campos.codigoDaFilial || "";
     // Canário do ticket autorizado. A integração 1209 já envia idpgto e idPagamento.
+    // No Zeev, atividadeAtual na TS03 contém a tarefa que disparou a integração.
+    // No fluxo real da 221169 ela veio como aprovacaoDoGestor, não como TS03.
     const canarioContaConsumo = obterTexto(campos.ticketRaiz) === '221169' &&
-      campos.tipoDaSolicitacao === 'PG' && campos.atividadeAtual === 'TS03' &&
+      campos.tipoDaSolicitacao === 'PG' &&
+      ['TS03', 'aprovacaoDoGestor'].includes(obterTexto(campos.atividadeAtual)) &&
       ['CC', 'Contas de consumo'].includes(obterTexto(campos.tipoDoPagamento));
+    if (obterTexto(campos.ticketRaiz) === '221169' && !canarioContaConsumo) {
+      throw new Error('Canário 221169: contexto Zeev inesperado; criação bloqueada');
+    }
     let PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
     const contextoMovimento = `CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
     const contextoFinanceiro = `CODSISTEMA=F;CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
@@ -170,10 +176,48 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       }
       const movimentos = await new TransportePagamentoV2(new PrazoPagamento(() => 30000))
         .buscarMovimentosPorTicket(String(Number(CODCOLIGADA)), '221169', '1.2.11');
-      if (movimentos.length > 1 || (PG && (movimentos.length !== 1 || PG !== movimentos[0]))) {
+      if (PG && !movimentos.includes(PG)) {
         throw new Error('Movimento do ticket 221169 ambíguo; conciliação necessária');
       }
-      if (movimentos.length === 1) PG = movimentos[0];
+      const movimentosAtivos: string[] = [];
+      for (const idMov of movimentos) {
+        const xmlMovimento = await dataServer.readReacord(
+          `${CODCOLIGADA};${idMov}`, 'MovMovimentoTBCData', contextoMovimento);
+        const tmov = registroUnico(xmlMovimento, 'TMOV');
+        const compl = registroUnico(xmlMovimento, 'TMOVCOMPL');
+        if (tmov.CODCOLIGADA !== String(Number(CODCOLIGADA)) || tmov.IDMOV !== idMov ||
+          tmov.CODCFO !== chaveCanario.codCfo || tmov.CODCOLCFO !== '0' ||
+          tmov.CODFILIAL !== String(Number(CODFILIAL)) || tmov.CODTMV !== '1.2.11' ||
+          compl.CODCOLIGADA !== String(Number(CODCOLIGADA)) || compl.IDMOV !== idMov ||
+          compl.TICKET !== '221169') {
+          throw new Error(`Movimento ${idMov} do ticket 221169 não corresponde à obrigação`);
+        }
+        if (tmov.STATUS !== 'C') {
+          movimentosAtivos.push(idMov);
+          continue;
+        }
+        if (!tmov.DATACANCELAMENTOMOV) {
+          throw new Error(`Cancelamento do movimento ${idMov} não confirmado`);
+        }
+        const movObj = await parseStringPromise(xmlMovimento, { explicitArray: false });
+        const pagamentos = comoArray(movObj?.MovMovimento?.TMOVPAGTO);
+        if (pagamentos.length !== 1 || !/^\d+$/.test(obterTexto(pagamentos[0]?.IDLAN))) {
+          throw new Error(`Lançamento cancelado do movimento ${idMov} não identificado`);
+        }
+        const idLanCancelado = obterTexto(pagamentos[0].IDLAN);
+        const flan = registroUnico(await dataServer.readReacord(
+          `${CODCOLIGADA};${idLanCancelado}`, 'FinLanDataBR', contextoFinanceiro), 'FLAN');
+        if (flan.CODCOLIGADA !== String(Number(CODCOLIGADA)) || flan.IDLAN !== idLanCancelado ||
+          flan.IDMOV !== idMov || flan.CODCFO !== chaveCanario.codCfo ||
+          flan.STATUSLAN !== '2' || !flan.DATACANCELAMENTO) {
+          throw new Error(`Lançamento ${idLanCancelado} ainda ativo ou cancelamento não confirmado`);
+        }
+        if (PG === idMov) PG = '';
+      }
+      if (movimentosAtivos.length > 1 || (PG && (movimentosAtivos.length !== 1 || PG !== movimentosAtivos[0]))) {
+        throw new Error('Movimento ativo do ticket 221169 ambíguo; conciliação necessária');
+      }
+      if (movimentosAtivos.length === 1) PG = movimentosAtivos[0];
     }
     const tipoChavePix = obterTexto(campos.codigoTipoChavePIX);
     const qrCodePix = tipoChavePix === "6" ? obterTexto(campos.chavePIX) : "";

@@ -22,12 +22,20 @@ function setup(options = {}) {
   let movimentoCriado = '';
   let lan = registroUnico(fixture('lan-vazio'), 'FLAN');
   const movimento = fixture('movimento').replace('<TICKET>9003</TICKET>', '<TICKET>221169</TICKET>');
+  const movimentoCancelado = movimento.replaceAll('<IDMOV>9001</IDMOV>', '<IDMOV>9000</IDMOV>')
+    .replace('<TMOV>', '<TMOV><STATUS>C</STATUS><DATACANCELAMENTOMOV>2026-10-20T00:00:00</DATACANCELAMENTOMOV>')
+    .replace('<IDLAN>9002</IDLAN>', '<IDLAN>9004</IDLAN>');
+  const lanCancelado = toXml('FLAN', { CODCOLIGADA: '8', IDLAN: '9004', IDMOV: '9000',
+    CODCFO: '0000000001', STATUSLAN: options.cancelamentoIncompleto ? '0' : '2',
+    DATACANCELAMENTO: '2026-10-20T00:00:00' });
   const mocks = {
     '../../../utils/wsDataserver': {
       wsDataserver: class {
-        async readReacord(_key, server) {
+        async readReacord(key, server) {
           stats.reads++;
           if (server === 'FinDadosPgtoDataBR') return fixture(options.formaI ? 'dado-i' : 'dado-n');
+          if (key === '8;9000' && server === 'MovMovimentoTBCData') return movimentoCancelado;
+          if (key === '8;9004' && server === 'FinLanDataBR') return lanCancelado;
           if (server === 'MovMovimentoTBCData') return movimento;
           return toXml('FLAN', lan);
         }
@@ -77,6 +85,22 @@ test('221169 sem IDPGTO válido falha antes de alterar o RM', async () => {
   assert.equal(x.stats.saves, 0);
 });
 
+test('atividade real do Zeev exige IDPGTO antes de criar movimento', async () => {
+  const x = setup();
+  const response = await x.run({ atividadeAtual: 'aprovacaoDoGestor', idpgto: '' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.reads, 0);
+  assert.equal(x.stats.saves, 0);
+});
+
+test('221169 bloqueia contexto de atividade inesperado antes de alterar o RM', async () => {
+  const x = setup();
+  const response = await x.run({ atividadeAtual: 'analiseFiscal' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.reads, 0);
+  assert.equal(x.stats.saves, 0);
+});
+
 test('221169 não devolve sucesso se o RM não persistir o vínculo', async () => {
   const x = setup({ writeNoEffect: true });
   const response = await x.run();
@@ -103,6 +127,27 @@ test('221169 cria movimento com a referência completa e só confirma após vinc
   assert.match(x.movimentoCriado, /<NUMEROMOV>656781102026<\/NUMEROMOV>/);
   assert.equal(x.lan.IDPGTO, '6');
   assert.equal(x.stats.saves, 2);
+});
+
+test('221169 ignora IDMOV antigo somente após confirmar cancelamento de TMOV e FLAN', async () => {
+  const x = setup({ lookup: ['9000'] });
+  const response = await x.run({
+    atividadeAtual: 'aprovacaoDoGestor', idDoMovimento: '9000',
+    dataDeEmissao: '19/10/2026', dataDeEntrada: '19/10/2026',
+    dataDeVencimento: '21/10/2026', valorTotal: '10,00', informacoes: 'Conta de Internet',
+    codigoDoCentroDeCusto: '01', chaveDeAcesso: '', tributos: [], itens: [],
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(JSON.parse(response.body).PG, '9001');
+  assert.match(x.movimentoCriado, /<NUMEROMOV>656781102026<\/NUMEROMOV>/);
+  assert.equal(x.lan.IDPGTO, '6');
+});
+
+test('221169 não recria se o FLAN antigo ainda estiver ativo', async () => {
+  const x = setup({ lookup: ['9000'], cancelamentoIncompleto: true });
+  const response = await x.run({ atividadeAtual: 'aprovacaoDoGestor', idDoMovimento: '9000' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.saves, 0);
 });
 
 test('outras instâncias seguem o caminho legado existente', async () => {
