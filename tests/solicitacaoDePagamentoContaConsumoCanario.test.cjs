@@ -21,7 +21,7 @@ function setup(options = {}) {
   const stats = { reads: 0, saves: 0, lookups: 0 };
   let movimentoCriado = '';
   let lan = registroUnico(fixture('lan-vazio'), 'FLAN');
-  const movimento = fixture('movimento').replace('<TICKET>9003</TICKET>', '<TICKET>221169</TICKET>');
+  const movimento = fixture('movimento').replace('<TICKET>9003</TICKET>', `<TICKET>${options.ticket || '221169'}</TICKET>`);
   const movimentoCancelado = movimento.replaceAll('<IDMOV>9001</IDMOV>', '<IDMOV>9000</IDMOV>')
     .replace('<TMOV>', '<TMOV><STATUS>C</STATUS><DATACANCELAMENTOMOV>2026-10-20T00:00:00</DATACANCELAMENTOMOV>')
     .replace('<IDLAN>9002</IDLAN>', '<IDLAN>9004</IDLAN>');
@@ -75,6 +75,47 @@ test('221169 vincula IDPGTO ao FLAN e confirma os campos por leitura do RM', asy
   assert.equal(x.lan.IPTE, linha);
   assert.equal(x.stats.saves, 1);
   assert.equal(x.stats.lookups, 1);
+});
+
+test('223399 confirma o IDPGTO no FLAN antes de devolver sucesso ao Zeev', async () => {
+  const x = setup({ ticket: '223399' });
+  const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+    contasDeConsumo: 'I', idPagamento: '8$_$0$_$0000000001$_$6',
+    listaDeParcelas: [{ vencimentoDaParcela: '', valorDaParcela: '' }] });
+  assert.equal(response.statusCode, 200);
+  assert.equal(x.lan.IDPGTO, '6');
+  assert.equal(x.lan.CODCOLPGTO, '8');
+  assert.equal(x.stats.lookups, 1);
+});
+
+test('223399 bloqueia IDPGTO ausente antes de gravar o RM', async () => {
+  const x = setup({ ticket: '223399', lookup: [] });
+  const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+    contasDeConsumo: 'I', idDoMovimento: '', idpgto: '', idPagamento: '' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.stats.saves, 0);
+});
+
+test('223399 não confirma sucesso quando o RM não persiste o vínculo bancário', async () => {
+  const x = setup({ ticket: '223399', writeNoEffect: true });
+  const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+    contasDeConsumo: 'I', idPagamento: '8$_$0$_$0000000001$_$6' });
+  assert.notEqual(response.statusCode, 200);
+  assert.equal(x.lan.IDPGTO, undefined);
+});
+
+test('223399 cria uma conta de Internet de parcela única e vincula o lançamento', async () => {
+  const x = setup({ ticket: '223399', lookup: [] });
+  const response = await x.run({ ticketRaiz: '223399', atividadeAtual: 'aprovacaoDoGestor',
+    contasDeConsumo: 'I', idDoMovimento: '', idPagamento: '8$_$0$_$0000000001$_$6',
+    numeroDaNF: '463806702', listaDeParcelas: [{ vencimentoDaParcela: '', valorDaParcela: '' }],
+    dataDeEmissao: '17/09/2026', dataDeEntrada: '', dataDeVencimento: '23/10/2026',
+    valorTotal: '20,42', informacoes: 'Conta de Internet', codigoDoCentroDeCusto: '01',
+    chaveDeAcesso: '', tributos: [], itens: [] });
+  assert.equal(response.statusCode, 200);
+  assert.match(x.movimentoCriado, /<NUMEROMOV>463806702<\/NUMEROMOV>/);
+  assert.equal(x.lan.IDPGTO, '6');
+  assert.equal(x.stats.saves, 2);
 });
 
 test('221169 sem IDPGTO válido falha antes de alterar o RM', async () => {

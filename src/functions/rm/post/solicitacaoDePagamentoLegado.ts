@@ -128,23 +128,25 @@ const aguardar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms
 export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<wsDataserver, 'saveRecord'>; getLOC: (coligada: string, filial: string) => Promise<string> }) => {
   try {
     const campos = JSON.parse(event.body);
-    if (obterTexto(campos.ticketRaiz) === '221169') {
-      console.info('[RM-INFO] Canário de conta de consumo recebido:', { ticket: '221169', atividade: campos.atividadeAtual });
+    const ticketCanario = ['221169', '223399'].includes(obterTexto(campos.ticketRaiz))
+      ? obterTexto(campos.ticketRaiz) : undefined;
+    if (ticketCanario) {
+      console.info('[RM-INFO] Canário de conta de consumo recebido:', { ticket: ticketCanario, atividade: campos.atividadeAtual });
     } else {
       console.info("[RM-INFO] Campos recebidos:", JSON.stringify(campos, null, 2));
     }
 
     const CODCOLIGADA = campos.codigoDaColigada2 || campos.codigoDaColigada || "";
     const CODFILIAL = campos.codigoDaFilial2 || campos.codigoDaFilial || "";
-    // Canário do ticket autorizado. A integração 1209 já envia idpgto e idPagamento.
+    // Canários dos tickets autorizados. A integração 1209 já envia idpgto e idPagamento.
     // No Zeev, atividadeAtual na TS03 contém a tarefa que disparou a integração.
-    // No fluxo real da 221169 ela veio como aprovacaoDoGestor, não como TS03.
-    const canarioContaConsumo = obterTexto(campos.ticketRaiz) === '221169' &&
+    // No fluxo real dos canários, ela veio como aprovacaoDoGestor, não como TS03.
+    const canarioContaConsumo = Boolean(ticketCanario) &&
       campos.tipoDaSolicitacao === 'PG' &&
       ['TS03', 'aprovacaoDoGestor'].includes(obterTexto(campos.atividadeAtual)) &&
       ['CC', 'Contas de consumo'].includes(obterTexto(campos.tipoDoPagamento));
-    if (obterTexto(campos.ticketRaiz) === '221169' && !canarioContaConsumo) {
-      throw new Error('Canário 221169: contexto Zeev inesperado; criação bloqueada');
+    if (ticketCanario && !canarioContaConsumo) {
+      throw new Error(`Canário ${ticketCanario}: contexto Zeev inesperado; criação bloqueada`);
     }
     let PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
     const contextoMovimento = `CODCOLIGADA=${CODCOLIGADA};CODUSUARIO=p_heflo`;
@@ -154,10 +156,10 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     let numeroMovimentoCanario: string | undefined;
     if (canarioContaConsumo) {
       if (!['T', 'I', 'Internet'].includes(obterTexto(campos.contasDeConsumo))) {
-        throw new Error('Canário 221169 exige conta de Internet');
+        throw new Error(`Canário ${ticketCanario} exige conta de Internet`);
       }
       if (campos.listaDeParcelas && (!Array.isArray(campos.listaDeParcelas) || campos.listaDeParcelas.length > 1)) {
-        throw new Error('Canário 221169 exige parcela única');
+        throw new Error(`Canário ${ticketCanario} exige parcela única`);
       }
       chaveCanario = resolverChaveDadoPagamento({ ...campos, CODCOLCFO: campos.CODCOLCFO || '0' });
       boletoCanario = validarBoletoContaConsumo(campos.codigoDeBarrasBoleto);
@@ -175,9 +177,9 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         throw new Error('IDPGTO não corresponde a um dado bancário Boleto ativo do fornecedor');
       }
       const movimentos = await new TransportePagamentoV2(new PrazoPagamento(() => 30000))
-        .buscarMovimentosPorTicket(String(Number(CODCOLIGADA)), '221169', '1.2.11');
+        .buscarMovimentosPorTicket(String(Number(CODCOLIGADA)), ticketCanario as string, '1.2.11');
       if (PG && !movimentos.includes(PG)) {
-        throw new Error('Movimento do ticket 221169 ambíguo; conciliação necessária');
+        throw new Error(`Movimento do ticket ${ticketCanario} ambíguo; conciliação necessária`);
       }
       const movimentosAtivos: string[] = [];
       for (const idMov of movimentos) {
@@ -189,8 +191,8 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
           tmov.CODCFO !== chaveCanario.codCfo || tmov.CODCOLCFO !== '0' ||
           tmov.CODFILIAL !== String(Number(CODFILIAL)) || tmov.CODTMV !== '1.2.11' ||
           compl.CODCOLIGADA !== String(Number(CODCOLIGADA)) || compl.IDMOV !== idMov ||
-          compl.TICKET !== '221169') {
-          throw new Error(`Movimento ${idMov} do ticket 221169 não corresponde à obrigação`);
+          compl.TICKET !== ticketCanario) {
+          throw new Error(`Movimento ${idMov} do ticket ${ticketCanario} não corresponde à obrigação`);
         }
         if (tmov.STATUS !== 'C') {
           movimentosAtivos.push(idMov);
@@ -215,7 +217,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         if (PG === idMov) PG = '';
       }
       if (movimentosAtivos.length > 1 || (PG && (movimentosAtivos.length !== 1 || PG !== movimentosAtivos[0]))) {
-        throw new Error('Movimento ativo do ticket 221169 ambíguo; conciliação necessária');
+        throw new Error(`Movimento ativo do ticket ${ticketCanario} ambíguo; conciliação necessária`);
       }
       if (movimentosAtivos.length === 1) PG = movimentosAtivos[0];
     }
@@ -371,8 +373,8 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
           if (tmov.CODCOLIGADA !== String(Number(CODCOLIGADA)) || tmov.IDMOV !== IDMOV ||
             tmov.CODCFO !== chaveCanario!.codCfo || tmov.CODCOLCFO !== '0' ||
             tmov.CODFILIAL !== String(Number(CODFILIAL)) || tmov.CODTMV !== '1.2.11' ||
-            compl.TICKET !== '221169' || compl.IDMOV !== IDMOV) {
-            throw new Error(`Movimento ${IDMOV} não pertence à conta de Internet do ticket 221169`);
+            compl.TICKET !== ticketCanario || compl.IDMOV !== IDMOV) {
+            throw new Error(`Movimento ${IDMOV} não pertence à conta de Internet do ticket ${ticketCanario}`);
           }
         }
         pagamentos = comoArray(movObj?.MovMovimento?.TMOVPAGTO)
