@@ -185,6 +185,26 @@ export class ConfigManagerRm {
     }
   }
 
+  async getIdMovPorTicket(CODCOLIGADA: string, TICKET: string, CODTMV: string): Promise<string | null> {
+    const url = this.buildConsultaSqlUrl('TICKET.RAIZ.0059', 'T', {
+      CODCOLIGADA,
+      TICKET,
+      CODTMV
+    });
+    try {
+      const data = await this.getJson<any[]>(url);
+      if (!data || !Array.isArray(data) || data.length === 0) return null;
+      const idmov = data[0]?.IDMOV;
+      return idmov ? String(idmov) : null;
+    } catch (erro: any) {
+      console.warn('[getIdMovPorTicket] Consulta falhou', {
+        message: erro?.message || String(erro),
+        CODCOLIGADA, TICKET, CODTMV
+      });
+      return null;
+    }
+  }
+
   async postComunicaFornecedor(
     CODCOLIGADA: string,
     CODFILIAL: string,
