@@ -130,8 +130,8 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     const campos = JSON.parse(event.body);
     const ticketCanario = ['221169', '223399'].includes(obterTexto(campos.ticketRaiz))
       ? obterTexto(campos.ticketRaiz) : undefined;
-    if (ticketCanario) {
-      console.info('[RM-INFO] Canário de conta de consumo recebido:', { ticket: ticketCanario, atividade: campos.atividadeAtual });
+    if (opcoesV2 || ticketCanario) {
+      console.info('[RM-INFO] Pagamento recebido:', { ticket: campos.ticketRaiz, atividade: campos.atividadeAtual });
     } else {
       console.info("[RM-INFO] Campos recebidos:", JSON.stringify(campos, null, 2));
     }
@@ -141,11 +141,11 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     // Canários dos tickets autorizados. A integração 1209 já envia idpgto e idPagamento.
     // No Zeev, atividadeAtual na TS03 contém a tarefa que disparou a integração.
     // No fluxo real dos canários, ela veio como aprovacaoDoGestor, não como TS03.
-    const canarioContaConsumo = Boolean(ticketCanario) &&
+    const canarioContaConsumo = !opcoesV2 && Boolean(ticketCanario) &&
       campos.tipoDaSolicitacao === 'PG' &&
       ['TS03', 'aprovacaoDoGestor'].includes(obterTexto(campos.atividadeAtual)) &&
       ['CC', 'Contas de consumo'].includes(obterTexto(campos.tipoDoPagamento));
-    if (ticketCanario && !canarioContaConsumo) {
+    if (!opcoesV2 && ticketCanario && !canarioContaConsumo) {
       throw new Error(`Canário ${ticketCanario}: contexto Zeev inesperado; criação bloqueada`);
     }
     let PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
@@ -656,7 +656,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       ...tagIf(isMovimentoComMunicipio, ["CODETDMUNSERV", campos.codigoDoEstado]),
       ...tagIf(isMovimentoComMunicipio, ["CODMUNSERVICO", campos.codigoDoMunicipio]),
       ["CODCCUSTO", campos.codigoDoCentroDeCusto],
-      ["CODCOLCFO", "0"],
+      ["CODCOLCFO", opcoesV2 ? campos.CODCOLCFO || "0" : "0"],
       ["HISTORICOCURTO", campos.informacoes],
     ].map(([tag, valor]) => montaTag(tag as string, valor));
 

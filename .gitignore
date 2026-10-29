@@ -15,6 +15,9 @@ yarn-error.log*
 # Builds
 dist/
 .build/
+.idpgto-evidence/
+__pycache__/
+*.pyc
 .serverless/
 coverage/
 

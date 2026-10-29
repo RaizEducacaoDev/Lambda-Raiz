@@ -1,5 +1,20 @@
 # Histórico de erros — pagamento
 
+## 2026-10-29 — vínculo obrigatório para PG
+
+- Causa confirmada na AWS: entrada sem IDPGTO podia criar movimento e retornar
+  sucesso; falha de associação financeira era capturada fora do canário.
+- Correção: identidade exata validada antes dos efeitos, protocolo PG geral,
+  reserva durável, checkpoint por IDLAN e confirmação por leitura oficial.
+- Regressões resolvidas na revisão: CODCOLCFO deve acompanhar o fornecedor no
+  XML; digest precisa incluir composição de aluguel/tributos/modalidade; IDMOV
+  informado precisa ser validado antes da reserva; datas reais do Zeev são BR.
+- Testes de DynamoDB emulado aguardam tabela ACTIVE, evitando corrida no setup.
+  Ao copiar ZipInfo entre arquivos, usar copy.copy para não modificar os offsets
+  do arquivo de origem e gerar falso BadZipFile na cópia do núcleo original.
+- Verificação local: 58 testes, typecheck, bundle e importação do pacote com
+  rede bloqueada. Evidência operacional/publicação fica no relatório privado.
+
 ## 2026-10-08 — ag-depurar-erro
 
 ### Erro: conta de consumo criada sem associação bancária, código e IPTE
