@@ -9,6 +9,7 @@ import base64
 import os
 import re
 import zipfile
+import time
 
 FUNCTION = 'lambda-raiz-prod-solicitacaoDePagamento'
 ACCOUNT = '757843862365'
@@ -106,8 +107,14 @@ except RuntimeError as exc:
 assert described['Table']['KeySchema']==[{'AttributeName':'pk','KeyType':'HASH'}]
 ttl=aws('dynamodb','describe-time-to-live','--table-name',table)
 assert ttl['TimeToLiveDescription']['TimeToLiveStatus']=='DISABLED', 'Reservations must never expire automatically'
-aws('dynamodb','update-continuous-backups','--table-name',table,
-    '--point-in-time-recovery-specification','PointInTimeRecoveryEnabled=true')
+for tentativa in range(12):
+    try:
+        aws('dynamodb','update-continuous-backups','--table-name',table,
+            '--point-in-time-recovery-specification','PointInTimeRecoveryEnabled=true')
+        break
+    except RuntimeError as exc:
+        if 'ContinuousBackupsUnavailableException' not in str(exc) or tentativa==11:raise
+        time.sleep(5)
 policy={'Version':'2012-10-17','Statement':[{'Effect':'Allow','Action':['dynamodb:GetItem','dynamodb:PutItem','dynamodb:UpdateItem'],
     'Resource':described['Table']['TableArn'],'Condition':{'ArnEquals':{'lambda:SourceFunctionArn':cfg['FunctionArn']}}}]}
 try:
