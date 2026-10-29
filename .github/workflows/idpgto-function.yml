@@ -28,4 +28,5 @@ jobs:
         with:
           name: idpgto-function-evidence
           path: .idpgto-evidence/
+          include-hidden-files: true
           retention-days: 7
