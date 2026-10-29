@@ -16,10 +16,11 @@ ACCOUNT = '757843862365'
 out = pathlib.Path('.idpgto-evidence')
 out.mkdir(exist_ok=True)
 
-def aws(*args, payload=None):
+def aws(*args, payload=None, stdin_value=None):
     command=['aws', *args, '--output', 'json']
     if payload is not None:command.extend(['--cli-input-json','file:///dev/stdin'])
-    result = subprocess.run(command, input=json.dumps(payload) if payload is not None else None, capture_output=True, text=True)
+    serialized=json.dumps(payload) if payload is not None else json.dumps(stdin_value) if stdin_value is not None else None
+    result = subprocess.run(command, input=serialized, capture_output=True, text=True)
     if result.returncode:
         match=re.search(r'An error occurred \(([^)]+)\)',result.stderr)
         raise RuntimeError(f'AWS {args[0]}/{args[1]} failed: {match.group(1) if match else "CLI_ERROR"}')
@@ -129,8 +130,8 @@ aws('iam','put-role-policy','--role-name',cfg['Role'].rsplit('/',1)[1],
 # Keep all existing environment values in memory; never write or print secrets.
 variables=dict(cfg.get('Environment',{}).get('Variables',{}))
 variables['PAGAMENTO_IDPGTO_TABLE']=table
-updated=aws('lambda','update-function-configuration',payload={'FunctionName':FUNCTION,'RevisionId':cfg['RevisionId'],
-    'Environment':{'Variables':variables}})
+updated=aws('lambda','update-function-configuration','--function-name',FUNCTION,'--revision-id',cfg['RevisionId'],
+    '--environment','file:///dev/stdin',stdin_value={'Variables':variables})
 subprocess.run(['aws','lambda','wait','function-updated-v2','--function-name',FUNCTION],check=True)
 current=aws('lambda','get-function-configuration','--function-name',FUNCTION)
 assert current['CodeSha256']==BASELINE
@@ -154,8 +155,8 @@ deployment={'function':FUNCTION,'region':'sa-east-1','baselineCodeSha256':BASELI
 def invoke(fields,name):
     event={'body':json.dumps(fields)}
     result_path=out/(name+'.json')
-    response=aws('lambda','invoke',str(result_path),payload={'FunctionName':FUNCTION,'InvocationType':'RequestResponse',
-        'Payload':base64.b64encode(json.dumps(event).encode()).decode()})
+    response=aws('lambda','invoke','--function-name',FUNCTION,'--invocation-type','RequestResponse',
+        '--payload','fileb:///dev/stdin',str(result_path),stdin_value=event)
     assert not response.get('FunctionError'), 'Lambda execution error'
     result=json.loads(result_path.read_text())
     return result
