@@ -18,6 +18,7 @@ dist/
 .idpgto-evidence/
 .idpgto-readback/
 .idpgto-incident/
+.idpgto-recovery/
 __pycache__/
 *.pyc
 .serverless/
