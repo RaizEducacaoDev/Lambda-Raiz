@@ -70,20 +70,24 @@ test('parser lê envelopes reais sanitizados e respeita case FDadosPgto', () => 
  assert.throws(() => parser.lerResultadoSoap('<s:Envelope><s:Body><s:Fault>Erro</s:Fault></s:Body></s:Envelope>','ReadRecord'));
  assert.throws(() => parser.registroUnico('<!DOCTYPE x><FinLAN/>','FLAN'));
 });
-test('wrapper entrega integralmente NF, PIX, boleto, transferência, outras tarefas e flags ao legado', async () => {
- let legado=0,v2=0;
+test('wrapper exige protocolo seguro para todo PG e preserva bundle de produção para outros fluxos', async () => {
+ let legado=0,seguro=0;
  const {handler}=load(path.join(base,'solicitacaoDePagamento.ts'), {
-   './solicitacaoDePagamentoLegado':{handlerLegado:async(event)=>{legado++;return {same:event};}},
-   './solicitacaoDePagamentoV2':{executarPagamentoV2:async()=>{v2++;return {v2:true};}},
+   './solicitacaoDePagamento.core.cjs':{handler:async(event)=>{legado++;return {same:event};}},
+   './solicitacaoDePagamentoSeguro':{executarPagamentoSeguro:async(campos)=>{seguro++;return {seguro:true,campos};}},
  });
  for (const tipo of ['NF','PIX','BOLETO','TM','Transferência','CC']) {
    const event={body:JSON.stringify({tipoDaSolicitacao:'PG',atividadeAtual:'TS03',tipoDoPagamento:tipo,integracaoBancariaV2:'N'})};
-   assert.equal((await handler(event)).same,event);
+   assert.equal((await handler(event)).seguro,true);
  }
  for (const atividade of ['validarPrestacaoContas','gravarPagamento','TS02']) {
   const event={body:JSON.stringify({tipoDaSolicitacao:'PG',atividadeAtual:atividade,tipoDoPagamento:'CC',integracaoBancariaV2:'S'})};
-  assert.equal((await handler(event)).same,event);
+  assert.equal((await handler(event)).seguro,true);
  }
- assert.equal(legado,9); assert.equal(v2,0);
- assert.deepEqual(await handler({body:JSON.stringify({tipoDaSolicitacao:'PG',atividadeAtual:'TS03',tipoDoPagamento:'Contas de consumo',integracaoBancariaV2:'S'})}),{v2:true});
+ assert.equal(legado,0); assert.equal(seguro,9);
+ for(const tipo of ['AD','RE','FF']){
+   const event={body:JSON.stringify({tipoDaSolicitacao:tipo})};
+   assert.equal((await handler(event)).same,event);
+ }
+ assert.equal(legado,3);
 });

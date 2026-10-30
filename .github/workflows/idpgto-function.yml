@@ -1,0 +1,44 @@
+name: IDPGTO payment function maintenance
+
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/idpgto-function.yml
+      - scripts/aws-idpgto-maintenance.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: idpgto-payment-function-production
+  cancel-in-progress: false
+
+jobs:
+  function:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      AWS_DEFAULT_REGION: sa-east-1
+      AWS_PAGER: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npm run verify:pagamento
+      - name: Deploy and verify only the authorized payment function
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          IDPGTO_OPERATION: deploy
+        run: python3 scripts/aws-idpgto-maintenance.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idpgto-function-evidence
+          path: .idpgto-evidence/
+          include-hidden-files: true
+          retention-days: 7

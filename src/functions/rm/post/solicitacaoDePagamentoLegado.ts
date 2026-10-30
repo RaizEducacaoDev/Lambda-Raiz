@@ -124,14 +124,19 @@ const localizarObjeto = (obj: any, chave: string): any => {
 };
 
 const aguardar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const resumirErroSeguro = (erro: unknown) => {
+  const code = erro && typeof erro === 'object' && 'code' in erro ? String(erro.code) : '';
+  return { errorType: erro instanceof Error && /^[A-Za-z0-9_]+$/.test(erro.name) ? erro.name : 'UnknownError',
+    errorCode: /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : undefined };
+};
 
 export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<wsDataserver, 'saveRecord'>; getLOC: (coligada: string, filial: string) => Promise<string> }) => {
   try {
     const campos = JSON.parse(event.body);
     const ticketCanario = ['221169', '223399'].includes(obterTexto(campos.ticketRaiz))
       ? obterTexto(campos.ticketRaiz) : undefined;
-    if (ticketCanario) {
-      console.info('[RM-INFO] Canário de conta de consumo recebido:', { ticket: ticketCanario, atividade: campos.atividadeAtual });
+    if (opcoesV2 || ticketCanario) {
+      console.info('[RM-INFO] Pagamento recebido:', { ticket: campos.ticketRaiz, atividade: campos.atividadeAtual });
     } else {
       console.info("[RM-INFO] Campos recebidos:", JSON.stringify(campos, null, 2));
     }
@@ -141,11 +146,11 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
     // Canários dos tickets autorizados. A integração 1209 já envia idpgto e idPagamento.
     // No Zeev, atividadeAtual na TS03 contém a tarefa que disparou a integração.
     // No fluxo real dos canários, ela veio como aprovacaoDoGestor, não como TS03.
-    const canarioContaConsumo = Boolean(ticketCanario) &&
+    const canarioContaConsumo = !opcoesV2 && Boolean(ticketCanario) &&
       campos.tipoDaSolicitacao === 'PG' &&
       ['TS03', 'aprovacaoDoGestor'].includes(obterTexto(campos.atividadeAtual)) &&
       ['CC', 'Contas de consumo'].includes(obterTexto(campos.tipoDoPagamento));
-    if (ticketCanario && !canarioContaConsumo) {
+    if (!opcoesV2 && ticketCanario && !canarioContaConsumo) {
       throw new Error(`Canário ${ticketCanario}: contexto Zeev inesperado; criação bloqueada`);
     }
     let PG = obterTexto(campos.idDoMovimento || campos.movimentoExistente);
@@ -656,7 +661,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       ...tagIf(isMovimentoComMunicipio, ["CODETDMUNSERV", campos.codigoDoEstado]),
       ...tagIf(isMovimentoComMunicipio, ["CODMUNSERVICO", campos.codigoDoMunicipio]),
       ["CODCCUSTO", campos.codigoDoCentroDeCusto],
-      ["CODCOLCFO", "0"],
+      ["CODCOLCFO", opcoesV2 ? campos.CODCOLCFO || "0" : "0"],
       ["HISTORICOCURTO", campos.informacoes],
     ].map(([tag, valor]) => montaTag(tag as string, valor));
 
@@ -852,7 +857,11 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         duracaoMs: Date.now() - inicioSaveRecord,
       }));
     } catch (errSoap) {
-      if (opcoesV2) throw errSoap; // Resultado incerto permanece reservado na V2.
+      if (opcoesV2) {
+        console.warn('[RM-DIAG]', JSON.stringify({ ...diagnosticoMovimento, etapa: 'SaveRecord', evento: 'erro',
+          ...resumirErroSeguro(errSoap), duracaoMs: Date.now() - inicioSaveRecord }));
+        throw errSoap; // Resultado incerto permanece reservado, sem expor Axios config/body.
+      }
       const isConnReset = errSoap instanceof Error && errSoap.message.includes("socket hang up");
       console.info("[RM-DIAG]", JSON.stringify({
         ...diagnosticoMovimento,
@@ -941,6 +950,10 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       return formatResponse(400, { message: "Erro ao gravar no TOTVS", error: "TOTVS: " + errorMessage });
     }
   } catch (error) {
+    if (opcoesV2) {
+      console.error('[RM-ERRO] Falha no caminho seguro', { etapa: 'handlerLegado', ...resumirErroSeguro(error) });
+      throw error;
+    }
     console.error("[RM-ERRO] ", error);
     return formatResponse(500, {
       message: "Erro interno do servidor",

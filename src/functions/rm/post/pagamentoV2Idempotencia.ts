@@ -8,6 +8,7 @@ export type OperacaoPagamento = {
 };
 export interface RepositorioPagamento {
   concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined>;
+  movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
   avancar(operacao: OperacaoPagamento, estado: EstadoPagamento, pg?: string): Promise<OperacaoPagamento>;
 }
@@ -17,6 +18,22 @@ export class ConflitoPagamento extends Error {}
 export class DynamoPagamento implements RepositorioPagamento {
   constructor(private readonly tabela: string,
     private readonly cliente = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 1 }))) {}
+  // Read-only fact for deciding whether a creation-only validation applies.
+  // This does not acquire a lease or authorize creation from an old snapshot.
+  async movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined> {
+    const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
+      { abortSignal: AbortSignal.timeout(2000) });
+    const existente = resposta.Item as OperacaoPagamento | undefined;
+    if (!existente) return undefined;
+    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
+      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
+    }
+    if (!['CREATED', 'UPDATING', 'COMPLETE'].includes(existente.state)) return undefined;
+    if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg) || !Number.isSafeInteger(Number(existente.pg))) {
+      throw new ConflitoPagamento('Reserva sem movimento durável válido; reconciliar');
+    }
+    return existente.pg;
+  }
   async concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined> {
     const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
       { abortSignal: AbortSignal.timeout(2000) });
