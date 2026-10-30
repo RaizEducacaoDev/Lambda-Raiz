@@ -181,3 +181,14 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   campos/tipos nativos fixos e etapas de checkpoint/chamada ao transporte/chave
   recebida. Não conserva texto bruto nem recupera a mensagem histórica; não
   altera digest, estados, HTTP ou autoriza retry. Publicação permanece pendente.
+- Recuperação de log: host efetivo confirmado na TOTVS Cloud, ambiente160286;
+  SMB/WinRM não acessíveis. Após login do usuário e acesso pelo aplicativo
+  oficial PortalTcloud disponível no catálogo da própria conta, o seletor de
+  cliente retornou `Nenhum cliente encontrado` nas buscas pelo prefixo da base
+  e pelo nomeRaiz. Os arquivos do servidor ainda não foram listados; não confundir
+  esse limite de acesso com ausência do log. Solicitado acesso por conta que já
+  administra160286. Nenhuma chamada financeira, trace ou restart foi executado.
+- Swagger/WSDL não expuseram consulta de logs gerais deSaveRecord. JobExecution
+  cobre jobs, sem vínculo temporal/síncrono documentado para este incidente;
+  apenas seu schema foi lido. Não consultar logs de outros módulos como se fossem
+  a resposta descartada. Solicitação de extração local preparada, sem envio.
