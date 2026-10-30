@@ -3,6 +3,7 @@ import { formatResponse } from '../../../utils/response';
 import { idPositivo, texto, preservarNumeroMovimentoContaConsumo } from './solicitacaoDePagamentoBancario';
 import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagamento } from './pagamentoV2Idempotencia';
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
+import { diagnosticarRetornoRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -13,6 +14,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
   criar: Criar, deps?: Dependencias) {
   let op: OperacaoPagamento | undefined;
   let criadoAgora = false;
+  let etapaCriacao: 'preflight' | 'checkpoint_creating' | 'transport_call' | 'transport_result' | 'checkpoint_created' | undefined;
+  let chaveRmRecebida: string | undefined;
   try {
     if (!context) throw new Error('Prazo da Lambda indisponível');
     const prazo = new PrazoPagamento(() => context.getRemainingTimeInMillis());
@@ -73,6 +76,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const resposta = await criar(campos, {
         buscarEstoque: (col, fil) => { prazo.exigir(15000); return rm.buscarEstoque(col, fil); },
         saveRecord: async (xml, servidor, contexto) => {
+          etapaCriacao = 'preflight';
           // Check the HTTP window before making the reservation irreversible.
           // DynamoDB is bounded at 2s; reserve another 500ms for local overhead.
           prazo.timeoutCriacao(2500);
@@ -85,15 +89,32 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           if (contaConsumo) xml = preservarNumeroMovimentoContaConsumo(xml, texto(entrada.numeroDaNF));
           // A reserva irreversível antecede o SaveRecord. Nem timeout nem falha
           // de checkpoint podem permitir uma segunda criação automática.
+          etapaCriacao = 'checkpoint_creating';
+          let inicioEtapa = Date.now();
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'creating_checkpoint_started' });
           op = await repo.avancar(op!, 'CREATING');
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'creating_checkpoint_confirmed', durationMs: Date.now() - inicioEtapa });
+          etapaCriacao = 'transport_call';
+          inicioEtapa = Date.now();
+          // This marks the transport invocation, not proof of an HTTP dispatch.
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'transport_call_started' });
           const retorno = await rm.saveRecord(xml, servidor, contexto);
+          etapaCriacao = 'transport_result';
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'transport_call_returned', durationMs: Date.now() - inicioEtapa });
           const match = retorno.trim().match(/^(\d+);([1-9]\d*)$/);
           if (!match || match[1] !== coligada) {
             console.warn('[RM-IDPGTO] Retorno de criação sem chave confirmada', { ticket, coligada,
-              category: /=+|\bat RM\./.test(retorno) ? 'rm_rejection_or_diagnostic' : 'unexpected_result', length: retorno.length });
+              ...diagnosticarRetornoRm(retorno, Boolean(match)) });
             throw new Error('Criação RM de resultado incerto; consultar movimento do ticket');
           }
+          chaveRmRecebida = match[2];
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'primary_key_received', idMov: chaveRmRecebida });
+          etapaCriacao = 'checkpoint_created';
+          inicioEtapa = Date.now();
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'created_checkpoint_started', idMov: chaveRmRecebida });
           op = await repo.avancar(op!, 'CREATED', match[2]);
+          console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'created_checkpoint_confirmed', idMov: chaveRmRecebida, durationMs: Date.now() - inicioEtapa });
+          etapaCriacao = undefined;
           criadoAgora = true;
           return retorno;
         },
@@ -192,8 +213,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     // Axios/SOAP exceptions may contain credentials and full bank data.
     const mensagem = erro instanceof PagamentoInvalido || erro instanceof ConflitoPagamento
       ? erro.message : 'Integração bancária não confirmada; consultar o estado antes de reenviar';
-    console.warn('[RM-IDPGTO] Integração pendente', { ticket: texto(entrada?.ticketRaiz), status, state: op?.state,
-      pg: op?.pg, errorType: erro instanceof Error ? erro.name : 'UnknownError' });
+    console.warn('[RM-IDPGTO] Integração pendente', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
+      status, state: op?.state, pg: op?.pg, errorType: tipoErroSeguro(erro), creationStage: etapaCriacao, receivedPg: chaveRmRecebida });
     return formatResponse(status, { message: mensagem, error: mensagem, code: 'IDPGTO_NAO_CONFIRMADO',
       integracaoBancaria: 'pendente', ...(op?.pg ? { PG: op.pg } : {}) });
   }

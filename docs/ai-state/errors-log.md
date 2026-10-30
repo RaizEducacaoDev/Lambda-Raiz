@@ -166,3 +166,18 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   operacional foi alterado nessa investigação; apenas auditoria e documentação.
 - Evidência somente leitura: execuções41130570993 e41131174223. Dados do caso
   e reproduções ficam nos artefatos privados. Rejeição específica ainda pendente.
+- Usuário confirmou ticket228310/coligada11/filial1. O template1209 real foi
+  lido sem salvar/testar e a reconstrução offline reproduziu o digest exato da
+  reserva. Natureza121, receita17080 e FKs conferidas; a linha tributária vazia
+  também existia no contrato do caso anterior aceito. Não atribuir causalidade.
+- Perfis T/F ativos do usuário técnico são os mesmos em11/31. Leituras às19:07
+  ainda não encontraram movimento pelo ticket/NF; cadastro2/11 continua ativo.
+  Isso não autoriza repetir criação. Logs nativos foram conferidos tanto na
+  janela18:16–18:20 quanto21:16–21:20, sem recuperar o retorno original.
+- Próxima evidência necessária: log do RM.Host/WebService às18:17:35–18:17:37
+  de30/10/2026 BRT (21:17:35–21:17:37 UTC), requisição AWS
+  0087563c-cd5e-4baf-956b-67b290f1ab14. Acesso solicitado ao usuário.
+- Preparação local de diagnóstico: motivos de allowlist, SHA256/tamanho/linhas,
+  campos/tipos nativos fixos e etapas de checkpoint/chamada ao transporte/chave
+  recebida. Não conserva texto bruto nem recupera a mensagem histórica; não
+  altera digest, estados, HTTP ou autoriza retry. Publicação permanece pendente.

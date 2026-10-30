@@ -18,6 +18,11 @@ const payload = { tipoDaSolicitacao:'PG', tipoDoPagamento:'OG', outrosGastos:'FR
   dataDeVencimento:'2026-11-10', valorTotal:'100,00', codigoTipoChavePIX:'2', chavePIX:'fixture@example.test',
   dataDeEmissao:'2026-10-29',dataDeEntrada:'2026-10-29',chaveDeAcesso:'',itens:[],tributos:[] };
 const parse = response => JSON.parse(response.body);
+async function capturarLogs(action){
+  const logs=[],original={info:console.info,warn:console.warn,error:console.error};
+  try {for(const level of Object.keys(original))console[level]=(...args)=>logs.push(args);return {result:await action(),logs};}
+  finally {Object.assign(console,original);}
+}
 let server, client, doc, seq=0;
 before(async()=>{
   server=dynalite({createTableMs:0});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -175,6 +180,39 @@ test('retorno RM sem chave registra somente categoria e tamanho e mantém a cria
   const output=JSON.stringify(logs);assert.ok(output.includes('rm_rejection_or_diagnostic'));assert.ok(output.includes('length'));
   assert.equal(output.includes(secret),false);assert.equal((await x.all())[0].state,'CREATING');
   await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+});
+test('rejeição1586multilinha registra motivo e hash sem dados sensíveis, preservando CREATING e409',async()=>{
+  const raw='Campo CODTRB não foi informado.\r\nprivate@example.test CPF12345678909 contaACCOUNT_PRIVATE\r\n=====\r\nat RM.Fixture'.padEnd(1586,'x');
+  const x=await setup({realLegacy:true,createResult:raw});
+  const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
+  const diagnostic=logs.find(l=>l[0]==='[RM-IDPGTO] Retorno de criação sem chave confirmada')[1];
+  assert.equal(diagnostic.reasonCode,'RM_REQUIRED_FIELD');assert.equal(diagnostic.length,1586);
+  assert.equal(diagnostic.responseSha256,require('node:crypto').createHash('sha256').update(raw).digest('hex'));
+  const serialized=JSON.stringify(logs);for(const value of ['private@example.test','CPF12345678909','ACCOUNT_PRIVATE',raw])assert.equal(serialized.includes(value),false);
+  assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+});
+test('chave recebida fica distinguível de checkpoint perdido, sem atualizar banco ou criar novamente',async()=>{
+  const x=await setup({realLegacy:true});const advance=x.repo.avancar.bind(x.repo);
+  x.repo.avancar=async(op,state,pg)=>{if(state==='CREATED')throw Object.assign(Error('PRIVATE_CHECKPOINT_DATA'),{name:'TimeoutError'});return advance(op,state,pg);};
+  const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
+  const events=logs.filter(l=>l[0]==='[RM-IDPGTO] Etapa de criação').map(l=>l[1].event);
+  assert.deepEqual(events,['creating_checkpoint_started','creating_checkpoint_confirmed','transport_call_started','transport_call_returned','primary_key_received','created_checkpoint_started']);
+  const pending=logs.find(l=>l[0]==='[RM-IDPGTO] Integração pendente')[1];
+  assert.equal(pending.creationStage,'checkpoint_created');assert.equal(pending.receivedPg,'9001');assert.equal(pending.pg,undefined);
+  assert.equal(JSON.stringify(logs).includes('PRIVATE_CHECKPOINT_DATA'),false);
+  assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+});
+test('falha do checkpointCREATING nunca é apresentada como despacho ou respostaRM',async()=>{
+  const x=await setup({realLegacy:true});const advance=x.repo.avancar.bind(x.repo);
+  x.repo.avancar=async(op,state,pg)=>{const next=await advance(op,state,pg);if(state==='CREATING')throw Object.assign(Error('PRIVATE_CHECKPOINT_DATA'),{name:'TimeoutError'});return next;};
+  const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
+  const events=logs.filter(l=>l[0]==='[RM-IDPGTO] Etapa de criação').map(l=>l[1].event);
+  assert.deepEqual(events,['creating_checkpoint_started']);
+  assert.equal(logs.find(l=>l[0]==='[RM-IDPGTO] Integração pendente')[1].creationStage,'checkpoint_creating');
+  assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal((await x.all())[0].state,'CREATING');
+  assert.equal(JSON.stringify(logs).includes('PRIVATE_CHECKPOINT_DATA'),false);
 });
 test('retenção no RM conserva valor líquido e associa somente a parcela nativa do movimento',async()=>{
   const x=await setup({parcelas:[{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'80.0000'}]});
