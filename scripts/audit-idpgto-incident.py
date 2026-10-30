@@ -1,6 +1,6 @@
 """Read-only correlation of a pending payment and sanitized Lambda logs.
 
-Refresh independently while the scoped recovery release is being processed.
+Refresh independently after the scoped recovery release and conditional adoption.
 """
 import datetime,json,pathlib,re,subprocess
 FUNCTION='lambda-raiz-prod-solicitacaoDePagamento';TABLE='lambda-raiz-prod-pagamento-idpgto'
