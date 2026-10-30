@@ -70,3 +70,11 @@ its transport/mapping, and Windows automation stopped because it could not
 confidently identify the browser URL. No UI or fiscal approval was changed.
 Production operational retest and other modality cases remain pending. No
 settlement, remittance or bank payment was performed.
+
+[Post-release audit](https://github.com/RaizEducacaoDev/Lambda-Raiz/actions/runs/41144743561)
+at 23:29 UTC confirmed the same active package/revision, exact original
+reservation and zero child checkpoints in a complete consistent scan. Complete
+CloudWatch windows confirmed original END/REPORT without timeout, and only the
+controlled422 responses after release, with no unexpected server failures in
+the inspected interval. This supplies termination/child-state evidence, but
+does not replace the outstanding native identity/rollback and fiscal approval.
