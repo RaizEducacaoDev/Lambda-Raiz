@@ -223,3 +223,15 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   lançamentos ou a consulta compartilhada antiga. Publicação AWS e canário da
   requisição original ficam a cargo do responsável da sessão; não inferir
   publicação a partir deste registro. A reserva original228310 foi preservada.
+
+- **Publicação confirmada:** commit28a314d, execução41143863601, somente a função
+  de pagamento, SHA r0ACtmx4cuGdCAaexa2P6RHkXAEnO5lctl4tiP1iqkk=, revisão
+  e959f76b-7707-4d85-9b13-7a0a27784f81.102 testes/ZIP/config/checkpoints aprovados;
+  segundo job e sua repetição pós-canário confirmaram código/core/HTTP/estados.
+- **Canário original:** intenção/digest exatos de228310 retornaram422 específico
+  de natureza internaRJ→RS. READ COMMITTED posterior semNOLOCK nas tabelas de
+  negócio confirmou0MOV/0FLAN; CREATING/digest/owner/lease originais intactos.
+  Isso previne nova reserva indevida, mas não reconcilia a tentativa histórica.
+- **Limite:** chave única possui nove componentes, seis derivados pelo nativo.
+  Sem prova de invariância ou rollback correlacionado e aprovação fiscal, não
+  liberar sucessor. Não fazer reset/delete. Ver operations/payment-fiscal-release-20261030.md.
