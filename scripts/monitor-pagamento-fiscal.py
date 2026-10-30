@@ -27,8 +27,18 @@ out['originalChildren']={'count':child_count,'complete':not bool(page_key),'page
 directory=pathlib.Path('.pagamento-fiscal-monitor');directory.mkdir(exist_ok=True)
 (directory/'readback.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
 assert out['originalChildren']['complete'] and out['originalChildren']['count']==0
+def log_window(start,end,pattern):
+ events=[];token=None;seen=set()
+ for _ in range(20):
+  request=['logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,'--start-time',str(start),'--end-time',str(end),'--filter-pattern',pattern,'--limit','200','--no-paginate']
+  if token:request.extend(['--next-token',token])
+  page=aws(*request);events.extend(page.get('events',[]));next_token=page.get('nextToken')
+  if not next_token:return {'events':events}
+  if next_token in seen:break
+  seen.add(next_token);token=next_token
+ return {'events':events,'nextToken':token}
 start=int(datetime.datetime(2026,10,30,23,21,35,tzinfo=datetime.timezone.utc).timestamp()*1000)
-logs=aws('logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,'--start-time',str(start),'--filter-pattern','"[RM-IDPGTO]"','--limit','200','--no-paginate')
+logs=log_window(start,int(datetime.datetime.now(datetime.timezone.utc).timestamp()*1000),'"[RM-IDPGTO]"')
 out['postReleaseLogWindowComplete']=not bool(logs.get('nextToken'));out['pendingEvents']=[]
 for event in logs.get('events',[]):
  message=event.get('message','')
@@ -37,7 +47,7 @@ for event in logs.get('events',[]):
  state=re.search(r'\bstate[\'\"]?\s*:\s*[\'\"]?([A-Z]+)',message)
  out['pendingEvents'].append({'timestamp':event['timestamp'],'ticket':ticket.group(1) if ticket else None,'status':int(status.group(1)) if status else None,'state':state.group(1) if state else None})
 out['unexpectedServerFailures']=[event for event in out['pendingEvents'] if event['status'] is None or event['status']>=500]
-original=aws('logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,'--start-time',str(int(datetime.datetime(2026,10,30,21,17,tzinfo=datetime.timezone.utc).timestamp()*1000)),'--end-time',str(int(datetime.datetime(2026,10,30,21,19,tzinfo=datetime.timezone.utc).timestamp()*1000)),'--filter-pattern','"0087563c-cd5e-4baf-956b-67b290f1ab14"','--limit','100','--no-paginate')
+original=log_window(int(datetime.datetime(2026,10,30,21,17,tzinfo=datetime.timezone.utc).timestamp()*1000),int(datetime.datetime(2026,10,30,21,19,tzinfo=datetime.timezone.utc).timestamp()*1000),'"0087563c-cd5e-4baf-956b-67b290f1ab14"')
 messages=[event.get('message','') for event in original.get('events',[])]
 out['originalExecution']={'requestId':'0087563c-cd5e-4baf-956b-67b290f1ab14','endObserved':any('END RequestId:' in value for value in messages),'reportObserved':any('REPORT RequestId:' in value for value in messages),'timeoutObserved':any('Task timed out' in value for value in messages),'windowComplete':not bool(original.get('nextToken'))}
 (directory/'readback.json').write_text(json.dumps(out,indent=2),encoding='utf-8');print(json.dumps(out,indent=2))
