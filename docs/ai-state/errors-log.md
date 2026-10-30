@@ -79,3 +79,48 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   replay após desativação, aliases no topo/parcela e suite de pagamento verde.
 - **Dependência:** provisionamento DynamoDB/IAM e contrato da TS03 no Zeev ainda
   pendentes; a versão de produção não recebeu esta mudança.
+
+## 2026-10-30 — ag-depurar-erro
+
+### Erro: criação remota concluída depois do timeout deixou o vínculo bancário pendente
+
+- **Sintoma:** TS03 retornou Conflict de criação incerta; o RM já possuía o
+  movimento e o lançamento em aberto, ainda sem IDPGTO/CODCOLPGTO.
+- **Número de causas:** múltiplas, confirmadas pela correlação independente de
+  CloudWatch, reserva durável e leitura do movimento/lançamento no RM.
+- **Causa 1 — prazo HTTP:** o transporte limitava também a criação de movimento
+  a 8 segundos. O cliente abortou antes do commit remoto, que ocorreu depois.
+  Abort local não representou cancelamento da operação no RM.
+- **Causa 2 — recuperação:** o estado CREATING bloqueava antes da consulta de
+  movimento existente, inclusive depois da expiração do lease. Evitava duplicar,
+  mas não oferecia reconciliação verificável de uma criação já concluída.
+- **Causa 3 — observabilidade:** o legado injetado convertia o erro em resposta
+  genérica e podia registrar o objeto Axios inteiro. Retorno sem chave primária
+  tampouco recebia uma classificação segura no protocolo externo.
+- **Correção 1:** criação recebe teto de 15 segundos, reserva 12 segundos para
+  checkpoint/vínculo/leitura e exige janela mínima de 9 segundos. O pré-checkpoint
+  guarda mais 2,5 segundos para o DynamoDB limitado a 2 segundos. Nova verificação
+  ocorre antes do HTTP. Uma falha excepcional depois do checkpoint continua
+  conservadoramente em CREATING; nenhum reset é feito por timeout/rejeição.
+- **Correção 2 — reconciliação operacional:** o caso existente deve ser tratado
+  pontualmente, depois de confirmar por SQL SELECT e SOAP independentes o único
+  movimento, proprietário, coligada/filial, fornecedor, tipo, documento, totais,
+  parcelas em aberto e ausência de pontes de baixa/boleto. Apenas o IDMOV já
+  comprovado pode ser vinculado por CAS preservando digest e reserva; a correção
+  bancária usa o serviço oficial. Nenhuma nova criação ou exclusão é necessária.
+- **Correção 3:** o caminho injetado registra classe/código/etapa/duração, sem
+  config, headers, corpo ou mensagem bruta; resultado sem chave tem categoria e
+  tamanho seguros. O núcleo original e o caminho sem injeção foram preservados.
+- **Revisão:** FinLanDataBR não expõe FLANBOLETO/FLANBAIXA; ReadView rejeitou
+  subconsulta e a consulta cadastrada de ticket utiliza TOP 1 sem filtrar coligada.
+  Esses contratos não provam ausência de pontes nem unicidade global. O protótipo
+  de recuperação automática foi retirado antes da publicação; CREATING continua
+  bloqueado na Lambda e exige reconciliação operacional independente.
+- **Verificação local:** regressões cobrem timeout de criação, janela insuficiente
+  antes do checkpoint, logs seguros e preservação de CREATING sem segunda criação.
+  Um SaveRecord simulado respondeu após 9 segundos sem abort. A execução final
+  de `npm run verify:pagamento` passou nos 63 testes, typecheck e bundle.
+- **Deploy Gap:** publicação e canário com releitura persistida ficam sob a
+  execução do responsável da sessão; verificação local não comprova produção.
+- **Lição:** preservar idempotência na incerteza e recuperar somente o registro
+  remoto comprovado; sucesso exige reler o IDPGTO no lançamento correto.

@@ -47,7 +47,7 @@ async function setup(opts={}) {
       if(table==='MovMovimentoTBCData')return movement();
       return dataset('FLAN',lans.get(key.split(';')[1]));},
     async saveRecord(content,table){
-      if(table==='MovMovimentoTBCData'){count.create++;if(opts.createError)throw Error('timeout');if(opts.timeAfterCreate)remaining=6000;return opts.createResult||'8;9001';}
+      if(table==='MovMovimentoTBCData'){count.create++;if(opts.createError)throw opts.createError instanceof Error?opts.createError:Error('timeout');if(opts.timeAfterCreate)remaining=6000;return opts.createResult||'8;9001';}
       count.update++;const row=registroUnico(content.slice(9,-3),'FLAN');
       if(!opts.noEffect)lans.set(row.IDLAN,{...lans.get(row.IDLAN),...row});
       if(opts.afterFirstUpdate && count.update===1)remaining=7000;
@@ -108,6 +108,11 @@ test('erros e timeout de criação nunca autorizam segunda criação após expir
 test('timeout após checkpoint do movimento recupera PG sem duplicar',async()=>{
   const x=await setup({timeAfterCreate:true});assert.notEqual((await x.run()).statusCode,200);await x.expire();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);
 });
+test('orçamento curto bloqueia antes de CREATING e pode retomar uma reserva ainda sem efeito',async()=>{
+  const x=await setup();x.setTime(22000);assert.equal((await x.run()).statusCode,503);
+  assert.equal((await x.all())[0].state,'RESERVED');assert.equal(x.count.create,0);
+  await x.expire();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);
+});
 test('falha/efeito incerto na associação não vira sucesso e nunca repete escrita incerta',async()=>{
   const committed=await setup({updateError:true});assert.notEqual((await committed.run()).statusCode,200);await committed.expire();assert.equal((await committed.run()).statusCode,200);assert.equal(committed.count.update,1);
   const lost=await setup({noEffect:true});assert.equal((await lost.run()).statusCode,409);await lost.expire();assert.equal((await lost.run()).statusCode,409);assert.equal(lost.count.update,1);
@@ -144,6 +149,32 @@ test('mudança financeira ou parcela ambígua bloqueia replay sem novo lançamen
 });
 test('montador real do legado usa o transporte durável e o protocolo confirma FLAN',async()=>{
   const x=await setup({realLegacy:true});assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+test('erros do legado injetado registram etapa e classe sem expor Axios config, credenciais ou corpo',async()=>{
+  const secret='SYNTHETIC_SECRET_MUST_NOT_APPEAR';
+  const error=Object.assign(Error(secret),{name:'CanceledError',code:'ERR_CANCELED',
+    config:{headers:{Authorization:secret},data:secret},request:{body:secret},response:{data:secret}});
+  const x=await setup({realLegacy:true,createError:error});
+  const logs=[],original={info:console.info,warn:console.warn,error:console.error};
+  try {
+    for(const level of Object.keys(original))console[level]=(...args)=>logs.push(args);
+    const result=await x.run();assert.equal(result.statusCode,503);assert.equal(x.count.create,1);
+  } finally {Object.assign(console,original);}
+  const output=JSON.stringify(logs);assert.ok(output.includes('SaveRecord'));assert.ok(output.includes('CanceledError'));
+  assert.ok(output.includes('ERR_CANCELED'));assert.equal(output.includes(secret),false);
+  assert.equal(output.includes('Authorization'),false);assert.equal((await x.all())[0].state,'CREATING');
+});
+test('retorno RM sem chave registra somente categoria e tamanho e mantém a criação bloqueada',async()=>{
+  const secret='SYNTHETIC_RM_DIAGNOSTIC_MUST_NOT_APPEAR';
+  const x=await setup({realLegacy:true,createResult:`Business rejection ${secret} ===== at RM.Fixture`});
+  const logs=[],original={info:console.info,warn:console.warn,error:console.error};
+  try {
+    for(const level of Object.keys(original))console[level]=(...args)=>logs.push(args);
+    assert.equal((await x.run()).statusCode,503);
+  } finally {Object.assign(console,original);}
+  const output=JSON.stringify(logs);assert.ok(output.includes('rm_rejection_or_diagnostic'));assert.ok(output.includes('length'));
+  assert.equal(output.includes(secret),false);assert.equal((await x.all())[0].state,'CREATING');
+  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
 });
 test('retenção no RM conserva valor líquido e associa somente a parcela nativa do movimento',async()=>{
   const x=await setup({parcelas:[{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'80.0000'}]});

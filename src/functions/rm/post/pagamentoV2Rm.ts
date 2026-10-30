@@ -63,6 +63,13 @@ export class PrazoPagamento {
     if (this.disponivel() < ms) throw new Error('Tempo insuficiente; operação mantida pendente');
   }
   timeout(): number { this.exigir(4000); return Math.min(8000, this.disponivel() - 3000); }
+  timeoutCriacao(margemCheckpoint = 0): number {
+    // Preserve time to checkpoint IDMOV, associate the bank data and reread RM.
+    // The extra pre-checkpoint margin covers the bounded DynamoDB request.
+    const timeout = Math.min(15000, this.disponivel() - 12000 - margemCheckpoint);
+    if (timeout < 9000) throw new Error('Tempo insuficiente antes de enviar a criação ao RM; manter pendente sem criar');
+    return timeout;
+  }
 }
 
 // Transporte exclusivo V2: o cliente SOAP e o comportamento legado não são alterados.
@@ -70,7 +77,8 @@ export class TransportePagamentoV2 implements TransporteRm {
   private readonly config = new wsDataserver();
   constructor(private readonly prazo: PrazoPagamento) {}
   private async executar(operacao: 'ReadRecord' | 'SaveRecord', valor: string, servidor: string, contexto: string): Promise<string> {
-    const timeout = this.prazo.timeout();
+    const timeout = operacao === 'SaveRecord' && servidor === 'MovMovimentoTBCData'
+      ? this.prazo.timeoutCriacao() : this.prazo.timeout();
     const campo = operacao === 'ReadRecord' ? 'PrimaryKey' : 'XML';
     const xml = `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><${operacao} xmlns="http://www.totvs.com/"><DataServerName>${servidor}</DataServerName><${campo}>${valor}</${campo}><Contexto>${contexto}</Contexto></${operacao}></s:Body></s:Envelope>`;
     const resposta = await axios.post(`${this.config.getUrl()}:8051/wsDataServer/IwsDataServer`, xml, {

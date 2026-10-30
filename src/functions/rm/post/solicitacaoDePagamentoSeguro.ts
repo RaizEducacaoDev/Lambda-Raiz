@@ -73,7 +73,9 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const resposta = await criar(campos, {
         buscarEstoque: (col, fil) => { prazo.exigir(15000); return rm.buscarEstoque(col, fil); },
         saveRecord: async (xml, servidor, contexto) => {
-          prazo.exigir(12000);
+          // Check the HTTP window before making the reservation irreversible.
+          // DynamoDB is bounded at 2s; reserve another 500ms for local overhead.
+          prazo.timeoutCriacao(2500);
           if (servidor !== 'MovMovimentoTBCData' || op!.state !== 'RESERVED') throw new Error('Criação fora do estado autorizado');
           const puro = xml.startsWith('<![CDATA[') && xml.endsWith(']]>') ? xml.slice(9, -3) : '';
           const mov = registroUnico(puro, 'TMOV'), compl = registroUnico(puro, 'TMOVCOMPL');
@@ -86,7 +88,11 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           op = await repo.avancar(op!, 'CREATING');
           const retorno = await rm.saveRecord(xml, servidor, contexto);
           const match = retorno.trim().match(/^(\d+);([1-9]\d*)$/);
-          if (!match || match[1] !== coligada) throw new Error('Criação RM de resultado incerto; consultar movimento do ticket');
+          if (!match || match[1] !== coligada) {
+            console.warn('[RM-IDPGTO] Retorno de criação sem chave confirmada', { ticket, coligada,
+              category: /=+|\bat RM\./.test(retorno) ? 'rm_rejection_or_diagnostic' : 'unexpected_result', length: retorno.length });
+            throw new Error('Criação RM de resultado incerto; consultar movimento do ticket');
+          }
           op = await repo.avancar(op!, 'CREATED', match[2]);
           criadoAgora = true;
           return retorno;

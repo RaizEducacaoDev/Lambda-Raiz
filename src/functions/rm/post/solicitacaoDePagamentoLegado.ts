@@ -124,6 +124,11 @@ const localizarObjeto = (obj: any, chave: string): any => {
 };
 
 const aguardar = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const resumirErroSeguro = (erro: unknown) => {
+  const code = erro && typeof erro === 'object' && 'code' in erro ? String(erro.code) : '';
+  return { errorType: erro instanceof Error && /^[A-Za-z0-9_]+$/.test(erro.name) ? erro.name : 'UnknownError',
+    errorCode: /^[A-Z][A-Z0-9_]{0,63}$/.test(code) ? code : undefined };
+};
 
 export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<wsDataserver, 'saveRecord'>; getLOC: (coligada: string, filial: string) => Promise<string> }) => {
   try {
@@ -852,7 +857,11 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
         duracaoMs: Date.now() - inicioSaveRecord,
       }));
     } catch (errSoap) {
-      if (opcoesV2) throw errSoap; // Resultado incerto permanece reservado na V2.
+      if (opcoesV2) {
+        console.warn('[RM-DIAG]', JSON.stringify({ ...diagnosticoMovimento, etapa: 'SaveRecord', evento: 'erro',
+          ...resumirErroSeguro(errSoap), duracaoMs: Date.now() - inicioSaveRecord }));
+        throw errSoap; // Resultado incerto permanece reservado, sem expor Axios config/body.
+      }
       const isConnReset = errSoap instanceof Error && errSoap.message.includes("socket hang up");
       console.info("[RM-DIAG]", JSON.stringify({
         ...diagnosticoMovimento,
@@ -941,6 +950,10 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       return formatResponse(400, { message: "Erro ao gravar no TOTVS", error: "TOTVS: " + errorMessage });
     }
   } catch (error) {
+    if (opcoesV2) {
+      console.error('[RM-ERRO] Falha no caminho seguro', { etapa: 'handlerLegado', ...resumirErroSeguro(error) });
+      throw error;
+    }
     console.error("[RM-ERRO] ", error);
     return formatResponse(500, {
       message: "Erro interno do servidor",
