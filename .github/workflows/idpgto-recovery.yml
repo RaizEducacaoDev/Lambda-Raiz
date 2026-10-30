@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: idpgto-payment-function-production
+  group: idpgto-payment-function-recovery-20261030
   cancel-in-progress: false
 jobs:
   recovery:
