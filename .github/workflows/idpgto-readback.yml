@@ -19,7 +19,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: sa-east-1
           AWS_PAGER: ''
-        run: python3 scripts/verify-idpgto-aws.py --ticket 228063 --company 31 --movement 453 --idlan 468 --state-only
+        run: python3 scripts/verify-idpgto-aws.py --ticket 228080 --company 31 --movement 454 --idlan 469 --state-only
       - uses: actions/upload-artifact@v4
         if: always()
         with:
