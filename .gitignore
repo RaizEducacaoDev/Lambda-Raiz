@@ -17,6 +17,7 @@ dist/
 .build/
 .idpgto-evidence/
 .idpgto-readback/
+.idpgto-incident/
 __pycache__/
 *.pyc
 .serverless/
