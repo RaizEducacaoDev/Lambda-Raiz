@@ -1,6 +1,6 @@
 """Read-only correlation of a pending payment and sanitized Lambda logs.
 
-Refresh independently after the scoped recovery release and conditional adoption.
+Refresh independently after the real Zeev retry, including safe confirmation IDs.
 """
 import datetime,json,pathlib,re,subprocess
 FUNCTION='lambda-raiz-prod-solicitacaoDePagamento';TABLE='lambda-raiz-prod-pagamento-idpgto'
@@ -58,6 +58,14 @@ for event in sorted(events.values(),key=lambda e:e['timestamp']):
         except ValueError:safe['parseable']=False
     elif '[RM-ERRO]' in message or '[RM-IDPGTO]' in message:
         safe['category']='bank_protocol' if '[RM-IDPGTO]' in message else 'core_error'
+        if '[RM-IDPGTO] Vínculo financeiro confirmado' in message:
+            safe['bankConfirmation']=True
+            for field in ['ticket','coligada','idMov','idPgto']:
+                match=re.search(r'\b'+field+r'[\'\"]?\s*:\s*[\'\"]?([1-9]\d*)\b',message)
+                if match:safe[field]=int(match.group(1))
+            match=re.search(r'\bidLans\s*:\s*\[([^\]]*)\]',message)
+            if match and re.fullmatch(r'[\s\d,\'\"]*',match.group(1)):
+                safe['idLans']=[int(n) for n in re.findall(r'\d+',match.group(1))]
         safe['knownCauses']=[v for v in known if v in message]
         match=re.search(r'timeout of (\d+)ms exceeded',message)
         if match:safe['timeoutMs']=int(match.group(1))
