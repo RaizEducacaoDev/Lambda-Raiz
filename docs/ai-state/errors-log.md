@@ -148,3 +148,21 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   ativo e coincidente, um único movimento/financeiro, principal1 e baixa0.
   Essa prova é de retomada após reconciliação; A04 testará uma criação nova.
   Regra auxiliar e aceite de pagamento continuam pendentes.
+
+## 2026-10-30 — recorrência PIX E-mail, causa específica ainda pendente
+
+- O aviso CREATING pode reaparecer por causas diferentes. A nova tentativa
+  respondeu em1398ms com diagnóstico RM sem chave, tamanho1586; não foi timeout.
+  A versão corrigida cnvkNpnJIWED49S7GpDSpy2oFQfkZo+vPtKnL50xL24= estava ativa.
+- Banco PIX E-mail ativo e coincidente com o formulário, mas nenhum movimento
+  foi encontrado nas consultas por ticket/documento. A reserva foi preservada.
+- Leituras delimitadas confirmaram produto, natureza orçamentária, CC, condição,
+  local, filial e fornecedor válidos. Nenhuma FK inválida foi comprovada.
+- A mensagem nativa foi descartada pelo wrapper que guarda apenas categoria e
+  tamanho. Logs nativos acessíveis não permitiram recuperá-la. Não repetir
+  SaveRecord para descobrir o motivo nem resetar CREATING por inferência.
+- Divergência de aliases PIX no montador foi reproduzida, mas não atribuída
+  como causa desta resposta sem evidência. Nenhuma fonte da aplicação ou dado
+  operacional foi alterado nessa investigação; apenas auditoria e documentação.
+- Evidência somente leitura: execuções41130570993 e41131174223. Dados do caso
+  e reproduções ficam nos artefatos privados. Rejeição específica ainda pendente.
