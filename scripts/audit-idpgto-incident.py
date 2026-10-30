@@ -72,4 +72,18 @@ for event in sorted(events.values(),key=lambda e:e['timestamp']):
     else:safe['category']='other_related_event'
     safe_events.append(safe)
 out['matchingEvents']=len(matching);out['requestIds']=sorted(request_ids);out['events']=safe_events
+# Recover only the structural contract of an earlier request from this integration.
+# Values (including PIX/account data) are never exported.
+old_start=int(datetime.datetime(2026,10,28,21,18,tzinfo=datetime.timezone.utc).timestamp()*1000)
+old_events=aws('logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,
+    '--start-time',str(old_start),'--end-time',str(old_start+180000),'--filter-pattern','"227324"').get('events',[])
+def shape(value):
+    if isinstance(value,dict):return {k:shape(v) for k,v in value.items()}
+    if isinstance(value,list):return {'type':'array','length':len(value),'items':[shape(v) for v in value]}
+    return {'type':type(value).__name__,'empty':value is None or value==''}
+for event in old_events:
+    message=event.get('message','')
+    if 'Campos recebidos:' in message:
+        original=json.loads(message.split('Campos recebidos:',1)[1].strip())
+        if str(original.get('ticketRaiz'))=='227324':out['integrationPayloadShape']=shape(original);break
 (outdir/'incident-readback.json').write_text(json.dumps(out,ensure_ascii=False,indent=2));print(json.dumps(out,ensure_ascii=False,indent=2))
