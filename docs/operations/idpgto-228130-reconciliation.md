@@ -21,10 +21,19 @@ ee07af3d-a9fb-420d-9028-5350945e0053. The root is CREATED/PG455 with the origina
 intent, owner and lock preserved. No child checkpoint exists until the real retry.
 The final safe verification is idpgto-228130-verification-final.json.
 
+The user subsequently resumed the fiscal task. Readback run41106685665 now
+confirms root and financial checkpoint COMPLETE, with the same455/470 and
+bank4/31 in CloudWatch. Zeev received both IDs and reached T15 — Baixar
+Lançamento. Native SOAP and independent SQL confirm one movement/financial,
+active matching bank data, original amount1 and settlement0, without bridges.
+See idpgto-228130-verification-retry.json. This was a reconciled retry; A04
+will verify a fresh creation with the existing TED CIP bank4.
+
 ## Exact operational procedure
 
-Steps1–6 have been executed and independently verified. Do not rerun the
-one-time adoption. Only the real Zeev retry and final acceptance remain pending.
+The adoption and real retry have been executed and independently verified.
+Do not rerun the one-time adoption. The auxiliary rule and payment acceptance
+remain pending; the next bank integration test is A04.
 
 1. Confirm the deployed function hash and revision for
    lambda-raiz-prod-solicitacaoDePagamento in account757843862365/sa-east-1.

@@ -142,3 +142,9 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - **Observabilidade do CI:** status agregado/job pode atrasar em relação aos
   artefatos e logs. Conferir artefatos reais da execução antes de concluir que
   uma publicação ainda não ocorreu apenas porque a API informa queued.
+- **Retomada real confirmada:** após a aprovação fiscal pelo usuário, o Zeev
+  recebeu455/470 e avançou a T15 — Baixar Lançamento. Leitura41106685665 confirmou
+  raiz e FLAN COMPLETE e CloudWatch com455/470/4/31; SOAP e SQL confirmaram banco
+  ativo e coincidente, um único movimento/financeiro, principal1 e baixa0.
+  Essa prova é de retomada após reconciliação; A04 testará uma criação nova.
+  Regra auxiliar e aceite de pagamento continuam pendentes.
