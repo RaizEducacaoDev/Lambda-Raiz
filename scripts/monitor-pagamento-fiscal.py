@@ -17,8 +17,15 @@ root=aws('dynamodb','get-item','--table-name',TABLE,'--key',json.dumps({'pk':{'S
 assert root['state']['S']=='CREATING' and 'pg' not in root and root['digest']['S']=='76f1c54ead4fe3fc82c00ffc0164d5d019bc6feb0d53578fb7444b482520a2c1'
 assert root['owner']['S']=='0bd66c31-c259-45b7-8208-9b9caa49f74f' and root['lockUntil']['N']=='1793395143619'
 out['originalReservationPreserved']=True
-children=aws('dynamodb','scan','--table-name',TABLE,'--consistent-read','--filter-expression','begins_with(pk, :prefix)','--expression-attribute-values',json.dumps({':prefix':{'S':key+'#'}}),'--select','COUNT','--limit','100','--no-paginate')
-out['originalChildren']={'count':children['Count'],'complete':not children.get('LastEvaluatedKey')}
+child_count=0;page_key=None;pages=0
+for _ in range(20):
+ scan_args=['dynamodb','scan','--table-name',TABLE,'--consistent-read','--filter-expression','begins_with(pk, :prefix)','--expression-attribute-values',json.dumps({':prefix':{'S':key+'#'}}),'--select','COUNT','--limit','500','--no-paginate']
+ if page_key:scan_args.extend(['--exclusive-start-key',json.dumps(page_key)])
+ children=aws(*scan_args);pages+=1;child_count+=children['Count'];page_key=children.get('LastEvaluatedKey')
+ if not page_key:break
+out['originalChildren']={'count':child_count,'complete':not bool(page_key),'pagesRead':pages}
+directory=pathlib.Path('.pagamento-fiscal-monitor');directory.mkdir(exist_ok=True)
+(directory/'readback.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
 assert out['originalChildren']['complete'] and out['originalChildren']['count']==0
 start=int(datetime.datetime(2026,10,30,23,21,35,tzinfo=datetime.timezone.utc).timestamp()*1000)
 logs=aws('logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,'--start-time',str(start),'--filter-pattern','"[RM-IDPGTO]"','--limit','200','--no-paginate')
@@ -33,6 +40,5 @@ out['unexpectedServerFailures']=[event for event in out['pendingEvents'] if even
 original=aws('logs','filter-log-events','--log-group-name','/aws/lambda/'+FUNCTION,'--start-time',str(int(datetime.datetime(2026,10,30,21,17,tzinfo=datetime.timezone.utc).timestamp()*1000)),'--end-time',str(int(datetime.datetime(2026,10,30,21,19,tzinfo=datetime.timezone.utc).timestamp()*1000)),'--filter-pattern','"0087563c-cd5e-4baf-956b-67b290f1ab14"','--limit','100','--no-paginate')
 messages=[event.get('message','') for event in original.get('events',[])]
 out['originalExecution']={'requestId':'0087563c-cd5e-4baf-956b-67b290f1ab14','endObserved':any('END RequestId:' in value for value in messages),'reportObserved':any('REPORT RequestId:' in value for value in messages),'timeoutObserved':any('Task timed out' in value for value in messages),'windowComplete':not bool(original.get('nextToken'))}
-directory=pathlib.Path('.pagamento-fiscal-monitor');directory.mkdir(exist_ok=True)
 (directory/'readback.json').write_text(json.dumps(out,indent=2),encoding='utf-8');print(json.dumps(out,indent=2))
 assert not out['unexpectedServerFailures'],'Inspect post-release server failures without retrying financial operations'
