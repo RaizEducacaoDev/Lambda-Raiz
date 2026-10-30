@@ -14,11 +14,17 @@ be deleted, reset to RESERVED, or followed by another movement SaveRecord.
 The code fix is commit37b714c: creation gets up to15s while preserving12s after
 the call, with a pre-checkpoint time check and safe diagnostics. It passed63
 tests, typecheck, bundle and ZIP-import smoke with zero network effects.
-The function-only release is pending GitHub runner allocation in run41102006254.
-Read its actual deployment artifact and independently verify AWS before adoption;
-a queued workflow or local package hash is not deployment evidence.
+The function-only release and conditional adoption completed in run41103551412.
+Independent AWS readback run41103814622 confirmed active SHA
+cnvkNpnJIWED49S7GpDSpy2oFQfkZo+vPtKnL50xL24= and revision
+ee07af3d-a9fb-420d-9028-5350945e0053. The root is CREATED/PG455 with the original
+intent, owner and lock preserved. No child checkpoint exists until the real retry.
+The final safe verification is idpgto-228130-verification-final.json.
 
 ## Exact operational procedure
+
+Steps1–6 have been executed and independently verified. Do not rerun the
+one-time adoption. Only the real Zeev retry and final acceptance remain pending.
 
 1. Confirm the deployed function hash and revision for
    lambda-raiz-prod-solicitacaoDePagamento in account757843862365/sa-east-1.

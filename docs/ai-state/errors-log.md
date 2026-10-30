@@ -134,3 +134,11 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   versões; nenhuma alteração AWS ocorreu na execução que falhou.
 - A adoção pontual de455 é executada somente após a publicação confirmada,
   com hash ativo obtido do readback e evidência RM de no máximo15min.
+- **Resultado confirmado:** execução41103551412 passou63 testes, typecheck,
+  bundle, preservação do núcleo/ZIP e dois negativos422; publicou somente a
+  função e adotou455 por CAS. Leitura independente41103814622 confirmou novo
+  SHA/revision e CREATED/PG455. SOAP+SQL posteriores confirmaram470 com banco4/31,
+  principal1 e baixa0, sem duplicação/pontes. Reteste Zeev e aceiteA03 pendentes.
+- **Observabilidade do CI:** status agregado/job pode atrasar em relação aos
+  artefatos e logs. Conferir artefatos reais da execução antes de concluir que
+  uma publicação ainda não ocorreu apenas porque a API informa queued.
