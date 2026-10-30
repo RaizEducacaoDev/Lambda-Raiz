@@ -124,3 +124,13 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   execução do responsável da sessão; verificação local não comprova produção.
 - **Lição:** preservar idempotência na incerteza e recuperar somente o registro
   remoto comprovado; sucesso exige reler o IDPGTO no lançamento correto.
+
+### Publicação: ERESOLVE antes dos efeitos AWS
+
+- A execução 41102006254 falhou no npm ci: serverless-dotenv-plugin6 exige
+  peer Serverless1/2/3, enquanto o lock existente usa Serverless4.
+- Os workflows anteriores já usam npm ci --legacy-peer-deps. A publicação
+  de recuperação foi alinhada à mesma instalação, preservando o lock e as
+  versões; nenhuma alteração AWS ocorreu na execução que falhou.
+- A adoção pontual de455 é executada somente após a publicação confirmada,
+  com hash ativo obtido do readback e evidência RM de no máximo15min.
