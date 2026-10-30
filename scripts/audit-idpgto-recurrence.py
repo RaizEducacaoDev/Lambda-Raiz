@@ -57,4 +57,15 @@ for event in sorted(all_events,key=lambda e:e['timestamp']):
 out={'observedUtc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'businessWrites':False,
  'function':{k:cfg.get(k) for k in ['FunctionName','CodeSha256','RevisionId','LastUpdateStatus','Timeout','Runtime','LastModified']},
  'windowStartMs':start,'candidateTickets':sorted(tickets),'matchedFailureEvents':len(events),'requestIds':sorted(requests),'events':safe}
+stage=cfg.get('Environment',{}).get('Variables',{}).get('STAGE','dev')
+table=cfg.get('Environment',{}).get('Variables',{}).get('PAGAMENTO_IDPGTO_TABLE')
+assert table=='lambda-raiz-prod-pagamento-idpgto'
+targets={(str(e['data']['coligada']),str(e['data']['ticket'])) for e in safe if e.get('kind')=='diagnostic'
+ and str(e.get('data',{}).get('coligada','')).isdigit() and str(e.get('data',{}).get('ticket','')).isdigit()}
+out['reservations']=[]
+for company,ticket in sorted(targets):
+ key=f'{stage}#PG#{company}#{ticket}'
+ item=aws('dynamodb','get-item','--table-name',table,'--consistent-read','--key',json.dumps({'pk':{'S':key}})).get('Item',{})
+ out['reservations'].append({'key':key,'exists':bool(item),'record':{k:next(iter(v.values())) for k,v in item.items()
+  if k in ['pk','digest','owner','lockUntil','state','pg']}})
 (outdir/'recurrence-readback.json').write_text(json.dumps(out,ensure_ascii=False,indent=2));print(json.dumps(out,ensure_ascii=False,indent=2))
