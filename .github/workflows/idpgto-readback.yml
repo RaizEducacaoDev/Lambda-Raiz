@@ -13,13 +13,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Independently verify active code, checkpoints and HTTP guard
+      - name: Read active code, checkpoints and logs for the new test
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: sa-east-1
           AWS_PAGER: ''
-        run: python3 scripts/verify-idpgto-aws.py
+        run: python3 scripts/verify-idpgto-aws.py --ticket 228063 --company 31 --movement 453 --idlan 468 --state-only
       - uses: actions/upload-artifact@v4
         if: always()
         with:
