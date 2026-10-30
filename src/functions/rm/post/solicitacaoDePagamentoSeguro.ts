@@ -4,6 +4,7 @@ import { idPositivo, texto, preservarNumeroMovimentoContaConsumo } from './solic
 import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagamento } from './pagamentoV2Idempotencia';
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
 import { diagnosticarRetornoRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
+import { NaturezaFiscalInvalida, prepararContextoFiscal, validarContextoFiscal } from './pagamentoFiscal';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -16,6 +17,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
   let criadoAgora = false;
   let etapaCriacao: 'preflight' | 'checkpoint_creating' | 'transport_call' | 'transport_result' | 'checkpoint_created' | undefined;
   let chaveRmRecebida: string | undefined;
+  let movimentoFiscalConhecido: string | undefined;
+  let movimentoFiscalRemoto: string | undefined;
   try {
     if (!context) throw new Error('Prazo da Lambda indisponível');
     const prazo = new PrazoPagamento(() => context.getRemainingTimeInMillis());
@@ -52,9 +55,37 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
         'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
       validarCadastro(dado, chave, entrada, planos);
+      if (!pgEntrada && codTmv === '1.2.03' && (texto(entrada.idDaNaturezaFiscal) || texto(entrada.codigoDaNaturezaFiscal))) {
+        movimentoFiscalConhecido = await repo.movimentoConhecido(pk, digest, pgEntrada);
+        if (!movimentoFiscalConhecido) {
+          const existentes = await rm.buscarMovimentosPorTicket(coligada, ticket, codTmv);
+          if (existentes.length > 1 || existentes.some(v => !idPositivo(v))) throw new ConflitoPagamento('Movimentos ambíguos; conciliar sem criar outro');
+          if (existentes.length === 1) {
+            await conferirMovimento(existentes[0]);
+            movimentoFiscalRemoto = existentes[0];
+          } else {
+            const fiscal = prepararContextoFiscal(entrada, { codColigada: coligada, codFilial: filial,
+              codColCfo: chave.codColCfo, codCfo: chave.codCfo });
+            if (fiscal) validarContextoFiscal(await rm.consultarContextoFiscal(fiscal), fiscal);
+          }
+        }
+      }
       if (pgEntrada) await conferirMovimento(pgEntrada);
     }
     op = concluida || await repo.reservar(pk, digest, pgEntrada, prazo.disponivel());
+    if (movimentoFiscalConhecido && op.pg !== movimentoFiscalConhecido) {
+      throw new ConflitoPagamento('Movimento durável alterado durante a retomada; reconciliar sem criar outro');
+    }
+    if (movimentoFiscalRemoto) {
+      if (op.pg && op.pg !== movimentoFiscalRemoto) throw new ConflitoPagamento('Reserva e movimento remoto divergem; conciliar sem criar outro');
+      if (!op.pg) {
+        prazo.exigir(8000);
+        const atuais = await rm.buscarMovimentosPorTicket(coligada, ticket, codTmv);
+        if (atuais.length !== 1 || atuais[0] !== movimentoFiscalRemoto) throw new ConflitoPagamento('Movimento remoto mudou durante a retomada; conciliar sem criar outro');
+        await conferirMovimento(movimentoFiscalRemoto);
+        op = await repo.avancar(op, 'CREATED', movimentoFiscalRemoto);
+      }
+    }
     if (!op.pg) {
       prazo.exigir(8000);
       const existentes = await rm.buscarMovimentosPorTicket(coligada, ticket, codTmv);
@@ -215,7 +246,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       ? erro.message : 'Integração bancária não confirmada; consultar o estado antes de reenviar';
     console.warn('[RM-IDPGTO] Integração pendente', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
       status, state: op?.state, pg: op?.pg, errorType: tipoErroSeguro(erro), creationStage: etapaCriacao, receivedPg: chaveRmRecebida });
-    return formatResponse(status, { message: mensagem, error: mensagem, code: 'IDPGTO_NAO_CONFIRMADO',
+    return formatResponse(status, { message: mensagem, error: mensagem, code: erro instanceof NaturezaFiscalInvalida ? erro.code : 'IDPGTO_NAO_CONFIRMADO',
       integracaoBancaria: 'pendente', ...(op?.pg ? { PG: op.pg } : {}) });
   }
 }

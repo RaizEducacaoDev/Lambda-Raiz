@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { wsDataserver } from '../../../utils/wsDataserver';
+import type { ChaveContextoFiscal } from './pagamentoFiscal';
+import { parsearReconciliacaoPagamento } from './pagamentoReconciliacao';
 
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: true });
 type Registro = Record<string, string>;
@@ -49,6 +51,7 @@ export interface TransporteRm {
   saveRecord(xml: string, servidor: string, contexto: string): Promise<string>;
   buscarMovimentosPorTicket(coligada: string, ticket: string, codTmv: string): Promise<string[]>;
   buscarEstoque(coligada: string, filial: string): Promise<string>;
+  consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown>;
 }
 
 export class PrazoPagamento {
@@ -90,15 +93,15 @@ export class TransportePagamentoV2 implements TransporteRm {
   readReacord(chave: string, servidor: string, contexto: string) { return this.executar('ReadRecord', chave, servidor, contexto); }
   saveRecord(xml: string, servidor: string, contexto: string) { return this.executar('SaveRecord', xml, servidor, contexto); }
   async buscarMovimentosPorTicket(coligada: string, ticket: string, codTmv: string): Promise<string[]> {
+    if (![coligada, ticket].every(valor => /^\d+$/.test(valor) && Number.isSafeInteger(Number(valor)) && Number(valor) > 0)) {
+      throw new Error('Identificadores inválidos para consulta de reconciliação');
+    }
     const timeout = this.prazo.timeout();
-    const parametros = `CODCOLIGADA=${encodeURIComponent(coligada)};TICKET=${encodeURIComponent(ticket)};CODTMV=${encodeURIComponent(codTmv)}`;
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0059/0/T?parameters=${parametros}`, {
+    const parametros = new URLSearchParams({ parameters: `CODCOLIGADA=${coligada};TICKET=${ticket}` });
+    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RECON/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
     });
-    if (!Array.isArray(resposta.data) || resposta.data.some((r: Record<string, unknown>) => !r || !/^[1-9]\d*$/.test(String(r.IDMOV)) || !Number.isSafeInteger(Number(r.IDMOV)))) {
-      throw new Error('Consulta de ticket retornou resposta inválida; criação bloqueada');
-    }
-    return resposta.data.map((r: Record<string, unknown>) => String(r.IDMOV));
+    return parsearReconciliacaoPagamento(resposta.data, coligada, ticket, codTmv).filter(m => m.CODTMV === codTmv).map(m => m.IDMOV);
   }
   async buscarEstoque(coligada: string, filial: string): Promise<string> {
     const timeout = this.prazo.timeout();
@@ -110,5 +113,19 @@ export class TransportePagamentoV2 implements TransporteRm {
       throw new Error('Consulta de estoque inválida ou ambígua');
     }
     return String(resposta.data[0].CODLOC);
+  }
+  async consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown> {
+    if (![chave.codColigada, chave.codFilial, chave.idNat].every(valor => /^\d+$/.test(valor) && Number.isSafeInteger(Number(valor)) && Number(valor) > 0) ||
+      !/^\d+$/.test(chave.codColCfo) || !Number.isSafeInteger(Number(chave.codColCfo)) ||
+      !/^[A-Za-z0-9._-]+$/.test(chave.codCfo)) throw new Error('Chave de consulta fiscal inválida');
+    const timeout = this.prazo.timeout();
+    const parametros = new URLSearchParams({ parameters: [
+      ['CODCOLIGADA', chave.codColigada], ['CODFILIAL', chave.codFilial], ['CODCOLCFO', chave.codColCfo],
+      ['CODCFO', chave.codCfo], ['IDNAT', chave.idNat],
+    ].map(([nome, valor]) => `${nome}=${valor}`).join(';') });
+    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.FISC/0/T?${parametros}`, {
+      timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
+    });
+    return resposta.data;
   }
 }

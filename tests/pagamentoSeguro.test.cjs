@@ -38,13 +38,17 @@ async function setup(opts={}) {
     await new Promise(resolve=>setTimeout(resolve,10));
   }
   let repo=new DynamoPagamento(table,doc), remaining=30000;
-  const count={create:0,update:0,lookup:0,read:0};
+  const count={create:0,update:0,lookup:0,read:0,fiscal:0};
   let bank={CODCOLIGADA:'8',CODCOLCFO:'0',CODCFO:'0000000001',IDPGTO:'6',ATIVO:'1',FORMAPAGAMENTO:'S',TIPOPIX:'2',CHAVE:'fixture@example.test',...opts.bank};
   const rows=opts.parcelas || [{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'100.0000'}];
   let lans=new Map(rows.map(p=>[p.IDLAN,{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',IDLAN:p.IDLAN,CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,
     DATAVENCIMENTO:p.DATAVENCIMENTO,VALORORIGINAL:p.VALOR,STATUSLAN:'0',VALORBAIXADO:'0.0000',BAIXAPENDENTE:'0',...opts.lan}]));
   const movement=()=>`<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:'1.2.16',STATUS:'F',...opts.mov})}${xml('TMOVCOMPL',{CODCOLIGADA:'8',IDMOV:'9001',TICKET:'9003',...opts.compl})}${rows.map(r=>xml('TMOVPAGTO',{CODCOLIGADA:'8',IDMOV:'9001',...r})).join('')}</MovMovimento>`;
   const rm={
+    async consultarContextoFiscal(key){count.fiscal++;if(opts.fiscalError)throw Error('fiscal unavailable');return opts.fiscalResponse||[{
+      FISCAL_VERSION:1,REQUEST_COMPANY:8,REQUEST_BRANCH:4,REQUEST_SUPPLIER_COMPANY:Number(bank.CODCOLCFO),REQUEST_SUPPLIER:'0000000001',REQUEST_NATURE:Number(key.idNat),
+      HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,NATURE_COMPANY:8,NATURE_ID:Number(key.idNat),NATURE_CODE:key.codigoNatureza||'1.949.01',NATURE_ACTIVE:1,NATURE_ROUTE:'D',
+      SUPPLIER_UF:'RJ',SUPPLIER_COUNTRY_ID:1,BRANCH_UF:'RJ',BRANCH_COUNTRY_ID:1}];},
     async buscarEstoque(){if(opts.stockError)throw Error('stock down');return '01';},
     async buscarMovimentosPorTicket(){count.lookup++;if(opts.lookupError)throw Error('lookup down');return opts.lookup||[];},
     async readReacord(key,table){count.read++;if(opts.readError)throw Error('unavailable');
@@ -74,7 +78,7 @@ async function setup(opts={}) {
   const run=(fields={})=>executarPagamentoSeguro({...payload,...fields},{getRemainingTimeInMillis:()=>remaining},create,{repositorio:repo,rm});
   const all=async()=>(await doc.send(new ScanCommand({TableName:table,ConsistentRead:true}))).Items;
   const expire=async()=>{for(const op of await all())await doc.send(new UpdateCommand({TableName:table,Key:{pk:op.pk},UpdateExpression:'SET lockUntil=:old',ExpressionAttributeValues:{':old':Date.now()-1}}));remaining=30000;};
-  return {run,count,expire,all,setBank(v){bank={...bank,...v};},setLan(id,v){lans.set(id,{...lans.get(id),...v});},get lans(){return lans;},setTime(t){remaining=t;},newRepo(){repo=new DynamoPagamento(table,DynamoDBDocumentClient.from(client));},get repo(){return repo;}};
+  return {run,count,expire,all,setBank(v){bank={...bank,...v};},setLan(id,v){lans.set(id,{...lans.get(id),...v});},setFiscal(options){Object.assign(opts,options);},get lans(){return lans;},setTime(t){remaining=t;},newRepo(){repo=new DynamoPagamento(table,DynamoDBDocumentClient.from(client));},get repo(){return repo;},table};
 }
 
 test('PIX: criação e gravação com leitura final; replay em instância nova sem nova escrita',async()=>{
@@ -112,6 +116,83 @@ test('erros e timeout de criação nunca autorizam segunda criação após expir
 });
 test('timeout após checkpoint do movimento recupera PG sem duplicar',async()=>{
   const x=await setup({timeAfterCreate:true});assert.notEqual((await x.run()).statusCode,200);await x.expire();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);
+});
+const fiscalFields={tipoDoPagamento:'NF',tipoDeItem:'Serviço',idDaNaturezaFiscal:'121',codigoDaNaturezaFiscal:'1.949.01'};
+const fiscalIncompativel={FISCAL_VERSION:1,REQUEST_COMPANY:8,REQUEST_BRANCH:4,REQUEST_SUPPLIER_COMPANY:0,REQUEST_SUPPLIER:'0000000001',REQUEST_NATURE:121,
+  HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,NATURE_COMPANY:8,NATURE_ID:121,NATURE_CODE:'1.949.01',NATURE_ACTIVE:1,NATURE_ROUTE:'D',
+  SUPPLIER_UF:'RJ',SUPPLIER_COUNTRY_ID:1,BRANCH_UF:'RS',BRANCH_COUNTRY_ID:1};
+test('CREATED/UPDATING duráveis retomam sem PG na entrada nem nova consulta fiscal, com Dynamo real emulado',async()=>{
+  for(const state of ['CREATED','UPDATING'])for(const failure of ['incompativel','indisponivel']){
+    const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
+    assert.equal((await x.run(fiscalFields)).statusCode,503);assert.equal(x.count.create,1);assert.equal(x.count.fiscal,1);
+    let root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'CREATED');assert.equal(root.pg,'9001');
+    if(state==='UPDATING')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:root.pk},UpdateExpression:'SET #state=:state',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':state}}));
+    root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));
+    assert.equal(await x.repo.concluida(root.pk,root.digest,undefined),undefined);
+    assert.equal(await x.repo.movimentoConhecido(root.pk,root.digest,undefined),'9001');
+    assert.deepEqual((await x.all()).find(r=>r.pk===root.pk),root);
+    x.setFiscal(failure==='incompativel'?{fiscalResponse:[fiscalIncompativel]}:{fiscalError:true});
+    await x.expire();x.newRepo();const result=await x.run(fiscalFields);
+    assert.equal(result.statusCode,200,`${state}/${failure}`);assert.equal(parse(result).PG,'9001');assert.equal(parse(result).LF,'9002');
+    assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+    const completed=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(completed.state,'COMPLETE');assert.equal(completed.pg,'9001');
+  }
+});
+test('leitura do movimento durável não renova lease nem libera retomada com owner ainda ativo',async()=>{
+  const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);
+  const before=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));x.setFiscal({fiscalError:true});x.setTime(30000);
+  assert.equal((await x.run(fiscalFields)).statusCode,409);assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
+});
+test('digest ou PG divergente na leitura consistente não permite bypass fiscal ou nova criação',async()=>{
+  const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);await x.expire();
+  const before=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));
+  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,'other-digest',undefined),/dados diferentes/);
+  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,before.digest,'9009'),/dados diferentes/);
+  x.setFiscal({fiscalError:true});assert.equal((await x.run({...fiscalFields,valorTotal:'101,00'})).statusCode,409);
+  assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
+});
+test('PG durável inválido bloqueia sem consultar fiscal e sem alterar a reserva',async()=>{
+  const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);await x.expire();
+  const parent=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));
+  await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:parent.pk},UpdateExpression:'SET pg=:pg',ExpressionAttributeValues:{':pg':'invalid'}}));
+  const before=(await x.all()).find(r=>r.pk===parent.pk);
+  assert.equal((await x.run(fiscalFields)).statusCode,409);assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.deepEqual((await x.all()).find(r=>r.pk===parent.pk),before);
+});
+test('snapshot de PG não autoriza criação se o registro adquirido perdeu o movimento',async()=>{
+  const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);await x.expire();
+  const original=x.repo.movimentoConhecido.bind(x.repo);
+  x.repo.movimentoConhecido=async(pk,digest,pg)=>{const known=await original(pk,digest,pg);
+    await doc.send(new UpdateCommand({TableName:x.table,Key:{pk},UpdateExpression:'SET #state=:state REMOVE pg',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':'RESERVED'}}));return known;};
+  x.setFiscal({fiscalError:true});assert.equal((await x.run(fiscalFields)).statusCode,409);
+  assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+});
+test('baseline RM sem raiz ou RESERVED expirado adota o mesmo movimento sem fiscal stale nem criação',async()=>{
+  for(const reserved of [false,true])for(const failure of ['incompativel','indisponivel']){
+    const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'},
+      ...(failure==='incompativel'?{fiscalResponse:[fiscalIncompativel]}:{fiscalError:true})});
+    if(reserved){const fields={...payload,...fiscalFields},key=identidadePagamento(fields);
+      const digest=hashIntencao(intencaoPagamento(fields,key,planosPagamento(fields,key),'1.2.03'));
+      await x.repo.reservar(`${process.env.STAGE||'dev'}#PG#8#9003`,digest,undefined,30000);await x.expire();}
+    const result=await x.run(fiscalFields);assert.equal(result.statusCode,200);assert.equal(parse(result).PG,'9001');assert.equal(parse(result).LF,'9002');
+    assert.equal(x.count.fiscal,0);assert.equal(x.count.create,0);assert.equal(x.count.update,1);assert.equal(x.count.lookup,2);
+    const root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'COMPLETE');assert.equal(root.pg,'9001');
+  }
+});
+test('CREATING ou estado desconhecido com candidato RM mantém409 e a reserva intacta',async()=>{
+  for(const state of ['CREATING','RNE']){
+    const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},fiscalError:true});
+    const fields={...payload,...fiscalFields},key=identidadePagamento(fields);
+    const digest=hashIntencao(intencaoPagamento(fields,key,planosPagamento(fields,key),'1.2.03'));
+    let op=await x.repo.reservar(`${process.env.STAGE||'dev'}#PG#8#9003`,digest,undefined,30000);
+    op=await x.repo.avancar(op,'CREATING');
+    if(state==='RNE')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:op.pk},UpdateExpression:'SET #state=:state',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':state}}));
+    await x.expire();const before=(await x.all())[0];
+    assert.equal((await x.run(fiscalFields)).statusCode,409);assert.deepEqual((await x.all())[0],before);
+    assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal(x.count.fiscal,0);
+  }
 });
 test('orçamento curto bloqueia antes de CREATING e pode retomar uma reserva ainda sem efeito',async()=>{
   const x=await setup();x.setTime(22000);assert.equal((await x.run()).statusCode,503);

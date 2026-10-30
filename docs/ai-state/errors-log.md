@@ -192,3 +192,34 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
   cobre jobs, sem vínculo temporal/síncrono documentado para este incidente;
   apenas seu schema foi lido. Não consultar logs de outros módulos como se fossem
   a resposta descartada. Solicitação de extração local preparada, sem envio.
+
+### Reprodução isolada e prevenção da natureza incompatível
+
+- RM_DEV foi confirmado como C3U7RQ_160289_RM_DV, diferente de PROD160286.
+  A intenção reconstruída bateu o digest original. Na base de homologação,
+  600 campos de cadastro/configuração e 144 de natureza/geografia coincidiram
+  com os valores selecionados em produção. O XML original recebeu rejeição
+  Natureza inválida e não gerou movimento. O texto histórico PROD descartado
+  não foi recuperado; a reprodução não deve ser descrita como aquele log.
+- Fornecedor RJ e filial11/1 RS, ambos Brasil. Natureza11/121 é interna;
+  alterando apenas IDNAT para a candidata interestadual11/166 em HML, o serviço
+  aceitou 90767/148481. O item herdou166, afastando a ausência de IDNAT no item
+  como causa necessária neste caso. Nenhuma seleção fiscal PROD foi alterada.
+- A proteção consulta RAIZ.PG.FISC antes de reservar novas solicitações1.2.03.
+  Não altera entrada/digest/CFOP. Falha de contrato é503 sem reserva; seleção
+  incompatível é422 específico. PG durável e PG remoto comprovado retomam sem
+  reaplicar validação de criação; CREATING incerto continua sem reabertura.
+- RAIZ.PG.RECON substitui o TOP1 exclusivamente no transporte seguro. O parser
+  exige total/lista completa/echo/identidade de todas as linhas; aceita os
+  metadados SQLNULL de SC/OC não alvo e exige ownership completo do alvo.
+- Segundo teste HML percorreu a fonte completa: 989900310 inválido422 com0
+  reservas/efeitos; corrigido cria apenas90769/148482 e grava banco2/11; replay
+  retorna os mesmos IDs. ReadRecord independente e contadores confirmaram1MOV,
+  1FLAN,0órfãos/baixa/boleto, principal1 e baixa0. Valor auxiliar nativo3 segue
+  pendente de análise separada, sem correção artificial de valor.
+- Verificação final:102 testes, typecheck, bundle e diff check aprovados.
+  Definições SELECT isoladas RAIZ.PG.FISC e RAIZ.PG.RECON registradas em PROD
+  pelo GlbConsSQLData com ReadRecord e GET conferidos. Não alteram naturezas,
+  lançamentos ou a consulta compartilhada antiga. Publicação AWS e canário da
+  requisição original ficam a cargo do responsável da sessão; não inferir
+  publicação a partir deste registro. A reserva original228310 foi preservada.
