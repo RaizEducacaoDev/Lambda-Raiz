@@ -265,6 +265,22 @@ def main():
         start_ms, end_ms = int(START.timestamp() * 1000), int(end.timestamp() * 1000) + 1
         if end_ms <= start_ms:
             raise AuditError('INVALID_LOG_WINDOW')
+        # The Zeev localizer has no timezone/AM-PM. These are hypotheses,
+        # not claimed timestamps or permission to mutate discovered tickets.
+        out['localizerCode'] = '202611030609-67'
+        out['localizerWindowCandidates'] = []
+        for hour in [6, 9, 18, 21]:
+            center = START.replace(hour=hour, minute=9)
+            window_start = int((center - datetime.timedelta(minutes=3)).timestamp() * 1000)
+            window_end = min(end_ms, int((center + datetime.timedelta(minutes=3)).timestamp() * 1000))
+            if window_end <= window_start:
+                continue
+            window_events, coverage = read_log_window('"[RM-IDPGTO]" "Integração pendente"',
+                window_start, window_end, deadline)
+            pending = [sanitize(event) for event in window_events]
+            out['localizerWindowCandidates'].append({'hypothesisCenterUtc': center.isoformat(),
+                'coverage': coverage, 'events': [event for event in pending if event and
+                    event.get('kind') == 'payment_pending' and event.get('status') == 409]})
         seen = set()
         out['logCoverage'] = {}
         matches, ticket_scope = read_log_window('"' + TICKET + '"', start_ms, end_ms, deadline)
