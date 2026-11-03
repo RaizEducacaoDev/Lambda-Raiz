@@ -9,13 +9,14 @@ const {parsearReconciliacaoPagamento}=load('pagamentoReconciliacao.ts');
 const xml=(name,data)=>`<${name}>${Object.entries(data).map(([k,v])=>`<${k}>${v}</${k}>`).join('')}</${name}>`;
 const dataset=(name,data)=>`<Fixture>${xml(name,data)}</Fixture>`;
 const parse=result=>JSON.parse(result.body);
+const documentoFixture=require('./documento-fixture.cjs');
 function setup(options={}){
  const fields={tipoDaSolicitacao:'PG',tipoDoPagamento:'NF',tipoDeItem:'Serviço',atividadeAtual:'aprovacaoDoGestor',
   ticketRaiz:'9003',codigoDaColigada2:'11',codigoDaFilial2:'1',codigoDoFornecedor:'0000000001',CODCOLCFO:'0',
   idpgto:'2',CODCOLPGTO:'11',numeroDaNF:'9003001',idDaNaturezaFiscal:'121',codigoDaNaturezaFiscal:'1.949.01',
   dataDeEmissao:'2026-10-26',dataDeEntrada:'2026-10-30',dataDeVencimento:'2026-12-31',valorTotal:'100,00',
   codigoTipoChavePIX:'2',chavePIX:'fixture@example.test',itens:[],tributos:[],...options.fields};
- const calls={reserve:0,create:0,bankWrite:0,fiscal:0,lookup:0,movementRead:0,order:[]},records=new Map();
+ const calls={reserve:0,create:0,bankWrite:0,fiscal:0,document:0,lookup:0,movementRead:0,order:[]},records=new Map();
  let lan={CODCOLIGADA:'11',IDLAN:'9002',IDMOV:'9001',CODFILIAL:'1',CODCFO:'0000000001',CODCOLCFO:'0',
   DATAVENCIMENTO:'2026-12-31',VALORORIGINAL:'100.0000',STATUSLAN:'0',VALORBAIXADO:'0',BAIXAPENDENTE:'0',
   ...(options.complete||fields.idDoMovimento?{IDPGTO:'2',CODCOLPGTO:'11'}:{})};
@@ -26,6 +27,8 @@ function setup(options={}){
   async avancar(op,state,pg=op.pg){const next={...op,state,...(pg?{pg}:{})};records.set(op.pk,next);return next;},
  };
  const rm={
+  async consultarDocumento(key){calls.document++;calls.order.push('document');if(options.documentError)throw Error('fixture unavailable');
+   return options.documentResponse===undefined?[documentoFixture(key,options.documentNative)]:options.documentResponse;},
   async consultarContextoFiscal(key){calls.fiscal++;calls.order.push('fiscal');if(options.fiscalError)throw Error('fixture unavailable');
    const row={FISCAL_VERSION:1,REQUEST_COMPANY:11,REQUEST_BRANCH:1,REQUEST_SUPPLIER_COMPANY:0,REQUEST_SUPPLIER:'0000000001',
     REQUEST_NATURE:Number(key.idNat),HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,NATURE_COMPANY:11,NATURE_ID:Number(key.idNat),
@@ -45,7 +48,7 @@ function setup(options={}){
   async saveRecord(content,server){if(server==='MovMovimentoTBCData'){calls.create++;return '11;9001';}
    calls.bankWrite++;lan={...lan,...registroUnico(content.slice(9,-3),'FLAN')};return '11;9002';},
  };
- const create=async(input,transport)=>{await transport.saveRecord(`<![CDATA[<MovMovimento>${xml('TMOV',{CODCOLIGADA:'11',CODFILIAL:'1',CODCFO:'0000000001',CODCOLCFO:'0',CODTMV:codigoMovimento(input)})}${xml('TMOVCOMPL',{TICKET:'9003'})}</MovMovimento>]]>`,'MovMovimentoTBCData','fixture');return {statusCode:200,body:'{}'};};
+ const create=async(input,transport)=>{await transport.saveRecord(`<![CDATA[<MovMovimento>${xml('TMOV',{CODCOLIGADA:'11',CODFILIAL:'1',CODCFO:'0000000001',CODCOLCFO:'0',CODTMV:codigoMovimento(input),NUMEROMOV:input.numeroDaNF,...(input.serie?{SERIE:input.serie}:{})})}${xml('TMOVCOMPL',{TICKET:'9003'})}</MovMovimento>]]>`,'MovMovimentoTBCData','fixture');return {statusCode:200,body:'{}'};};
  const run=()=>executarPagamentoSeguro(fields,{getRemainingTimeInMillis:()=>30000},create,{repositorio:repo,rm});
  const digest=()=>{const key=identidadePagamento(fields);return hashIntencao(intencaoPagamento(fields,key,planosPagamento(fields,key),codigoMovimento(fields)));};
  return {fields,calls,records,run,digest};
@@ -54,7 +57,7 @@ function setup(options={}){
 test('novo121/RJ_RS retorna422 específico antes de qualquer reserva ou efeito',async()=>{
  const x=setup(),snapshot=JSON.stringify(x.fields),digest=x.digest();const result=await x.run();
  assert.equal(result.statusCode,422);assert.equal(parse(result).code,'NATUREZA_FISCAL_INCOMPATIVEL');assert.match(parse(result).message,/RJ.*RS/);
- assert.equal(x.calls.fiscal,1);assert.deepEqual(x.calls.order,['concluida','bank','movimentoConhecido','lookup','fiscal']);
+ assert.equal(x.calls.fiscal,1);assert.deepEqual(x.calls.order,['concluida','bank','movimentoConhecido','lookup','document','fiscal']);
  assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.records.size,0);
  assert.equal(JSON.stringify(x.fields),snapshot);assert.equal(x.digest(),digest);
 });
@@ -84,9 +87,11 @@ test('COMPLETE e PG informado não executam guard fiscal nem criam novo moviment
   const x=setup(options);assert.equal((await x.run()).statusCode,200);assert.equal(x.calls.fiscal,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.order.includes('movimentoConhecido'),false);
  }
 });
-test('outroCODTMV ou ambos campos de natureza ausentes preservam comportamento anterior',async()=>{
+test('outroCODTMV não consulta documento; serviço sem natureza mantém validação documental antes de criar',async()=>{
  for(const fields of [{tipoDeItem:'Material',idDaNaturezaFiscal:'invalid'},{idDaNaturezaFiscal:'',codigoDaNaturezaFiscal:''}]){
-  const x=setup({fields});assert.equal((await x.run()).statusCode,200);assert.equal(x.calls.fiscal,0);assert.equal(x.calls.create,1);assert.equal(x.calls.order.includes('movimentoConhecido'),false);
+  const x=setup({fields});assert.equal((await x.run()).statusCode,200);assert.equal(x.calls.fiscal,0);assert.equal(x.calls.create,1);
+  assert.equal(x.calls.document,fields.tipoDeItem==='Material'?0:1);
+  assert.equal(x.calls.order.includes('movimentoConhecido'),fields.tipoDeItem!=='Material');
  }
 });
 test('RM existente sem raiz durável pula fiscal stale e associa sem criar outro movimento',async()=>{
@@ -115,4 +120,32 @@ test('SC/OC mais um PG preservam o alvo; contrato truncado/foreign e dois PGs bl
   const x=setup({reconResponse:response,fiscalError:true});assert.notEqual((await x.run()).statusCode,200);
   assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.fiscal,0);
  }
+});
+
+test('colisão nativa por número/série de outro ticket retorna422 antes de reservar ou criar, inclusive em reenvios',async()=>{
+ const x=setup({fields:{numeroDaNF:'114'},documentNative:{DOC_MATCH_COUNT:1,CODCOLIGADA:11,IDMOV:78497,
+  CODFILIAL:1,CODCOLCFO:0,CODCFO:'0000000001',CODTMV:'1.2.99',SERIE:'1',NUMEROMOV:'000000114',CODTDO:'002',
+  CODCOLCFOAUX:0,CODCFOAUX:'0000000001',TICKET:'110229'}});
+ for(let n=0;n<3;n++){
+  const result=await x.run();assert.equal(result.statusCode,422);assert.equal(parse(result).code,'DOCUMENTO_RM_DUPLICADO');
+ }
+ assert.equal(x.calls.document,3);assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);
+ assert.equal(x.calls.bankWrite,0);assert.equal(x.records.size,0);assert.equal(x.calls.fiscal,0);
+});
+
+test('série não vinculada ou consulta documental indisponível não deixam reserva que impeça corrigir a entrada',async()=>{
+ for(const [options,status,code] of [[{fields:{serie:'70000'},documentNative:{SERIES_MATCH_COUNT:0}},422,'SERIE_DOCUMENTO_INVALIDA'],
+  [{documentError:true},503,'IDPGTO_NAO_CONFIRMADO'],[{documentResponse:[]},503,'IDPGTO_NAO_CONFIRMADO']]){
+  const x=setup(options),result=await x.run();assert.equal(result.statusCode,status);assert.equal(parse(result).code,code);
+  assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.records.size,0);
+ }
+});
+
+test('serviço sem natureza explícita também detecta colisão documental sem selecionar série alternativa',async()=>{
+ const fields={numeroDaNF:'114',idDaNaturezaFiscal:'',codigoDaNaturezaFiscal:'',serie:''};
+ const x=setup({fields,documentNative:{DOC_MATCH_COUNT:1,CODCOLIGADA:11,IDMOV:78497,CODFILIAL:1,CODCOLCFO:0,
+  CODCFO:'0000000001',CODTMV:'1.2.03',SERIE:'1',NUMEROMOV:'000000114',CODTDO:'002',CODCOLCFOAUX:0,
+  CODCFOAUX:'0000000001',CRO:null,SUBSERIE:null,TICKET:'110229'}});
+ const result=await x.run();assert.equal(result.statusCode,422);assert.equal(parse(result).code,'DOCUMENTO_RM_DUPLICADO');
+ assert.equal(x.fields.serie,'');assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.fiscal,0);
 });

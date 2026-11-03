@@ -2,6 +2,7 @@ import axios from 'axios';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { wsDataserver } from '../../../utils/wsDataserver';
 import type { ChaveContextoFiscal } from './pagamentoFiscal';
+import type { ChaveDocumento } from './pagamentoDocumento';
 import { parsearReconciliacaoPagamento } from './pagamentoReconciliacao';
 
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: true });
@@ -52,6 +53,7 @@ export interface TransporteRm {
   buscarMovimentosPorTicket(coligada: string, ticket: string, codTmv: string): Promise<string[]>;
   buscarEstoque(coligada: string, filial: string): Promise<string>;
   consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown>;
+  consultarDocumento(chave: ChaveDocumento): Promise<unknown>;
 }
 
 export class PrazoPagamento {
@@ -124,6 +126,23 @@ export class TransportePagamentoV2 implements TransporteRm {
       ['CODCFO', chave.codCfo], ['IDNAT', chave.idNat],
     ].map(([nome, valor]) => `${nome}=${valor}`).join(';') });
     const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.FISC/0/T?${parametros}`, {
+      timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
+    });
+    return resposta.data;
+  }
+  async consultarDocumento(chave: ChaveDocumento): Promise<unknown> {
+    if (![chave.codColigada, chave.codFilial].every(v => /^[1-9]\d*$/.test(v) && Number.isSafeInteger(Number(v))) ||
+      !/^\d+$/.test(chave.codColCfo) || !Number.isSafeInteger(Number(chave.codColCfo)) ||
+      !/^[A-Za-z0-9._-]{1,30}$/.test(chave.codCfo) || chave.codTmv !== '1.2.03' ||
+      !/^\d{1,9}$/.test(chave.numero) || !/^[A-Za-z0-9._-]{0,5}$/.test(chave.serie)) {
+      throw new Error('Chave de consulta do documento inválida');
+    }
+    const timeout = this.prazo.timeout();
+    const parametros = new URLSearchParams({ parameters: [
+      ['CODCOLIGADA', chave.codColigada], ['CODFILIAL', chave.codFilial], ['CODCOLCFO', chave.codColCfo],
+      ['CODCFO', chave.codCfo], ['CODTMV', chave.codTmv], ['NUMERO', chave.numero], ['SERIE', chave.serie || '~'],
+    ].map(([nome, valor]) => `${nome}=${valor}`).join(';') });
+    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.DOC/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
     });
     return resposta.data;

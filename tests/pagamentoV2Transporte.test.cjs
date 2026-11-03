@@ -86,3 +86,21 @@ test('consulta fiscal usa somente RAIZ.PG.FISC/0/T, parâmetros codificados e me
  await assert.rejects(()=>rm.consultarContextoFiscal({codColigada:'11',codFilial:'1',codColCfo:'0',codCfo:'fixture;IDNAT=999',idNat:'121'}),/Chave de consulta fiscal inválida/);assert.equal(requests.length,1);
  remaining=3000;await assert.rejects(()=>rm.consultarContextoFiscal({codColigada:'11',codFilial:'1',codColCfo:'0',codCfo:'0000000001',idNat:'121'}),/Tempo insuficiente/);assert.equal(requests.length,1);
 });
+
+test('consulta documental usa contrato isolado, sentinela de série ausente, abort e rejeita injeção antes do HTTP',async()=>{
+ const requests=[],data=[{DOC_VERSION:1}];let remaining=30000;
+ const {PrazoPagamento,TransportePagamentoV2}=load(path.resolve(__dirname,'../src/functions/rm/post/pagamentoV2Rm.ts'),{
+  axios:{get:async(url,options)=>{requests.push({url,options});return {data};}},
+  '../../../utils/wsDataserver':{wsDataserver:class{getUrl(){return 'http://test.invalid';}getCredentials(){return 'synthetic';}}},
+ });
+ const rm=new TransportePagamentoV2(new PrazoPagamento(()=>remaining));
+ const key={codColigada:'9',codFilial:'3',codColCfo:'0',codCfo:'0000154129',codTmv:'1.2.03',numero:'114',serie:''};
+ assert.equal(await rm.consultarDocumento(key),data);
+ const url=new URL(requests[0].url);assert.equal(url.pathname,'/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.DOC/0/T');
+ assert.equal(url.searchParams.get('parameters'),'CODCOLIGADA=9;CODFILIAL=3;CODCOLCFO=0;CODCFO=0000154129;CODTMV=1.2.03;NUMERO=114;SERIE=~');
+ assert.equal(requests[0].options.timeout,8000);assert.ok(requests[0].options.signal instanceof AbortSignal);
+ for(const changes of [{codCfo:'PRIVATE;CODCOLIGADA=31'},{numero:'1234567890'},{serie:'1;X=9'},{serie:'~'},{codTmv:'1.2.01'}]){
+  await assert.rejects(()=>rm.consultarDocumento({...key,...changes}),/consulta do documento inválida/);
+ }
+ assert.equal(requests.length,1);remaining=3000;await assert.rejects(()=>rm.consultarDocumento(key),/Tempo insuficiente/);assert.equal(requests.length,1);
+});

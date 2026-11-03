@@ -5,6 +5,8 @@ import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagam
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
 import { diagnosticarRetornoRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
 import { NaturezaFiscalInvalida, prepararContextoFiscal, validarContextoFiscal } from './pagamentoFiscal';
+import { DocumentoPagamentoInvalido, prepararDocumento, validarDocumento } from './pagamentoDocumento';
+import type { DocumentoValidado } from './pagamentoDocumento';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -19,6 +21,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
   let chaveRmRecebida: string | undefined;
   let movimentoFiscalConhecido: string | undefined;
   let movimentoFiscalRemoto: string | undefined;
+  let documentoCriacao: DocumentoValidado | undefined;
   try {
     if (!context) throw new Error('Prazo da Lambda indisponível');
     const prazo = new PrazoPagamento(() => context.getRemainingTimeInMillis());
@@ -55,7 +58,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
         'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
       validarCadastro(dado, chave, entrada, planos);
-      if (!pgEntrada && codTmv === '1.2.03' && (texto(entrada.idDaNaturezaFiscal) || texto(entrada.codigoDaNaturezaFiscal))) {
+      if (!pgEntrada && codTmv === '1.2.03') {
         movimentoFiscalConhecido = await repo.movimentoConhecido(pk, digest, pgEntrada);
         if (!movimentoFiscalConhecido) {
           const existentes = await rm.buscarMovimentosPorTicket(coligada, ticket, codTmv);
@@ -64,6 +67,10 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
             await conferirMovimento(existentes[0]);
             movimentoFiscalRemoto = existentes[0];
           } else {
+            const documento = prepararDocumento(entrada, { codColigada: coligada, codFilial: filial,
+              codColCfo: chave.codColCfo, codCfo: chave.codCfo, codTmv });
+            if (!documento) throw new Error('Contexto do documento indisponível antes da criação');
+            documentoCriacao = validarDocumento(await rm.consultarDocumento(documento), documento);
             const fiscal = prepararContextoFiscal(entrada, { codColigada: coligada, codFilial: filial,
               codColCfo: chave.codColCfo, codCfo: chave.codCfo });
             if (fiscal) validarContextoFiscal(await rm.consultarContextoFiscal(fiscal), fiscal);
@@ -102,6 +109,9 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         idpgto: String(chave.idPgto), CODCOLPGTO: chave.codColPgto, CODCOLCFO: chave.codColCfo,
         dataDeEntrada: dataLegado(entrada.dataDeEntrada), dataDeEmissao: dataLegado(entrada.dataDeEmissao),
         dataDeVencimento: dataLegado(entrada.dataDeVencimento),
+        // Pin the native series observed by the read-only preflight. Never infer
+        // a DPS series, change the caller's fields or alter its durable digest.
+        ...(documentoCriacao ? { serie: documentoCriacao.serie } : {}),
         ...(Array.isArray(entrada.listaDeParcelas) ? { listaDeParcelas: entrada.listaDeParcelas.map((p: CamposPagamento) =>
           ({ ...p, vencimentoDaParcela: dataLegado(p.vencimentoDaParcela) })) } : {}) };
       const resposta = await criar(campos, {
@@ -117,6 +127,9 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           if (mov.CODCOLIGADA !== coligada || mov.CODFILIAL !== filial || mov.CODCFO !== chave.codCfo ||
               mov.CODCOLCFO !== chave.codColCfo || mov.CODTMV !== codTmv ||
               compl.TICKET !== ticket) throw new ConflitoPagamento('XML do movimento diverge da obrigação validada');
+          if (documentoCriacao && (mov.SERIE !== documentoCriacao.serie || mov.NUMEROMOV !== documentoCriacao.numero)) {
+            throw new ConflitoPagamento('XML do documento diverge da série/numeração validada; nenhuma criação foi enviada');
+          }
           if (contaConsumo) xml = preservarNumeroMovimentoContaConsumo(xml, texto(entrada.numeroDaNF));
           // A reserva irreversível antecede o SaveRecord. Nem timeout nem falha
           // de checkpoint podem permitir uma segunda criação automática.
@@ -246,7 +259,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       ? erro.message : 'Integração bancária não confirmada; consultar o estado antes de reenviar';
     console.warn('[RM-IDPGTO] Integração pendente', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
       status, state: op?.state, pg: op?.pg, errorType: tipoErroSeguro(erro), creationStage: etapaCriacao, receivedPg: chaveRmRecebida });
-    return formatResponse(status, { message: mensagem, error: mensagem, code: erro instanceof NaturezaFiscalInvalida ? erro.code : 'IDPGTO_NAO_CONFIRMADO',
+    return formatResponse(status, { message: mensagem, error: mensagem,
+      code: erro instanceof NaturezaFiscalInvalida || erro instanceof DocumentoPagamentoInvalido ? erro.code : 'IDPGTO_NAO_CONFIRMADO',
       integracaoBancaria: 'pendente', ...(op?.pg ? { PG: op.pg } : {}) });
   }
 }
