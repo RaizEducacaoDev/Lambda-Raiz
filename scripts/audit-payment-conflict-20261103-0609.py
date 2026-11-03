@@ -1,4 +1,4 @@
-"""Bounded, read-only AWS correlation for candidate 18/228634; no payment invoke.
+"""Bounded, read-only AWS correlation for candidate 9/226374; no payment invoke.
 
 Only fixed enums, identifiers, numeric metrics and diagnostic fingerprints leave
 memory. Raw CloudWatch messages, Lambda environment and AWS errors never do.
@@ -18,11 +18,12 @@ REGION = 'sa-east-1'
 FUNCTION = 'lambda-raiz-prod-solicitacaoDePagamento'
 TABLE = 'lambda-raiz-prod-pagamento-idpgto'
 GROUP = '/aws/lambda/' + FUNCTION
-TICKET, COMPANY, BRANCH, CODTMV = '228634', '18', '3', '1.2.10'
-PK = 'prod#PG#18#228634'
-EXPECTED_DIGEST = 'fd6e3e0c9d7c3c771d87656d2d84ab991e5f635039c1e1a8572963e24660aa96'
-ORIGINAL_REQUEST = '90abbe26-abb1-4f81-a6a1-4a190cec01c3'
-START = datetime.datetime(2026, 11, 3, tzinfo=datetime.timezone.utc)
+TICKET, COMPANY, BRANCH, CODTMV = '226374', '9', '3', '1.2.03'
+PK = 'prod#PG#9#226374'
+EXPECTED_DIGEST = None  # No expected digest was known before this read-only collection.
+REFERENCE_REQUEST = 'b032cc53-ab5e-4075-9892-99b02fd7093e'
+START = datetime.datetime(2026, 10, 27, tzinfo=datetime.timezone.utc)
+LOCALIZER_DAY = datetime.datetime(2026, 11, 3, tzinfo=datetime.timezone.utc)
 OUT = pathlib.Path('.payment-conflict-20261103-0609')
 AWS_READS = frozenset({('sts', 'get-caller-identity'), ('lambda', 'get-function-configuration'),
     ('dynamodb', 'get-item'), ('logs', 'filter-log-events')})
@@ -228,7 +229,7 @@ def add_events(out, events, seen):
     for event in events:
         message, request = unwrap(event)
         row = sanitize(event)
-        if not row or (request != ORIGINAL_REQUEST and str(row.get('ticket', '')) != TICKET):
+        if not row or (request != REFERENCE_REQUEST and str(row.get('ticket', '')) != TICKET):
             continue
         signature = (event.get('timestamp'), hashlib.sha256(message.encode()).hexdigest())
         if signature not in seen:
@@ -241,7 +242,7 @@ def main():
     end = datetime.datetime.now(datetime.timezone.utc)
     out = {'observedUtc': end.isoformat(), 'businessWrites': False, 'configurationWrites': False,
         'candidateConfirmedByUser': False, 'ticket': TICKET, 'company': COMPANY, 'branch': BRANCH,
-        'codTmv': CODTMV, 'originalRequestId': ORIGINAL_REQUEST,
+        'codTmv': CODTMV, 'referenceRequestId': REFERENCE_REQUEST,
         'windowStartUtc': START.isoformat(), 'windowEndUtc': end.isoformat(),
         'allowedAwsOperations': sorted('/'.join(op) for op in AWS_READS), 'events': []}
     exit_code = 0
@@ -261,7 +262,8 @@ def main():
         item = response.get('Item', {})
         record = safe_reservation(item)
         out['reservation'] = {'key': PK, 'exists': bool(item), 'record': record,
-            'expectedDigestMatches': record.get('digest') == EXPECTED_DIGEST}
+            'expectedDigestKnown': EXPECTED_DIGEST is not None,
+            'expectedDigestMatches': record.get('digest') == EXPECTED_DIGEST if EXPECTED_DIGEST else None}
         start_ms, end_ms = int(START.timestamp() * 1000), int(end.timestamp() * 1000) + 1
         if end_ms <= start_ms:
             raise AuditError('INVALID_LOG_WINDOW')
@@ -270,7 +272,7 @@ def main():
         out['localizerCode'] = '202611030609-67'
         out['localizerWindowCandidates'] = []
         for hour in [6, 9, 18, 21]:
-            center = START.replace(hour=hour, minute=9)
+            center = LOCALIZER_DAY.replace(hour=hour, minute=9)
             window_start = int((center - datetime.timedelta(minutes=3)).timestamp() * 1000)
             window_end = min(end_ms, int((center + datetime.timedelta(minutes=3)).timestamp() * 1000))
             if window_end <= window_start:
@@ -286,8 +288,8 @@ def main():
         matches, ticket_scope = read_log_window('"' + TICKET + '"', start_ms, end_ms, deadline)
         out['logCoverage']['ticket'] = ticket_scope
         add_events(out, matches, seen)  # Preserve safe ticket evidence if context read fails.
-        context, request_scope = read_log_window('"' + ORIGINAL_REQUEST + '"', start_ms, end_ms, deadline)
-        out['logCoverage']['originalRequest'] = request_scope
+        context, request_scope = read_log_window('"' + REFERENCE_REQUEST + '"', start_ms, end_ms, deadline)
+        out['logCoverage']['referenceRequest'] = request_scope
         add_events(out, context, seen)
         out['windowComplete'] = ticket_scope['complete'] and request_scope['complete']
         if not out['windowComplete']:
@@ -299,8 +301,8 @@ def main():
     out['events'].sort(key=lambda row: row['timestamp'])
     out['requestIds'] = sorted({r['requestId'] for r in out['events'] if r.get('requestId')})
     out['pending409Timeline'] = [r for r in out['events'] if r['kind'] == 'payment_pending' and r.get('status') == 409]
-    original = [r for r in out['events'] if r.get('requestId') == ORIGINAL_REQUEST]
-    out['originalRequestMarkers'] = {'startSeen': any(r['kind'] == 'lambda_start' for r in original),
+    original = [r for r in out['events'] if r.get('requestId') == REFERENCE_REQUEST]
+    out['referenceRequestMarkers'] = {'startSeen': any(r['kind'] == 'lambda_start' for r in original),
         'endSeen': any(r['kind'] == 'lambda_end' for r in original),
         'reportSeen': any(r['kind'] == 'lambda_report' for r in original),
         'nonKeyDiagnosticSeen': any(r['kind'] == 'non_key_result' for r in original)}
@@ -312,25 +314,25 @@ def main():
 
 def self_test():
     secret = 'PRIVATE_PIX_SECRET@example.test'
-    message = "ticket: '228634',\n reasonCode: 'RM_INVALID_DATE', reasonSource: 'allowlist_v1',\n" + \
+    message = "ticket: '226374',\n reasonCode: 'RM_INVALID_DATE', reasonSource: 'allowlist_v1',\n" + \
         "responseSha256: '" + 'a' * 64 + "', length: 1291, lineCount: 12,\n" + \
         "mentionedFields: [\n 'DATAEMISSAO', 'DATAVENCIMENTO'\n ], nativeErrorTypes: [ 'FormatException' ]"
-    event = {'timestamp': 1793739541667, 'message': ORIGINAL_REQUEST + '\tWARN\t[RM-IDPGTO] Retorno de criação sem chave confirmada {\n' + message + '\n}'}
+    event = {'timestamp': 1793739541667, 'message': REFERENCE_REQUEST + '\tWARN\t[RM-IDPGTO] Retorno de criação sem chave confirmada {\n' + message + '\n}'}
     row = sanitize(event)
     assert row['reasonCode'] == 'RM_INVALID_DATE' and row['length'] == 1291 and row['lineCount'] == 12
     assert row['mentionedFields'] == ['DATAEMISSAO', 'DATAVENCIMENTO'] and row['nativeErrorTypes'] == ['FormatException']
     assert row['responseSha256'] == 'a' * 64 and row['nonKeyResult']
-    pending = sanitize({'timestamp': 1, 'message': ORIGINAL_REQUEST + "\t[RM-IDPGTO] Integração pendente { ticket: '228634', status: 409, state: undefined, pg: undefined, creationStage: undefined }"})
+    pending = sanitize({'timestamp': 1, 'message': REFERENCE_REQUEST + "\t[RM-IDPGTO] Integração pendente { ticket: '226374', status: 409, state: undefined, pg: undefined, creationStage: undefined }"})
     assert pending['status'] == 409 and pending['stateUndefined'] and pending['pgUndefined']
     assert secret not in json.dumps(safe_fields("{reasonCode:'" + secret + "', errorCode:'" + secret + "', mentionedFields:['" + secret + "'], responseSha256:'" + secret + "'}"))
     assert sanitize({'timestamp': 1, 'message': '[RM-INFO] Campos recebidos: ' + secret}) is None
     assert sanitize({'timestamp': 1, 'message': '[RM-ERRO] ' + secret}) is None
-    legacy = sanitize({'timestamp': 1, 'message': ORIGINAL_REQUEST + '\t[RM-DIAG] ' + json.dumps({'ticket': TICKET,
+    legacy = sanitize({'timestamp': 1, 'message': REFERENCE_REQUEST + '\t[RM-DIAG] ' + json.dumps({'ticket': TICKET,
         'coligada': COMPANY, 'filial': BRANCH, 'codTmv': CODTMV, 'evento': 'erro', 'etapa': 'SaveRecord',
         'errorType': 'TimeoutError', 'errorCode': 'ETIMEDOUT', 'duracaoMs': 1234, 'raw': secret})})
     assert legacy['errorType'] == 'TimeoutError' and legacy['duracaoMs'] == 1234 and secret not in json.dumps(legacy)
     assert safe_fields('{length:1234private, lineCount:2}') == {'lineCount': 2}
-    report = sanitize({'timestamp': 1, 'message': 'REPORT RequestId: ' + ORIGINAL_REQUEST + '\tDuration: 1398.2 ms\tBilled Duration: 1400 ms\tMax Memory Used: 88 MB\tStatus: success'})
+    report = sanitize({'timestamp': 1, 'message': 'REPORT RequestId: ' + REFERENCE_REQUEST + '\tDuration: 1398.2 ms\tBilled Duration: 1400 ms\tMax Memory Used: 88 MB\tStatus: success'})
     assert report['durationMs'] == 1398.2 and report['billedDurationMs'] == 1400 and report['status'] == 'success'
     for operation in [('lambda', 'invoke'), ('dynamodb', 'put-item'), ('dynamodb', 'update-item'), ('dynamodb', 'delete-item'), ('lambda', 'update-function-code')]:
         try:
@@ -339,10 +341,10 @@ def self_test():
             assert str(error) == 'AWS_OPERATION_NOT_ALLOWLISTED'
         else:
             raise AssertionError('Mutation was not rejected')
-    assert safe_reservation({'pk': {'S': PK}, 'digest': {'S': EXPECTED_DIGEST}, 'secret': {'S': secret}}) == {'pk': PK, 'digest': EXPECTED_DIGEST}
-    wrapped = sanitize({'timestamp': 1, 'message': json.dumps({'requestId': ORIGINAL_REQUEST,
-        'message': '[RM-IDPGTO] Etapa de criação { ticket: 228634, event: \'primary_key_received\', idMov: 9001 }'})})
-    assert wrapped['event'] == 'primary_key_received' and wrapped['requestId'] == ORIGINAL_REQUEST
+    assert safe_reservation({'pk': {'S': PK}, 'digest': {'S': 'a' * 64}, 'secret': {'S': secret}}) == {'pk': PK, 'digest': 'a' * 64}
+    wrapped = sanitize({'timestamp': 1, 'message': json.dumps({'requestId': REFERENCE_REQUEST,
+        'message': '[RM-IDPGTO] Etapa de criação { ticket: 226374, event: \'primary_key_received\', idMov: 9001 }'})})
+    assert wrapped['event'] == 'primary_key_received' and wrapped['requestId'] == REFERENCE_REQUEST
     merged = {'events': []}
     add_events(merged, [event, event], set())
     assert len(merged['events']) == 1 and merged['events'][0]['reasonSource'] == 'allowlist_v1'
@@ -350,10 +352,10 @@ def self_test():
     try:
         pages = iter([{'events': [], 'nextToken': 'page2'}, {'events': [], 'nextToken': 'page3'}, {'events': [event]}])
         globals()['aws'] = lambda *args, **kwargs: next(pages)
-        events, coverage = read_log_window('"228634"', 0, 2, time.monotonic() + 30)
+        events, coverage = read_log_window('"226374"', 0, 2, time.monotonic() + 30)
         assert coverage['complete'] and coverage['pages'] == 3 and events == [event]
         pages = iter([{'events': [], 'nextToken': 'same'}, {'events': [], 'nextToken': 'same'}])
-        events, coverage = read_log_window('"228634"', 0, 2, time.monotonic() + 30)
+        events, coverage = read_log_window('"226374"', 0, 2, time.monotonic() + 30)
         assert not coverage['complete'] and coverage['reason'] == 'TOKEN_REPEATED'
     finally:
         globals()['aws'] = original_aws
