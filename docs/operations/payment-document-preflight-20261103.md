@@ -49,3 +49,21 @@ confirmed rather than inferred from its description or the DPS number.
 Only the payment Lambda entrypoint is included in the scoped release. Its
 immutable legacy core, other package entries and function configuration are
 preserved, with revision guards, backup, negative canaries and code rollback.
+
+## Production publication
+
+Source commit 3199579207c48ccdb661a60f7accdc18a54c3fab was published at
+2026-11-03T22:37:41Z. Release and independent route/package readback passed in
+[run 41732226686](https://github.com/RaizEducacaoDev/Lambda-Raiz/actions/runs/41732226686).
+The active CodeSha256 is `6Mf0NJD8HIyDhId6FzbAGKqWu13Strj23mIvnBhKmxQ=`;
+revision is `61c06ae6-76ad-4e20-95c9-a06d9eae1d22`. Both document canaries
+returned their expected 422 codes without creating DynamoDB reservations.
+
+A single subsequent request through the attested production API, with the
+exact original business digest and its existing protected reservation, returned
+DOCUMENTO_RM_DUPLICADO. Native reads before/after found zero movements for that
+ticket. A fresh [read-only AWS audit](https://github.com/RaizEducacaoDev/Lambda-Raiz/actions/runs/41732855399)
+confirmed the active package, the original reservation unchanged and zero
+creation dispatch events for the ticket in the complete inspected interval.
+The old case still requires fiscal-series confirmation and separate historical
+reconciliation; this publication did not release it.

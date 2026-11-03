@@ -235,3 +235,162 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - **Limite:** chave única possui nove componentes, seis derivados pelo nativo.
   Sem prova de invariância ou rollback correlacionado e aprovação fiscal, não
   liberar sucessor. Não fazer reset/delete. Ver operations/payment-fiscal-release-20261030.md.
+
+## 2026-11-03 — Aliases bancários no Zeev: candidato offline, não publicado
+
+- Incidente224773: CloudWatch às12:24:13 BRT correlacionado ao request
+  a279a8f8-3b94-405c-a064-25ff19fe284a. O payload apresentava IDPGTO5 e chave
+  composta terminada em1; o guard rejeitou antes da criação nessa chamada.
+  Leitura posterior já tinha5/5 por alteração externa; este trabalho não mudou
+  o ticket. Não atribuir uma sequência exata de eventos de tela sem captura.
+- Nos scripts arquivados299/386 de28/10, seis testes reproduziram: reabertura
+  troca cadastro salvo5 pelo primeiro1; escrita tardia pode divergir os aliases;
+  preservação pós-cadastro mantém somente ID numérico sem reconstruir composta.
+- Candidato local coordena os três campos, conserva seleção validada, invalida
+  mudanças reais e reconstrói identidade por leitura. O preenchimento automático
+  sem seletor foi preservado. Revisão corrigiu invalidação indevida de versão
+  antes do onchange do tipoPIX; teste executa capture e depois onchange.
+-124 testes locais aprovados:35identidade/45cadastro/26consulta/18preservaçãoV2.
+  Seis reproduções negativas e sintaxe dos dois scripts conferidas; nova leitura
+  independente dos arquivos confirmou hashes e caudas não relacionadas intactas.
+- **Não publicado:** conexão do editor/navegador indisponível; APIs oficiais
+  retornaram metadados e exportação opaca, sem baseline JS atual. Não importar
+  aplicação completa nem colar candidato arquivado sobre configuração desconhecida.
+- Pendente: baseline atual, validação no DOM real e contrato/hook imediato após
+  inclusão no386. NewBankInformations/POST estão intactos e nenhum retry foi
+  introduzido. Publicar/reler hashes e depois confirmar em ticket teste/FLAN.
+- Pacote: C:\Users\felipe.martins\artifacts\zeev-bank-identity-sync-20261103.
+  Nenhuma escrita operacional Zeev/RM/AWS, mudança SQL ou reprocessamento nesta etapa.
+- Complemento confirmado pela API atual: tarefas de serviço18245/18246/18761
+  `Gravar IDPGTO` usam1611 no fluxo299. Escrita depois do envio não passa por
+  listener/observer/submit da tela; o candidato frontend é insuficiente nesse
+  caminho. Ler/corrigir configuração atual1611 e coerência com a identidade
+  selecionada antes de publicar/declarar solução. O mapeamento arquivado só
+  atualiza idpgto/codcolpgto; não afirmar execução1611 na tela sem comprovação.
+
+## 2026-11-03 — Análise de parcelas: limite de retomada reproduzido, sem correção
+
+- Leitura nativa de228424/224343/227787/227193 conferiu10FLANs, todos com o
+  IDPGTO/CODCOLPGTO da identidade selecionada e cadastro ativo. O caso228424
+  tem alias numérico vazio no Zeev, porém composta válida6/18 e3FLANs corretos.
+  Não confundir campo oculto vazio com ausência de vínculo financeiro.
+- Fonte PG aplica a chave global em todos os planos e confirma cada IDLAN
+  antes de COMPLETE.4testes relevantes existentes e8cenários adicionais passaram.
+- **Limite reproduzido offline:**3parcelas com default nativo1, desejado6,
+  interrupção após a primeira associação:503; retomada409 porque criadoAgora
+  é falso e as restantes ainda têm1.1MOV/1gravação; sem duplicidade ou falso200.
+  Não encontrado esse cenário nos4casos reais; testes usam RM/Dynamo emulados.
+- Tratar retomada só com prova do default da própria criação, preservando
+  título histórico/alterado e sem relaxar sobrescrita/reset/CREATING.
+  Repetir IDPGTO no payload de cada linha não resolve esse limite.
+- Fontes conferidas iguais ao commit28a314d. Última verificação AWS disponível
+  é03/11 12h28BRT; nenhuma nova confirmação do pacote neste exercício.
+- Evidência: C:\Users\felipe.martins\artifacts\installments-idpgto-audit-20261103.
+  Relatório na pasta Desktop/Problemas Tesouraria2.0. Sem escrita operacional,
+  alteração de fonte produtiva, publicação ou reprocessamento.
+
+## 2026-11-03 — NovoConflict0609:226374 correlacionado ao minuto, usuário não confirmou
+
+- Localizador202611030609-67 sem número de ticket. Falha409 no226374 às18:09:25
+  BRT, requestb032cc53-ab5e-4075-9892-99b02fd7093e.228634 era outro candidato de
+  falha às17:58, sem409 no minuto; não confundir os dois nem suas datas/cadastros.
+- Primeira tentativa226374:02/11 11:43:50BRT,4efffdfd-b6d7-4a87-857f-fe99421654d3.
+  Transporte retornou975ms, diagnóstico RM_UNCLASSIFIED_REJECTION/1389chars/
+  14linhas, campoSERIE. Sem chave;503/CREATING, semPG. Hash seguro do retorno
+  a7da2aded467e342de27827516f8f7f5e93418042cd65504ce79966fc65e7138.
+- Reserva9/226374 consistente permaneceCREATING, digest
+  f6d5bff690ca5fe785705ea08e586f3f4fb4454f9c191ccb77ca450ed1ed3932.
+  Retentativas409 têmstateUndefined no log porop não atribuído. Não é gap parcelado.
+- Identidade PIX3/9 ativa/coerente. RM recon por ticket0. Busca READ COMMITTED
+  pelo documento atual114/fornecedor0000154129/filial9/3 encontrou MOV78497,
+  série1/000000114, emissão01/12/2025, ticket110229, FLAN161973 já baixado.
+  Formulário atual é22/10/2026, série vazia. Série principal9/1.2.03=1.
+  Indício de série/numeração; não inferir causa exata ou alterar registro antigo.
+- Falta confirmar ticket com usuário e conferir NF/série/intenção original antes
+  de qualquer reconciliação. Sem reset/Put/UpdateDynamo, SaveRecord ou aprovação.
+- Somente diagnósticos readonly adicionados/push: c35eaa3/4f48b9b/727ff33;
+  execução41723121930. Função ativa continuaSHA r0ACtmx4cuGdCAaexa2P6RHkXAEnO5lctl4tiP1iqkk=.
+  Artefatos C:\Users\felipe.martins\artifacts\zeev-conflict-20261103-0609.
+
+### Continuação: ticket confirmado, série informada70000 e omissão do XML reproduzida
+
+- Usuário confirmou226374 e informouSERIE70000 na NF. A série não existe em
+  TSERIE0/9 nem no vínculo TTMVSERIE9/1.2.03. CampoTMOV.SERIEvarchar8 comporta.
+  ZeevserieDaNF persistida ainda vazia; não inferir ausência na tela não salva.
+- SourceLegado só enviavaSERIE em1.2.01/1.2.25: NFserviço1.2.03 ignorava até
+  valor explícito70000. Teste doXML real falhou antes. Fix local1linha inclui
+  SERIE informada em1.2.03.6novos testes passaram; gates completos108/108,
+  typecheck e bundle. Commit LOCALb95599a, sem push ou deploy dessa correção.
+- Na fonte Zeev arquivada de28/10, FIELD_MAP de serieDaNF aceita sóMaterial,
+  apesar do comentárioServiço; hipótese adicional de captura. Exigir baseline
+  atual antes de alterar. Metadados vivos mostram campo obrigatório emT07.
+- Proposto cadastro nativo70000 na coligada9 e vínculo adicional em1.2.03,
+  principal1 preservada; gravação somente do campoSérie do226374, sem concluir
+  tarefa. Parametrização produtiva ainda não autorizada/aplicada. CREATING
+  permanece; não usar cadastro/série nova como autorização para outra criação.
+- Plano/evidências emseries-70000-change-plan.json e relatório Desktop. O
+  suporteTOTVS orienta cadastro+vínculo; para NFS-e conferir sérieRPS nSerieRPS.
+
+
+### Retificação: 70000 é SÉRIE DA DPS, mapeamento para RM ainda não comprovado
+
+- O usuário esclareceu que 70000 é a série da DPS. A recomendação anterior de
+  cadastrar/vincular esse valor em TSERIE/TTMVSERIE e preencher serieDaNF foi
+  retirada. Não inferir equivalência entre DPS, nSerieRPS e TMOV.SERIE.
+- Fonte primária municipal confirma série70.000 do Emissor Nacional Web:
+  https://nfem.joinville.sc.gov.br/index.jsp?mens=SI . Ainda falta identificar
+  no documento o Número da NFS-e separado do Número/Série da DPS e confirmar
+  a correspondência no recebimento de serviço pelo RM. Origem do114 pendente.
+- b95599a permanece apenas local, sem push/deploy; testes de XML não validam
+  semântica fiscal. Plano JSON e relatório Desktop retificados. Rejeição que
+  menciona SERIE não comprova ausência de cadastro70000 como causa raiz.
+- Sem alteração operacional, reset de reserva, SaveRecord ou reprocessamento.
+
+
+### Continuação: NFS-e114 confirmada, intenção original reconstruída, preflight verificado
+
+- Usuário confirmou114 comoNúmeroNFS-e,70000comoSérieDPS e pediu correção definitiva.
+- Enumeração offline de91.530 representações encontrou exato digestf6d5...3932:
+  IDNAT23/CODNAT1.949.01,receita17080,sérievazia,27/10entrada,22/10emissão,
+  tributosblank_row. Não atribuir o vazio atual da Natureza à tentativa original.
+- Reprodução nativaDEV160289 da intenção exata: JáExisteNota...Número eSérie,
+  sérieprincipal1;78497/110229/2025conflita. ZeroMOVantes/depois. O hash nativo
+  HML difere dePROD; o texto histórico dePROD continua não recuperado.
+- PreflightRAIZ.PG.DOCnovoSELECTcompleto+eco9componentesSEMfiltroano/CODTMV,
+  registrado viaGlbConsSQLData emDEV/PROD. SERIEsemparâmetro usa sentinela~.
+  Correção de compatibilidade nativa: CAST(:SERIE AS VARCHAR(16)) antes da
+  comparação com~; parâmetro isolado seguido de= causavaFE011. ReadbacksOK.
+- Novo serviço1.2.03 valida docantesRESERVED/CREATING; fixa série observada na
+  cópia do builder e confere XMLsérie/número. Rejeita whitespace no número
+  para evitar divergência entre trim preflight e slice9 no legado. Input/digest
+  preservados. Classifierreconhece a mensagemduplicidade, seminferirrollback.
+- 129testes+typecheck+bundle. HarnessRMrealnegativos422 com0reservas/0saves.
+  PositivoDEVsynthetic989926374NFN→99863/188433,IDPGTO3/CODCOLPGTO9,5273,40,
+  aberto/sembaixa/boleto;replaymesmosIDs1MOV1bankwrite. ReadbackindependenteOK.
+- Fontecommit3199579pushed,release41732226686emexecução. Nenhuma série fiscal,
+  tarefaZeev,reservaDynamooufinanceiroPRODalterado. NFNnãoatribuidono226374.
+- A reserva originalpermaneceCREATING. PreflightNOLOCKnãoéprovadeausência,
+  não resolvecorridasnemautorizareset. Falta confirmação sérieRM e evidência
+  para reconciliação histórica controlada.
+
+
+### Publicação concluída e prova pela rota PROD do ticket original
+
+- Release41732226686success,fonte3199579,03/11/202622:37:41UTC. SHAativo
+  6Mf0NJD8HIyDhId6FzbAGKqWu13Strj23mIvnBhKmxQ=,revision
+  61c06ae6-76ad-4e20-95c9-a06d9eae1d22.129testesCI+typecheck+bundle.
+- NovasérieefetivafixadanaCÓPIAdobuilder,validarDocumentoretornasérie/número/
+  tipodocumento;série/númeroXMLconferidosantesCREATING. Nadaalterounodigest.
+- Config/core/outrosarquivosZIPpreservados.4canáriosPROD422esperados;
+  DOCUMENTO_RM_DUPLICADOeSERIE_DOCUMENTO_INVALIDAsemreservas.
+- Prova adicional pela rotaAPIattestada comhashoriginalf6d5...3932 recebeu422
+  DOCUMENTO_RM_DUPLICADO.0MOVpeloticketantes/depois. Chamadanãoéautorização
+  pararetentativaSaveRecord;reservaCREATINGfoipreservada.
+- Auditoriareadonly41732855399success22:40:47UTC:
+  mesmoSHA/revision,reserva9/226374state/digest/owner/leaseintocados;janela
+  completade10minmostra1pendente422e0despachosSaveRecordpara226374.
+- GCRITICALLOGnativo,p_heflo,duasjanelasdetempooriginais:0registros. Texto
+  históricodePRODaindanãorecuperado;HMLnãosubstituiprovade rollbackhistórico.
+- Ticket226374NÃOliberadoparaconcluir:confirmarsériefiscalRMereconciliar
+  reservahistóricacomprovaadequada. Nenhumafiscalaprovação,reset/PUTDynamo
+  oufinanceiroPRODaplicado. RelatórioatualizadonapastaDesktopinformada.
