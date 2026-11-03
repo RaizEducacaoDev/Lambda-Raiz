@@ -644,6 +644,7 @@ export const handlerLegado = async (event: any, opcoesV2?: { transporte: Pick<ws
       ["CODCFO", campos.codigoDoFornecedor],
       ...tagIf(!isMovimentoSimples, ["NUMEROMOV", canarioContaConsumo ? numeroMovimentoCanario : campos.numeroDaNF.slice(0, 9)]),
       ...tagIf(isMovimentoComFrete, ["SERIE", campos.serie]),
+      ...tagIf(CODTMV === "1.2.03" && Boolean(obterTexto(campos.serie)), ["SERIE", obterTexto(campos.serie)]),
       ["CODTMV", CODTMV],
       ["DATAEMISSAO", ["1.2.06", "1.2.07", "1.2.29", "1.2.28"].includes(CODTMV)
         ? toISOSimple(campos.dataDeEntrada)
