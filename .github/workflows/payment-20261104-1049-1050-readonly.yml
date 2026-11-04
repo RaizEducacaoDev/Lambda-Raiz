@@ -1,0 +1,30 @@
+name: Payment November 4 1049-1050 read-only diagnosis
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-20261104-1049-1050-readonly.yml
+      - scripts/audit-payment-20261104-1049-1050.py
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/audit-payment-conflict-20261103-0609.py --self-test
+      - name: Read logs, version and original reservation without invocation or writes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-20261104-1049-1050.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-20261104-1049-1050-readback
+          path: .payment-20261104-1049-1050/
+          include-hidden-files: true
+          retention-days: 7
