@@ -394,3 +394,23 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - Ticket226374NÃOliberadoparaconcluir:confirmarsériefiscalRMereconciliar
   reservahistóricacomprovaadequada. Nenhumafiscalaprovação,reset/PUTDynamo
   oufinanceiroPRODaplicado. RelatórioatualizadonapastaDesktopinformada.
+
+
+## 2026-11-04 — 4220912 correlacionado e causa documental confirmada
+
+- Localizador202611040912-4→226374às09:12:24.586BRT,requestc6e2528c-685b-42dc-84a3-c4d66e7165a6.
+  Workflowreadonly41827758931,fonte12d47f0,novaLambdaSHA6Mf0...mxQ=ativa/revision61c06...1d22.
+  Apenas1eventopendente422,nãohouvecheckpoint/despachoRMnajanela;guardexecutaantesreserva.
+- Zeev atual:NF114/serieDaNFvazia,IDNAT23/CODNAT1.949.01/receita17080agorapersistidos,
+  IDPGTO3/CODCOLPGTO9/chavecompostacoerentes,PIXativo. RMretorna0MOVpor226374.
+- Colisãoatualrelidanativa:default1+114→MOV78497,ticket110229,01/12/2025,5100,
+  LAN161973STATUSLAN1/VALORBAIXADO5100. Nãoéolançamentonovo;indexTXMOVCFXsemANO
+  (9componentesrelidos). Buscar114/data22Oct2026/fornecedoremqualquersériesóachouohistórico.
+- NFNjávinculada1.2.03masusoatual9éemissão2.2.26/2.2.29.10descritaDPSusadaem
+  emissão2.1.26. NomenãoconfirmaMAPincomingNFS-e;nemtesteDEVaprovaNFNnesse226374.
+- Reserva9/226374CREATING/digestf6d5...3932/owner/leaseinalterados. Correçãosérie
+  mudarádigest;apenaspreenchereaprovarpodegerar409. Ajustefiscal+reconciliaçãodevem
+  sercoordenados;semresetgenéricoouSaveRecordsemprova/autorizaçãonecessária.
+- FaltaFiscalconfirmarsérieRMcorretadaentrada(70000continuaSérieDPS). NãoalterarNF114,
+  registropagode2025nemremoverguardparaavançar. DocumentadoemDesktop/ProblemasTesouraria2.0
+  eartifacts/zeev-422-20261104-0912. Nenhumaescritafiscal/financeira/AWS/Dynamo/Zeevnestaanálise.
