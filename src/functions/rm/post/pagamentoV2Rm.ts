@@ -4,6 +4,7 @@ import { wsDataserver } from '../../../utils/wsDataserver';
 import type { ChaveContextoFiscal } from './pagamentoFiscal';
 import type { ChaveDocumento } from './pagamentoDocumento';
 import { parsearReconciliacaoPagamento } from './pagamentoReconciliacao';
+import { parsearCensoRetomada, type CensoRetomada } from './pagamentoRetomada';
 
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: true });
 type Registro = Record<string, string>;
@@ -54,6 +55,7 @@ export interface TransporteRm {
   buscarEstoque(coligada: string, filial: string): Promise<string>;
   consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown>;
   consultarDocumento(chave: ChaveDocumento): Promise<unknown>;
+  consultarRetomada(coligada: string, ticket: string): Promise<CensoRetomada>;
 }
 
 export class PrazoPagamento {
@@ -115,6 +117,17 @@ export class TransportePagamentoV2 implements TransporteRm {
       throw new Error('Consulta de estoque inválida ou ambígua');
     }
     return String(resposta.data[0].CODLOC);
+  }
+  async consultarRetomada(coligada: string, ticket: string): Promise<CensoRetomada> {
+    if (![coligada, ticket].every(v => /^[1-9]\d*$/.test(v) && Number.isSafeInteger(Number(v)))) {
+      throw new Error('Identificadores inválidos para conferir a retomada');
+    }
+    const timeout = this.prazo.timeout();
+    const parametros = new URLSearchParams({ parameters: `CODCOLIGADA=${coligada};TICKET=${ticket}` });
+    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RETRY/0/T?${parametros}`, {
+      timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
+    });
+    return parsearCensoRetomada(resposta.data, coligada, ticket);
   }
   async consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown> {
     if (![chave.codColigada, chave.codFilial, chave.idNat].every(valor => /^\d+$/.test(valor) && Number.isSafeInteger(Number(valor)) && Number(valor) > 0) ||

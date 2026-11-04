@@ -47,7 +47,9 @@ const possui = (row: Record<string, unknown>, nome: string): boolean => Object.p
 
 // A read-only observation can prevent a new creation. It cannot authorize
 // recreation, release CREATING, reuse a colliding movement or prove rollback.
-export function validarDocumento(retorno: unknown, esperado: ChaveDocumento): DocumentoValidado {
+function analisarDocumento(retorno: unknown, esperado: ChaveDocumento, existente?: { idMov: string; ticket: string }): DocumentoValidado {
+  if (existente && (!/^[1-9]\d*$/.test(existente.idMov) || !Number.isSafeInteger(Number(existente.idMov)) ||
+      !/^[1-9]\d*$/.test(existente.ticket) || !Number.isSafeInteger(Number(existente.ticket)))) return indisponivel();
   if (esperado.codTmv !== '1.2.03' || !/^\d{1,9}$/.test(esperado.numero) || !/^[A-Za-z0-9._-]{0,5}$/.test(esperado.serie)) indisponivel();
   const empresa = inteiro(esperado.codColigada), filial = inteiro(esperado.codFilial), empresaFornecedor = inteiro(esperado.codColCfo, true);
   texto(esperado.codCfo, codigo);
@@ -90,6 +92,7 @@ export function validarDocumento(retorno: unknown, esperado: ChaveDocumento): Do
     if (row.CODCOLCFO != null) inteiro(row.CODCOLCFO, true);
     if (row.CODCFO != null) texto(row.CODCFO, codigo);
     if (row.TICKET != null) texto(row.TICKET, /^\d{1,50}$/);
+    if (existente && (String(id) !== existente.idMov || row.TICKET !== existente.ticket || row.CODTMV !== esperado.codTmv)) return indisponivel();
     ids.add(id);
   }
   const row = primeira!;
@@ -112,8 +115,19 @@ export function validarDocumento(retorno: unknown, esperado: ChaveDocumento): Do
   const vinculos = inteiro(row.SERIES_MATCH_COUNT, true);
   if (vinculos > 1) return indisponivel();
   if (vinculos === 0) throw new DocumentoPagamentoInvalido('SERIE_DOCUMENTO_INVALIDA', 'A série informada não está vinculada ao tipo de movimento no RM. Revise a série fiscal do documento.');
-  if (ids.size > 0) {
+  if (existente && (ids.size !== 1 || !ids.has(Number(existente.idMov)))) return indisponivel();
+  if (!existente && ids.size > 0) {
     throw new DocumentoPagamentoInvalido('DOCUMENTO_RM_DUPLICADO', 'Já existe documento no RM com a mesma identidade de numeração e série. Revise a NFS-e; o lançamento existente não será reutilizado.');
   }
   return { serie, numero: esperado.numero, tipoDocumento };
+}
+
+export function validarDocumento(retorno: unknown, esperado: ChaveDocumento): DocumentoValidado {
+  return analisarDocumento(retorno, esperado);
+}
+
+// Positive observation for an already-created movement of THIS ticket only.
+// This function never authorizes creating a new movement or accepting zero rows.
+export function validarDocumentoExistente(retorno: unknown, esperado: ChaveDocumento, idMov: string, ticket: string): DocumentoValidado {
+  return analisarDocumento(retorno, esperado, { idMov, ticket });
 }

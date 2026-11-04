@@ -5,8 +5,9 @@ import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagam
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
 import { diagnosticarRetornoRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
 import { NaturezaFiscalInvalida, prepararContextoFiscal, validarContextoFiscal } from './pagamentoFiscal';
-import { DocumentoPagamentoInvalido, prepararDocumento, validarDocumento } from './pagamentoDocumento';
+import { DocumentoPagamentoInvalido, prepararDocumento, validarDocumento, validarDocumentoExistente } from './pagamentoDocumento';
 import type { DocumentoValidado } from './pagamentoDocumento';
+import { validarCriacaoEncontrada } from './pagamentoRetomada';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -51,13 +52,77 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         compl.IDMOV !== pg || compl.TICKET !== ticket) throw new ConflitoPagamento('Movimento não pertence ao ticket/fornecedor/destino ativo esperado');
       return movimento;
     };
+    const validarBanco = async () => {
+      const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
+        'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
+      validarCadastro(dado, chave, entrada, planos);
+    };
+    const validarNovaNota = async () => {
+      const documento = prepararDocumento(entrada, { codColigada: coligada, codFilial: filial,
+        codColCfo: chave.codColCfo, codCfo: chave.codCfo, codTmv });
+      if (!documento) throw new Error('Contexto do documento indisponível antes da criação');
+      const validado = validarDocumento(await rm.consultarDocumento(documento), documento);
+      const fiscal = prepararContextoFiscal(entrada, { codColigada: coligada, codFilial: filial,
+        codColCfo: chave.codColCfo, codCfo: chave.codCfo });
+      if (fiscal) validarContextoFiscal(await rm.consultarContextoFiscal(fiscal), fiscal);
+      return validado;
+    };
+    const provarMovimentoEncontrado = async (pg: string) => {
+      prazo.exigir(6000);
+      const censo = await rm.consultarRetomada(coligada, ticket);
+      if (censo.movimentos.length !== 1 || censo.movimentos[0].coligada !== coligada ||
+          censo.movimentos[0].idMov !== pg || censo.lancamentos.length !== planos.length) {
+        throw new ConflitoPagamento('A consulta do TOTVS não confirmou um único movimento com todas as parcelas desta solicitação');
+      }
+      const documento = prepararDocumento(entrada, { codColigada: coligada, codFilial: filial,
+        codColCfo: chave.codColCfo, codCfo: chave.codCfo, codTmv });
+      if (!documento) throw new Error('Documento indisponível para confirmar o movimento encontrado');
+      const nota = validarDocumentoExistente(await rm.consultarDocumento(documento), documento, pg, ticket);
+      const xml = await conferirMovimento(pg), lancamentos: string[] = [];
+      for (const f of censo.lancamentos) {
+        prazo.exigir(5000);
+        lancamentos.push(await rm.readReacord(`${coligada};${f.idLan}`, 'FinLanDataBR', contextoF));
+      }
+      validarCriacaoEncontrada(censo, xml, lancamentos, { coligada, filial, fornecedor: chave.codCfo,
+        coligadaFornecedor: chave.codColCfo, ticket, idMov: pg, tipo: codTmv, numero: nota.numero,
+        serie: nota.serie, tipoDocumento: nota.tipoDocumento, emissao: texto(entrada.dataDeEmissao),
+        entrada: texto(entrada.dataDeEntrada), valor: texto(entrada.valorTotal), planos });
+    };
+    // Only service-invoice recovery uses these paths. Existing replay remains
+    // strict; the caller cannot supply a proof, a replacement owner or a state.
+    if (codTmv === '1.2.03' && !pgEntrada) {
+      const anterior = await repo.consultar(pk);
+      if (anterior && !Object.prototype.hasOwnProperty.call(anterior, 'pg') && anterior.lockUntil <= Date.now()) {
+        if (anterior.state === 'RESERVED' && anterior.protocolVersion === 2 && anterior.digest !== digest) {
+          await validarBanco();
+          const censo = await rm.consultarRetomada(coligada, ticket);
+          if (censo.movimentos.length || censo.lancamentos.length) {
+            throw new ConflitoPagamento('A solicitação já possui movimento ou lançamento no TOTVS; outro envio não foi autorizado');
+          }
+          documentoCriacao = await validarNovaNota();
+          prazo.exigir(18000);
+          op = await repo.corrigirReserva(anterior, digest, prazo.disponivel());
+          console.info('[RM-IDPGTO] Retomada confirmada', { ticket, coligada, event: 'corrected_before_dispatch' });
+        } else if (anterior.state === 'CREATING' && anterior.digest === digest) {
+          const censo = await rm.consultarRetomada(coligada, ticket);
+          if (censo.movimentos.length === 1 && censo.movimentos[0].coligada === coligada && censo.lancamentos.length === planos.length) {
+            await validarBanco();
+            const pg = censo.movimentos[0].idMov;
+            await provarMovimentoEncontrado(pg);
+            prazo.exigir(8000);
+            op = await repo.confirmarCriacaoIncerta(anterior, pg, prazo.disponivel());
+            console.info('[RM-IDPGTO] Retomada confirmada', { ticket, coligada, event: 'existing_creation_confirmed', idMov: pg });
+          }
+          // An empty query is not proof of rollback. The original state remains
+          // irreversible unless a positively identified native movement exists.
+        }
+      }
+    }
     const concluida = await repo.concluida(pk, digest, pgEntrada);
     // A confirmação de replay também relê o RM. Cadastro desativado depois do
     // pagamento não invalida um vínculo já persistido, mas nunca autoriza escrita.
     if (!concluida) {
-      const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
-        'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
-      validarCadastro(dado, chave, entrada, planos);
+      await validarBanco();
       if (!pgEntrada && codTmv === '1.2.03') {
         movimentoFiscalConhecido = await repo.movimentoConhecido(pk, digest, pgEntrada);
         if (!movimentoFiscalConhecido) {
@@ -67,19 +132,13 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
             await conferirMovimento(existentes[0]);
             movimentoFiscalRemoto = existentes[0];
           } else {
-            const documento = prepararDocumento(entrada, { codColigada: coligada, codFilial: filial,
-              codColCfo: chave.codColCfo, codCfo: chave.codCfo, codTmv });
-            if (!documento) throw new Error('Contexto do documento indisponível antes da criação');
-            documentoCriacao = validarDocumento(await rm.consultarDocumento(documento), documento);
-            const fiscal = prepararContextoFiscal(entrada, { codColigada: coligada, codFilial: filial,
-              codColCfo: chave.codColCfo, codCfo: chave.codCfo });
-            if (fiscal) validarContextoFiscal(await rm.consultarContextoFiscal(fiscal), fiscal);
+            documentoCriacao = documentoCriacao || await validarNovaNota();
           }
         }
       }
       if (pgEntrada) await conferirMovimento(pgEntrada);
     }
-    op = concluida || await repo.reservar(pk, digest, pgEntrada, prazo.disponivel());
+    op = op || concluida || await repo.reservar(pk, digest, pgEntrada, prazo.disponivel());
     if (movimentoFiscalConhecido && op.pg !== movimentoFiscalConhecido) {
       throw new ConflitoPagamento('Movimento durável alterado durante a retomada; reconciliar sem criar outro');
     }
@@ -131,6 +190,17 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
             throw new ConflitoPagamento('XML do documento diverge da série/numeração validada; nenhuma criação foi enviada');
           }
           if (contaConsumo) xml = preservarNumeroMovimentoContaConsumo(xml, texto(entrada.numeroDaNF));
+          if (codTmv === '1.2.03') {
+            const censo = await rm.consultarRetomada(coligada, ticket);
+            // SC/OC may legitimately share the ticket. Preserve the existing
+            // complete RECON classification, but never create over a financial
+            // entry or a movement of this payment type found in the final read.
+            const pagamentosAtuais = await rm.buscarMovimentosPorTicket(coligada, ticket, codTmv);
+            if (censo.lancamentos.length || pagamentosAtuais.length) {
+              throw new ConflitoPagamento('Já existe movimento ou lançamento desta solicitação no TOTVS; nova criação bloqueada');
+            }
+          }
+          prazo.timeoutCriacao(2500);
           // A reserva irreversível antecede o SaveRecord. Nem timeout nem falha
           // de checkpoint podem permitir uma segunda criação automática.
           etapaCriacao = 'checkpoint_creating';
@@ -167,6 +237,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     }
     const pg = op.pg!;
     prazo.exigir(5000);
+    if (op.recuperadaCriacaoIncerta && !concluida) await provarMovimentoEncontrado(pg);
     const movimento = await conferirMovimento(pg);
     const pagamentos = registrosRm(movimento, 'TMOVPAGTO');
     if (pagamentos.length !== planos.length || new Set(pagamentos.map(p => p.IDLAN)).size !== pagamentos.length ||
@@ -253,6 +324,17 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     return formatResponse(200, { PG: pg, LF: ids.length === 1 ? ids[0] : '', idLans: ids,
       integracaoBancaria: gravou ? 'gravada' : 'ja_gravada' });
   } catch (erro) {
+    // A failed build/preflight has no native creation effect. Fence this owner
+    // before expiring its lease. A remotely persisted CREATING checkpoint makes
+    // the CAS fail, preserving uncertainty even if its response was lost.
+    if (op?.state === 'RESERVED' && op.protocolVersion === 2 && !Object.prototype.hasOwnProperty.call(op, 'pg')) {
+      try {
+        const repo = deps?.repositorio || new DynamoPagamento(process.env.PAGAMENTO_IDPGTO_TABLE!);
+        await repo.encerrarAntesDoEnvio(op);
+      } catch {
+        console.warn('[RM-IDPGTO] Encerramento antes do envio não confirmado', { ticket: texto(entrada?.ticketRaiz), state: op.state });
+      }
+    }
     const status = erro instanceof PagamentoInvalido ? 422 : erro instanceof ConflitoPagamento ? 409 : 503;
     // Axios/SOAP exceptions may contain credentials and full bank data.
     const mensagem = erro instanceof PagamentoInvalido || erro instanceof ConflitoPagamento

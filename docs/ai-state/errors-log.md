@@ -414,3 +414,64 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - FaltaFiscalconfirmarsérieRMcorretadaentrada(70000continuaSérieDPS). NãoalterarNF114,
   registropagode2025nemremoverguardparaavançar. DocumentadoemDesktop/ProblemasTesouraria2.0
   eartifacts/zeev-422-20261104-0912. Nenhumaescritafiscal/financeira/AWS/Dynamo/Zeevnestaanálise.
+
+
+## 2026-11-04 — 4090941: NF alterada114→1141; aguardar número fiscal verdadeiro
+
+- Localizador202611040941-30→22637409:41:25.310BRT,requestd93a9e18-59bc-4b06-9912-95c8d1122fa8.
+  AuditoriaAWSreadonly41831845093success;mesmoSHA6Mf...mxQ=,reservaoriginalCREATINGf6d5...3932inalterada.
+- ZeevNF1141/sérievazia;0MOVdoticket,IDPGTO3/9ativo/coerente. Offline,mudarapenasonúmero
+  atualde1141para114fazdigestvoltaraooriginalexato. Novo409édivergênciadaintenção,antesdeSaveRecord.
+- Pergunta factual obrigatória pendente:1141é número real ou sótesteparaavançar? Nãousarnúmero
+  fictício,nãoreverter1141semconfirmaçãodoconteúdo,nãoliberarfinanceiroantesdadosverdadeiros.
+- Auditoriaoriginal:JOINcorretoAUDITID(nãoPARENTLOGID). PrimeiraconsultaauditFLANexpirou
+  em12s;NÃOézero. Consultaindexada/sargávelviaprópriosíndicesAUDITDATE/AUDITIDretornou
+  0FLANeventosdasjanelasoriginais02Nov11:38–11:49/14:38–14:49,scope9/CFO0/0000154129,
+  todasfiliais. FlagFLANINSUPDDELativasdesde2022;Configativaantesoriginal,retention0sem
+  inferênciaautomática. Sérieprincipal1últimamodificação2024-12-19. TMOVatualemqualquer
+  filialnasjanelasoudata22Octtambém0. Ausênciaaudittriggerisoladanãoprovarollback.
+- Recuperaçãoplanejada:manifestoexclusivo+snapshotoriginalimutável+transaçãoCASúnica,
+  somentedepoisdeprovasuficienteedadosfiscaisverdadeiros. Semoperaçãoaplicada,semnovo
+  códigoLambda/deploynesteturno. ReportDesktop/ProblemasTesouraria2.0eartefatos0941.
+
+
+## 2026-11-04 — confirmação do número real e restauração comprovada
+
+- Felipe confirmou que acrescentou o 1 apenas para tentar passar. O número real é 114.
+- Em 13:18:55 UTC, PATCH oficial de formvalues/226374 alterou somente numeroDaNF, de 1141 para 114. HTTP 200, success true. Uma nova sessão GET sem cache comprovou a persistência.
+- Único campo selecionado alterado: numeroDaNF. Ticket ativo e tarefa T07 preservados; IDMOV/IDLAN vazios; aliases de pagamento 3/9 preservados.
+- Nenhuma conclusão de tarefa, invocação financeira, gravação RM, alteração Lambda ou escrita Dynamo nesta restauração.
+- A pendência de confirmação do número está encerrada. Continuam pendentes a série fiscal de entrada da NFS-e nacional e a recuperação coordenada da reserva original; não aprovar para testar antes desses ajustes.
+- Solicitada a orientação de série ao Fiscal via Felipe. NFN/10 não foram adotadas por inferência; DPS70000 não foi confundida com série de entrada.
+- Prova em artifacts/zeev-conflict-20261104-0941/restore-real-invoice-confirmed.json e relatório atualizado no Desktop/Problemas Tesouraria 2.0.
+
+
+## 2026-11-04 — preservar a série original por instrução expressa
+
+- Felipe determinou manter a série original da integração e questionou a causalidade das mudanças da Lambda. Retirada a escolha pendente de outra série fiscal; não cadastrar 70000 nem selecionar NFN/10.
+- Fresh GET Zeev e DataServers/RAIZ.PG.DOC/RECON às 13:28 UTC: 226374 permanece NF114/série vazia, efetiva1, IDPGTO3/9 e zero movimentos pelo ticket. Movimento78497/ticket110229 ocupa 114/série1; financeiro161973 permanece pago.
+- Auditoria AWS41831845093, tentativa2, sucesso: SHA6Mf0...mxQ e reserva original preservadas. Somente operações de leitura.
+- b95599a acrescentou encaminhamento de série explícita; 3199579 acrescentou preflight422 e fixação da série nativa observada. Para o caso vazio, a série efetiva não mudou:1.
+- Reprodução HML original sem tag SERIE já recebeu rejeição nativa de número/série; hash diferente do retorno original PROD. Não confundir reprodução com recuperação do texto de produção ou prova de rollback.
+- Nenhum deploy/escrita operacional nesta verificação. Não declarar resolvido. Preservar original1/114 e reconciliar a operação histórica com prova; não criar identidade fiscal fictícia para passar.
+
+
+## 2026-11-04 — novos localizadores 1049/1050 correlacionados
+
+- 202611041049-73 → 226374,13:49:17.429 UTC,request c366056a-01b8-4945-8400-498712b4e992,422 antes de criação.
+- 202611041050-34 → 226374,13:50:09.583 UTC,request fbb0cc26-42dc-4f2b-8700-bb7474aed5c3,409 antes de criação.
+- Workflow somente leitura41841953901 passou; commit e3e0d70 não altera/deploya Lambda. SHA ativo6Mf...mxQ e reserva original CREATING/f6d5...3932 preservados.
+- GET atual13:51:43 UTC mostra NF1141 novamente; original real confirmado114. Série vazia/default1, IDPGTO3/9ativo/coerente,0MOV oficial pelo ticket. Sem restauração durante edição ativa e sem presumir nova nota verdadeira.
+- Estudo nativo: CRO não é exercício; subsérie não pode ser inventada; não identificado parâmetro anual focal. 9/1.2.03 CODTDO002/CRONULL/SUBSERIENULL em1798MOV desde2025, sem SEGUNDONUMERO. FTDO054 existe mas uso observado é emissão2.*; nome não aprova mudança. PermiteNFRepetida Fiscal não libera índiceTMOV.
+- Minuta técnica local pronta para Fiscal/TOTVS: confirmar contrato de entrada NFS-e nacional TTMV.CODTDOLANDUP+TTMVEXT.CODTDO→TMOV.CODTDO ou rotina nativa para coexistência2025/2026 mantendo1/114 e histórico pago. Não enviada.
+- Reconciliação não concluída; nenhuma escrita operacional/financeira, nenhum reset/reserva liberada. Evidências em artifacts/zeev-errors-20261104-1049-1050 e relatório no Desktop/Problemas Tesouraria2.0.
+
+## 2026-11-04 — retomada segura implementada e verificada
+
+- Novas raízes protocolVersion2: falha antes de envio invalida owner e expira apenas RESERVED com CAS exato. CheckpointCREATING remoto impede encerramento mesmo quando resposta se perde.
+- Correção de digest só em RESERVED2 expirado, pg realmente ausente, com censo completo MOV/FLAN vazio e entrada/documento/banco/fiscal válidos. Snapshot integral imutável preservado antesCAS; semdelete/TTL/IAMnovo.
+- CREATING pode adotar apenas criação própria positivamente comprovada com mesmo digest. Confere documento/série/tipo, fornecedor/destino, datas, BRUTO=LIQ=esperado, TODASparcelas/IDLANs, aberto/sembaixa/semboletovinculado. Markerpersistente força nova conferência antesbankwrites. Zero nunca liberaCREATING.
+- Novo SELECT nativo RAIZ.PG.RETRY usa READCOMMITTEDLOCK. Registrado porGlbConsSQLData emHML/PROD e relido com parser;0MOV/0LAN226374,1/1fixtureHML989926374 eprodtest228063. Nenhum financeiro/parâmetro fiscal alterado.
+- 159testes+typecheck+bundle passaram. Revisão detectou bloqueio indevidoSC/OCno último censo; corrigido preservando RECONcompleto+filtroPG e bloqueando qualquerLANprévio. Novo testeverde.
+- HML real readonly: reserva simulada emDynamoLOCALCREATING recuperou MOV99863/LAN188433 existente, COMPLETE/histórico1, SaveRecordnativoTOTALMENTEdesabilitado,0tentativaswrites. Original226374fixtureficou422/CREATINGsemalteração.
+- Publicação escopada preparada, ainda pendente no momento deste registro. Sem nova criação financeira. 226374não está liberado: NF114/série1colide com2025; reserva original não é ressetada/convertida emRESERVED2.

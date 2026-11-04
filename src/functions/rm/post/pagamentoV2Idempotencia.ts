@@ -1,12 +1,18 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 export type EstadoPagamento = 'RESERVED' | 'CREATING' | 'CREATED' | 'UPDATING' | 'COMPLETE';
 export type OperacaoPagamento = {
   pk: string; digest: string; owner: string; lockUntil: number; state: EstadoPagamento; pg?: string;
+  protocolVersion?: 2;
+  recuperadaCriacaoIncerta?: true;
 };
 export interface RepositorioPagamento {
+  consultar(pk: string): Promise<OperacaoPagamento | undefined>;
+  corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento>;
+  confirmarCriacaoIncerta(antes: OperacaoPagamento, pg: string, duracao: number): Promise<OperacaoPagamento>;
+  encerrarAntesDoEnvio(operacao: OperacaoPagamento): Promise<void>;
   concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined>;
   movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
@@ -14,10 +20,111 @@ export interface RepositorioPagamento {
 }
 export class ConflitoPagamento extends Error {}
 
+const raizPagamento = (pk: unknown): pk is string => typeof pk === 'string' && /^[^#]+#PG#[1-9]\d*#[1-9]\d*$/.test(pk);
+const digestValido = (digest: unknown): digest is string => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest);
+// Only JSON values can occur in this protocol. Reject unsupported snapshots,
+// rather than silently dropping attributes from their immutable history.
+const ordenarSnapshot = (valor: unknown): unknown => {
+  if (valor === null || typeof valor === 'string' || typeof valor === 'boolean' ||
+    (typeof valor === 'number' && Number.isFinite(valor))) return valor;
+  if (Array.isArray(valor)) return valor.map(ordenarSnapshot);
+  if (valor && typeof valor === 'object' && Object.getPrototypeOf(valor) === Object.prototype) {
+    return Object.fromEntries(Object.keys(valor).sort().map(k => [k, ordenarSnapshot((valor as Record<string, unknown>)[k])]));
+  }
+  throw new ConflitoPagamento('Snapshot da reserva inválido; nenhuma retomada autorizada');
+};
+const snapshotCanonico = (valor: unknown): string => JSON.stringify(ordenarSnapshot(valor));
+
 // Não há TTL nem delete: apagar uma reserva possibilitaria duplicação no RM.
 export class DynamoPagamento implements RepositorioPagamento {
   constructor(private readonly tabela: string,
     private readonly cliente = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 1 }))) {}
+  async consultar(pk: string): Promise<OperacaoPagamento | undefined> {
+    const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
+      { abortSignal: AbortSignal.timeout(2000) });
+    if (resposta.Item && resposta.Item.pk !== pk) throw new ConflitoPagamento('Leitura da reserva não corresponde à operação solicitada');
+    return resposta.Item as OperacaoPagamento | undefined;
+  }
+  // The service must first validate a complete, read-only RM proof of no payment
+  // effects and the corrected input. This method is not an API-input override.
+  async corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento> {
+    if (!digestValido(digestNovo) || digestNovo === antes.digest || antes.protocolVersion !== 2) {
+      throw new ConflitoPagamento('Reserva não admite correção automática da intenção');
+    }
+    return this.retomar(antes, 'RESERVED', digestNovo, undefined, duracao);
+  }
+  // Requires a positive, complete RM identity/amount/date/installment proof for
+  // this same digest, validated by the service. Zero RM rows never call here.
+  async confirmarCriacaoIncerta(antes: OperacaoPagamento, pg: string, duracao: number): Promise<OperacaoPagamento> {
+    if (typeof pg !== 'string' || !/^[1-9]\d*$/.test(pg) || !Number.isSafeInteger(Number(pg))) {
+      throw new ConflitoPagamento('Movimento confirmado inválido; nenhuma retomada autorizada');
+    }
+    return this.retomar(antes, 'CREATED', antes.digest, pg, duracao);
+  }
+  // Only a caller that has not passed its durable CREATING checkpoint may end
+  // this lease. A lost checkpoint response cannot satisfy this RESERVED CAS.
+  async encerrarAntesDoEnvio(op: OperacaoPagamento): Promise<void> {
+    if (!raizPagamento(op.pk) || op.state !== 'RESERVED' || op.protocolVersion !== 2 ||
+        Object.prototype.hasOwnProperty.call(op, 'pg') || !digestValido(op.digest) ||
+        typeof op.owner !== 'string' || !op.owner || !Number.isSafeInteger(op.lockUntil) || op.lockUntil <= 0) {
+      throw new ConflitoPagamento('Reserva não admite encerramento antes do envio');
+    }
+    await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk: op.pk },
+      UpdateExpression: 'SET #owner = :newOwner, lockUntil = :expired',
+      ConditionExpression: '#owner = :oldOwner AND #state = :reserved AND digest = :digest' +
+        ' AND lockUntil = :oldUntil AND protocolVersion = :protocol AND attribute_not_exists(pg)',
+      ExpressionAttributeNames: { '#owner': 'owner', '#state': 'state' },
+      ExpressionAttributeValues: { ':newOwner': randomUUID(), ':expired': Date.now() - 1, ':oldOwner': op.owner,
+        ':reserved': 'RESERVED', ':digest': op.digest, ':oldUntil': op.lockUntil, ':protocol': 2 } }),
+    { abortSignal: AbortSignal.timeout(2000) });
+  }
+  private async retomar(antes: OperacaoPagamento, estado: 'RESERVED' | 'CREATED', digest: string,
+    pg: string | undefined, duracao: number): Promise<OperacaoPagamento> {
+    const agora = Date.now(), estadoAnterior = estado === 'RESERVED' ? 'RESERVED' : 'CREATING';
+    if (!raizPagamento(antes.pk) || !digestValido(antes.digest) || typeof antes.owner !== 'string' || !antes.owner ||
+      antes.state !== estadoAnterior || Object.prototype.hasOwnProperty.call(antes, 'pg') ||
+      !Number.isSafeInteger(antes.lockUntil) || antes.lockUntil <= 0 || antes.lockUntil > agora ||
+      !Number.isSafeInteger(duracao) || duracao <= 0 || !Number.isSafeInteger(agora + duracao + 60000)) {
+      throw new ConflitoPagamento('Estado, prazo ou vínculo da reserva não admite esta retomada');
+    }
+    const serializado = snapshotCanonico(antes);
+    const snapshot = JSON.parse(serializado) as OperacaoPagamento;
+    const snapshotSha256 = createHash('sha256').update(serializado).digest('hex');
+    const historico = { pk: `${snapshot.pk}#HISTORY#${snapshotSha256}`, snapshotSha256, snapshot };
+    try {
+      await this.cliente.send(new PutCommand({ TableName: this.tabela, Item: historico,
+        ConditionExpression: 'attribute_not_exists(pk)' }), { abortSignal: AbortSignal.timeout(2000) });
+    } catch (erro) {
+      if (!(erro instanceof Error) || erro.name !== 'ConditionalCheckFailedException') throw erro;
+      const gravado = await this.cliente.send(new GetCommand({ TableName: this.tabela,
+        Key: { pk: historico.pk }, ConsistentRead: true }), { abortSignal: AbortSignal.timeout(2000) });
+      if (!gravado.Item || snapshotCanonico(gravado.Item) !== snapshotCanonico(historico)) {
+        throw new ConflitoPagamento('Histórico imutável da reserva não corresponde ao snapshot');
+      }
+    }
+    // An orphan history is harmless if another writer wins. Never delete the
+    // root, overwrite history or infer that a timed-out CAS did not commit.
+    const owner = randomUUID(), lockUntil = Date.now() + duracao + 60000;
+    if (!Number.isSafeInteger(lockUntil)) throw new ConflitoPagamento('Prazo da retomada inválido');
+    const nomes: Record<string, string> = { '#owner': 'owner', '#state': 'state' };
+    const valores: Record<string, unknown> = { ':owner': owner, ':until': lockUntil, ':digest': digest,
+      ':newState': estado, ':oldOwner': snapshot.owner, ':oldState': snapshot.state,
+      ':oldDigest': snapshot.digest, ':oldUntil': snapshot.lockUntil, ':now': Date.now() };
+    let condicaoProtocolo = ' AND attribute_not_exists(protocolVersion)';
+    if (Object.prototype.hasOwnProperty.call(snapshot, 'protocolVersion')) {
+      valores[':protocol'] = snapshot.protocolVersion;
+      condicaoProtocolo = ' AND protocolVersion = :protocol';
+    }
+    if (pg) { valores[':pg'] = pg; valores[':recuperada'] = true; }
+    const resposta = await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk: snapshot.pk },
+      UpdateExpression: `SET #owner = :owner, lockUntil = :until, digest = :digest, #state = :newState${pg ? ', pg = :pg, recuperadaCriacaoIncerta = :recuperada' : ''}`,
+      ConditionExpression: '#owner = :oldOwner AND #state = :oldState AND digest = :oldDigest AND lockUntil = :oldUntil' +
+        ' AND lockUntil <= :now AND attribute_not_exists(pg)' + condicaoProtocolo,
+      ExpressionAttributeNames: nomes, ExpressionAttributeValues: valores, ReturnValues: 'ALL_NEW' }),
+    { abortSignal: AbortSignal.timeout(2000) });
+    if (!resposta.Attributes) throw new Error('Retomada sem confirmação de estado; consultar reserva');
+    return resposta.Attributes as OperacaoPagamento;
+  }
   // Read-only fact for deciding whether a creation-only validation applies.
   // This does not acquire a lease or authorize creation from an old snapshot.
   async movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined> {
@@ -51,7 +158,7 @@ export class DynamoPagamento implements RepositorioPagamento {
   async reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento> {
     const agora = Date.now();
     const novo: OperacaoPagamento = { pk, digest, owner: randomUUID(), lockUntil: agora + duracao + 60000,
-      state: pg ? 'CREATED' : 'RESERVED', ...(pg ? { pg } : {}) };
+      state: pg ? 'CREATED' : 'RESERVED', ...(pg ? { pg } : {}), ...(raizPagamento(pk) ? { protocolVersion: 2 as const } : {}) };
     try {
       await this.cliente.send(new PutCommand({ TableName: this.tabela, Item: novo,
         ConditionExpression: 'attribute_not_exists(pk)' }), { abortSignal: AbortSignal.timeout(2000) });

@@ -21,12 +21,14 @@ function setup(options={}){
   DATAVENCIMENTO:'2026-12-31',VALORORIGINAL:'100.0000',STATUSLAN:'0',VALORBAIXADO:'0',BAIXAPENDENTE:'0',
   ...(options.complete||fields.idDoMovimento?{IDPGTO:'2',CODCOLPGTO:'11'}:{})};
  const repo={
+  async consultar(pk){return records.get(pk);},
   async concluida(pk,digest,pg){calls.order.push('concluida');if(options.complete&&!pk.includes('#FLAN#'))return {pk,digest,pg:'9001',state:'COMPLETE',owner:'fixture',lockUntil:Date.now()+90000};return undefined;},
   async movimentoConhecido(){calls.order.push('movimentoConhecido');return undefined;},
   async reservar(pk,digest,pg){calls.reserve++;calls.order.push('reservar');pg=options.reservePg||pg;const op={pk,digest,pg,state:pg?'CREATED':'RESERVED',owner:'fixture',lockUntil:Date.now()+90000};records.set(pk,op);return op;},
   async avancar(op,state,pg=op.pg){const next={...op,state,...(pg?{pg}:{})};records.set(op.pk,next);return next;},
  };
  const rm={
+  async consultarRetomada(){return {movimentos:[],lancamentos:[]};},
   async consultarDocumento(key){calls.document++;calls.order.push('document');if(options.documentError)throw Error('fixture unavailable');
    return options.documentResponse===undefined?[documentoFixture(key,options.documentNative)]:options.documentResponse;},
   async consultarContextoFiscal(key){calls.fiscal++;calls.order.push('fiscal');if(options.fiscalError)throw Error('fixture unavailable');
