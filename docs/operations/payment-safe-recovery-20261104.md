@@ -52,12 +52,25 @@ it is not a production mapping decision.
 
 ## Ticket 226374 boundary
 
-Its original legacy CREATING operation lacks historical no-effect confirmation.
-It is not reset, deleted or automatically upgraded to a pre-dispatch v2 attempt.
-Its true invoice114/series1 collides with the separate paid2025 document
-78497/161973. The current form was last observed as1141 after user edits. This
-release neither invents a replacement invoice nor resolves the native fiscal
-identity collision; the ticket is not declared ready for approval.
+The release did not automatically reset its legacy CREATING operation. A later,
+separately authorized one-time reconciliation was applied for invoice1141/series1
+in workflow41877211477. It independently checked the closed original invocation,
+complete later-dispatch log coverage, committed movement and financial censuses,
+the current Zeev fields, bank3/9 and absence of a duplicate1141 document.
+
+The complete original reservation and observations were archived immutably before
+an exact conditional update reserved the NEW intent under protocol2. Original
+historical rollback is not claimed; the documented finding is no persisted effect
+identified and the original invocation closed. The separate paid2025 records
+78497/161973 were preserved. This exceptional operation does not authorize generic
+automatic recovery of an unknown CREATING operation with a zero current lookup.
+
+A separate executor verified the root, archive and fresh RM/Zeev observations at
+2026-11-04T17:26:19Z. The ticket is ready for user approval with1141/series1 and
+bankIDPGTO3/CODCOLPGTO9. No financial creation or Zeev task completion was performed
+by maintenance. Final IDMOV/IDLAN and banking association require readback after
+the user approves. The temporary maintenance secret was removed and both scoped
+workflows disabled after verification.
 
 Publication targets only the payment Lambda entrypoint and preserves the legacy
 core, other ZIP entries and function configuration, with baseline/revision
