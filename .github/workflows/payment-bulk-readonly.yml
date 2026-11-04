@@ -1,0 +1,32 @@
+name: Payment backlog recovery evidence read-only
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - scripts/audit-payment-bulk-recovery.py
+      - .github/workflows/payment-bulk-readonly.yml
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read exact backlog roots, creation windows and active package
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-bulk-recovery.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bulk-readonly-evidence
+          path: .payment-bulk-readonly/
+          include-hidden-files: true
+          retention-days: 7
