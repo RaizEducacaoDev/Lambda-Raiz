@@ -15,6 +15,8 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -188,8 +190,16 @@ class Live:
         except urllib.error.HTTPError as error:
             status = error.code if isinstance(error.code, int) and 100 <= error.code <= 599 else 'UNKNOWN'
             raise GateError(f'HTTP {stage} status={status}') from None
-        except urllib.error.URLError:
-            raise GateError(f'HTTP {stage} status=NETWORK_ERROR') from None
+        except urllib.error.URLError as error:
+            # Classify locally; never include remote addresses, exception text or certificates.
+            reason = error.reason
+            category = ('TLS_CERTIFICATE' if isinstance(reason, ssl.SSLCertVerificationError) else
+                        'TLS_ERROR' if isinstance(reason, ssl.SSLError) else
+                        'DNS_ERROR' if isinstance(reason, socket.gaierror) else
+                        'NETWORK_TIMEOUT' if isinstance(reason, TimeoutError) else
+                        'CONNECTION_REFUSED' if isinstance(reason, ConnectionRefusedError) else
+                        'NETWORK_ERROR')
+            raise GateError(f'HTTP {stage} status={category}') from None
         except TimeoutError:
             raise GateError(f'HTTP {stage} status=TIMEOUT') from None
         require(len(value) <= 15_000_000, 'Remote response exceeds limit')

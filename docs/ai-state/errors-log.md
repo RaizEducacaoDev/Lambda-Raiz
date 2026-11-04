@@ -484,3 +484,10 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - NovoZIPativo temnomesbackslash; montadornormalizaapenasnomes, rejeitacolisaonormalizada,preservatodosbytesforaentry/core. Buildrealatual+smoke0networkpassaram.
 - 160testes+typecheck+bundle+2Pythonpassaram. Retargetbaseline/revisionatualaprovadoporrevisãoindependente. Ainda nãoéliberaçãofinanceirado226374.
 - Usuárioconfirmouusar226374comoteste;perguntafactualpendentesobre114realvs1141testeemprodução, pois1141foraexplicitamentedeclaradocontorno.
+
+## 2026-11-04 — versão publicada e conferência após alerta sobre Sara
+
+- Publicação 41869523543 concluída às 13:41 BRT e relida independentemente. SHA `Pt8n1Td1BarRUJWuGaQnMcNY5bYXcS8b3TvUaY28U0U=`, revisão `8e19007a-a781-4bad-b4c9-3c749e5b9318`. A alteração de PIX CNPJ da publicação das 11:47 foi preservada; 160 testes, typecheck, bundle e proteções de deploy passaram.
+- Nova auditoria do run 41873429982 observou o mesmo pacote ativo às 14:01:49 BRT. Nenhum UpdateFunction posterior encontrado até essa leitura. Repositório consultado ao vivo: main/dev sem publicação de código posterior às bases já conhecidas; a branch de correção está em 274a0a7.
+- O dry-run da regularização excepcional da reserva antiga parou em `HTTP RM_READRECORD status=NETWORK_ERROR`, antes de qualquer escrita. Endpoint local 8051 respondeu HTTP 400 sem autenticação; 443 falhou na verificação de nome do certificado. Não mudar porta nem desabilitar TLS para contornar. Diagnóstico do executor deve distinguir rede/TLS sem revelar mensagens remotas ou credenciais.
+- 226374 continua sem liberação. Não aplicar a reserva nova com NF1141 enquanto permanece pendente a definição entre o documento real114 e um teste controlado1141 na produção.

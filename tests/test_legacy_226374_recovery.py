@@ -152,6 +152,26 @@ class LegacyRecovery(unittest.TestCase):
                 self.assertNotIn('private', str(caught.exception))
                 self.assertTrue(caught.exception.__suppress_context__)
 
+    def test_network_failure_classification_keeps_details_private_and_does_not_retry(self):
+        failures = [(m.ssl.SSLCertVerificationError(1, 'private TOKEN'), 'TLS_CERTIFICATE'),
+                    (m.ssl.SSLError(1, 'private TOKEN'), 'TLS_ERROR'),
+                    (m.socket.gaierror(-2, 'private TOKEN'), 'DNS_ERROR'),
+                    (TimeoutError('private TOKEN'), 'NETWORK_TIMEOUT'),
+                    (ConnectionRefusedError('private TOKEN'), 'CONNECTION_REFUSED'),
+                    (OSError('private TOKEN'), 'NETWORK_ERROR')]
+        for reason, expected in failures:
+            with self.subTest(category=expected):
+                live = m.Live(False, CODE)
+                live.opener = Mock()
+                live.opener.open.side_effect = m.urllib.error.URLError(reason)
+                with self.assertRaises(m.GateError) as caught:
+                    live.http(m.urllib.request.Request('https://private.invalid/'), 'RM_READRECORD')
+                self.assertEqual(str(caught.exception), 'HTTP RM_READRECORD status=' + expected)
+                self.assertNotIn('TOKEN', str(caught.exception))
+                self.assertNotIn('private', str(caught.exception))
+                self.assertTrue(caught.exception.__suppress_context__)
+                self.assertEqual(live.opener.open.call_count, 1)
+
     def test_default_dry_run_has_no_mutations(self):
         fake = Fake()
         result = run(fake)
