@@ -491,3 +491,11 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - Nova auditoria do run 41873429982 observou o mesmo pacote ativo às 14:01:49 BRT. Nenhum UpdateFunction posterior encontrado até essa leitura. Repositório consultado ao vivo: main/dev sem publicação de código posterior às bases já conhecidas; a branch de correção está em 274a0a7.
 - O dry-run da regularização excepcional da reserva antiga parou em `HTTP RM_READRECORD status=NETWORK_ERROR`, antes de qualquer escrita. Endpoint local 8051 respondeu HTTP 400 sem autenticação; 443 falhou na verificação de nome do certificado. Não mudar porta nem desabilitar TLS para contornar. Diagnóstico do executor deve distinguir rede/TLS sem revelar mensagens remotas ou credenciais.
 - 226374 continua sem liberação. Não aplicar a reserva nova com NF1141 enquanto permanece pendente a definição entre o documento real114 e um teste controlado1141 na produção.
+
+## 2026-11-04 — autorização da regularização específica do 226374
+
+- Usuário determinou executar a correção 2 e prosseguir com o número informado no formulário para o ticket de teste 226374. Foi explicitado no retorno que será usado o valor atual 1141, mantendo a série original 1. A regularização não conclui a tarefa Zeev nem cria financeiro.
+- Releitura do formulário e renderização local em 17:20 UTC preservaram o digest `dc1348992b3d67d49485a1ab8aef3b9dd7af7c51c0eef2e8f2817766cd1a0d9e`. Não é captura de um corpo HTTP real; o runtime continua validando a requisição completa.
+- Causa do 401 da manutenção: credencial do executor. Configurado secret temporário exclusivo RECONCILE_226374_ZEEV_TOKEN com a credencial local já validada, sem alterar TOKEN_ZEEV global nem ambiente Lambda. Remover ao terminar a operação e sua releitura independente.
+- Dry-run 41876425609 avançou após autenticação e parou com ValueError antes de qualquer escrita. A data nativa real contém fração de duas casas (15:15:27.53), aceita no Python local, mas incompatível com o parser ISO antigo. Executor fixado em Python 3.12, guard 3.11+ e teste com o dado real, mantendo o bloqueio para alteração posterior à tentativa.
+- Preparados workflow de aplicação única e releitura em executor independente. Todos os controles de ausência, fechamento, histórico imutável e CAS permanecem obrigatórios. Não repetir CAS após resposta incerta.
