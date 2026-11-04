@@ -1,0 +1,45 @@
+name: Execute authorized payment 225136 once
+on:
+  push:
+    branches: [fix/payment-native-225136-20261104]
+    paths:
+      - scripts/execute-payment-225136.py
+      - scripts/execute-payment-225136.cjs
+      - .github/workflows/execute-payment-225136.yml
+permissions:
+  contents: read
+concurrency:
+  group: payment-225136-controlled-execution
+  cancel-in-progress: false
+jobs:
+  execute:
+    if: false # Closed: movement 45370 / financial entry 70183 were independently verified.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run build:pagamento
+      - name: One native execution with production ownership and encrypted diagnostics
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_REGION: sa-east-1
+          AWS_PAGER: ''
+          TICKET225136_ZEEV_TOKEN: ${{ secrets.TICKET225136_ZEEV_TOKEN }}
+        run: python3 scripts/execute-payment-225136.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ticket225136-controlled-execution
+          path: .ticket225136-execution/
+          include-hidden-files: true
+          retention-days: 3

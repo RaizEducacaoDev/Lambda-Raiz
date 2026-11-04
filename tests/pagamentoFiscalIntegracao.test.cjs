@@ -152,3 +152,14 @@ test('timeout do SaveRecord não dispara uma segunda chamada nem expõe dados da
  assert.equal(parse(result).code,'CRIACAO_RM_NAO_CONFIRMADA');assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);
  assert.equal(JSON.stringify(result).includes('PRIVATE_NATIVE_PAYLOAD'),false);noDuplicateReads(x);
 });
+
+test('rejeição fiscal é decisão nativa e devolve motivo fixo sem número nem stack',async()=>{
+ const raw='Movimento 000000018 - Série 1: Natureza inválida.&#xD;Possíveis causas: natureza interestadual em movimentação interna e vice-versa.\n=====\nat RM.Mov.Movimento.MovMovConsistencia.ConsisteIntegracaoFiscal';
+ const x=setup({nativeResult:raw}),result=await x.run(),body=parse(result);
+ assert.equal(result.statusCode,503);assert.equal(body.code,'RM_INVALID_FISCAL_NATURE');
+ assert.match(body.message,/TOTVS rejeitou a natureza fiscal/);assert.match(body.message,/tarefa Fiscal/);
+ assert.doesNotMatch(body.message,/000000018|ConsisteIntegracaoFiscal|não autoriza|2\.949\.01/);
+ assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);noDuplicateReads(x);
+ assert.equal(JSON.stringify(x.calls.evidences).includes('Natureza inválida'),false);
+ assert.equal(x.calls.evidences.find(e=>e.phase==='native_result').diagnostic.reasonCode,'RM_INVALID_FISCAL_NATURE');
+});

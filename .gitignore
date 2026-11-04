@@ -46,3 +46,5 @@ credenciaisAWS.txt
 backup/
 
 undefined
+.native-fiscal-diagnostic-release/
+.ticket225136-execution/
