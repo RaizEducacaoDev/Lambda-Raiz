@@ -212,6 +212,26 @@ class AuditTests(unittest.TestCase):
             self.assertEqual(kwargs['env']['AWS_MAX_ATTEMPTS'], '1')
             self.assertNotIn('PASSWORD', a.FUNCTION_QUERY)
 
+    def test_cli_explicit_absence_envelope_is_required_not_empty_stdout(self):
+        request = {'TableName': a.TABLE, 'Key': {'pk': {'S': a.claim_key(229064)}}, 'ConsistentRead': True}
+        response = subprocess.CompletedProcess([], 0, stdout='{"Item":null,"ItemPresent":false}', stderr='')
+        with patch.object(a.subprocess, 'run', return_value=response) as execute:
+            self.assertEqual(a.ReadOnlyAws().call('dynamodb', 'get-item', request), {})
+            self.assertIn(a.DDB_QUERY, execute.call_args.args[0])
+        for invalid in ['', '{}', '{"Item":null}', '{"Item":{},"ItemPresent":false}',
+                        '{"Item":null,"ItemPresent":true}', '{"Item":null,"ItemPresent":0}']:
+            with self.subTest(value=invalid), patch.object(a.subprocess, 'run', return_value=
+                    subprocess.CompletedProcess([], 0, stdout=invalid, stderr='')), self.assertRaises(a.AuditError):
+                a.ReadOnlyAws().call('dynamodb', 'get-item', request)
+
+    def test_cli_presence_envelope_preserves_complete_typed_item(self):
+        item = root(229064)
+        item['unknownFutureAttribute'] = {'M': {'value': {'S': 'synthetic'}}}
+        request = {'TableName': a.TABLE, 'Key': {'pk': {'S': a.root_key(229064)}}, 'ConsistentRead': True}
+        response = subprocess.CompletedProcess([], 0, stdout=json.dumps({'Item': item, 'ItemPresent': True}), stderr='')
+        with patch.object(a.subprocess, 'run', return_value=response):
+            self.assertEqual(a.ReadOnlyAws().call('dynamodb', 'get-item', request), {'Item': item})
+
     def test_workflow_rejects_manual_event_rerun_other_repo_branch(self):
         env = {'GITHUB_ACTIONS': 'true', 'GITHUB_EVENT_NAME': 'push', 'GITHUB_REPOSITORY': a.REPOSITORY,
                'GITHUB_REF': 'refs/heads/' + a.BRANCH, 'GITHUB_RUN_ATTEMPT': '1',

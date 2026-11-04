@@ -36,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FUNCTION_QUERY = ('{FunctionName:FunctionName,FunctionArn:FunctionArn,CodeSha256:CodeSha256,'
                   'RevisionId:RevisionId,State:State,LastUpdateStatus:LastUpdateStatus,'
                   'Stage:Environment.Variables.STAGE,PaymentTable:Environment.Variables.PAGAMENTO_IDPGTO_TABLE}')
+DDB_QUERY = "{Item: Item, ItemPresent: contains(keys(@), 'Item')}"
 
 
 class AuditError(Exception):
@@ -99,6 +100,11 @@ class ReadOnlyAws:
                        '--cli-connect-timeout', '5', '--cli-read-timeout', '15']
             if service == 'lambda':
                 command += ['--query', FUNCTION_QUERY]
+            elif service == 'dynamodb':
+                # AWS CLI may print nothing for an empty GetItem response.
+                # Force a nonempty envelope, never interpret blank stdout as
+                # proof that a claim is absent.
+                command += ['--query', DDB_QUERY]
             try:
                 response = subprocess.run(command, capture_output=True, text=True, encoding='utf-8',
                                           timeout=25, env={**os.environ, 'AWS_MAX_ATTEMPTS': '1',
@@ -111,6 +117,14 @@ class ReadOnlyAws:
         except (ValueError, TypeError):
             raise AuditError('AWS_READ_JSON_INVALID') from None
         require(type(value) is dict, 'AWS_READ_RESPONSE_NOT_OBJECT')
+        if service == 'dynamodb':
+            require(set(value) == {'Item', 'ItemPresent'} and type(value['ItemPresent']) is bool,
+                    'DYNAMODB_PRESENCE_ENVELOPE_INVALID')
+            if value['ItemPresent'] is False:
+                require(value['Item'] is None, 'DYNAMODB_ABSENCE_ENVELOPE_INCONSISTENT')
+                return {}
+            require(type(value['Item']) is dict and bool(value['Item']), 'DYNAMODB_PRESENT_ITEM_INVALID')
+            return {'Item': value['Item']}
         return value
 
 
