@@ -23,6 +23,15 @@ if os.environ.get('INCIDENT_ORIGINAL_ONLY') == '1':
              'duplicate':'DUPLIC','required':'OBRIGATOR','invalid':'INVALID','period':'PERIODO',
              'timeout':'TIMEOUT','reset':'ECONNRESET','soap_fault':'FAULT','return_without_key':'CHAVE',
              'stock':'ESTOQUE','permission':'PERMISSAO','format':'FORMAT','product':'PRODUTO'}
+    known_errors={
+        'RM_RETURN_WITHOUT_EXPECTED_KEY':'Criação RM de resultado incerto; consultar movimento do ticket',
+        'CREATION_NOT_CONFIRMED':'Criação não confirmada; preservar reserva para conciliação',
+        'CREATION_STATE_MISMATCH':'Criação fora do estado autorizado',
+        'TIME_BEFORE_DISPATCH':'Tempo insuficiente antes de enviar a criação ao RM; manter pendente sem criar',
+        'TIME_BUDGET':'Tempo insuficiente; operação mantida pendente',
+        'SOAP_INVALID':'SOAP RM inválido ou Fault',
+        'SOAP_RESULT_MISSING':'Resultado SOAP RM ausente ou ambíguo',
+        'XML_INVALID':'XML RM inválido'}
     import unicodedata
     rows=[]
     for event in raw:
@@ -34,6 +43,7 @@ if os.environ.get('INCIDENT_ORIGINAL_ONLY') == '1':
              'labels':[label for label in ['[RM-INFO]','[RM-ERRO]','[RM-WARN]','[RM-DIAG]','[RM-IDPGTO]'] if label in message],
              'mentionedFields':[v for v in markers if re.search(r'\b'+v+r'\b',normalized)],
              'fixedIndicators':[k for k,v in phrases.items() if v in normalized]}
+        row['knownCodeErrors']=[code for code,literal in known_errors.items() if literal in message]
         # Export only the date field if explicitly present and matching a bounded date grammar.
         value=a.scalar(message,'dataDeEntrada')
         if value is not None and re.fullmatch(r'[0-9T:/ .+Z-]{0,35}',value): row['dataDeEntradaIfLogged']=value
