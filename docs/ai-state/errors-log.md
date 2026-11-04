@@ -508,3 +508,13 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - Novo executor confirmou estado, arquivo integral e novas consultas RM/Zeev às17:26:19UTC: `verified=true`, 0MOV/0LAN226374, 1141/1, IDPGTO3/CODCOLPGTO9, SHAprodPt8/rev8e190preservados. Somente duas escritas DynamoDB; nenhuma criação RM, invocação financeira ou conclusão Zeev.
 - Secret exclusivo de manutenção removido e ausência verificada. Workflows específicos arquivados com iffalse para evitar reexecução; código Lambda e credenciais globais não foram alterados nesta regularização.
 - Ticket liberado para aprovação pelo usuário. O lançamento ainda precisa ser criado pela execução normal do Zeev e ter seu IDLAN/IDPGTO conferidos; esta evidência não declara integração financeira concluída.
+
+## 2026-11-04 — diagnóstico 226455, sem liberação
+
+- Novo relato de criação incerta: PG/NF/Material/Boleto,9/2,fornecedor0/0000173084,NF1672577/série1,R$1145.84,IDPGTO6/9ativoI. EtapaT04. Aliasesbancárioscoerentes;keyNF44 e boleto47 presentes/formatoaceito. DataEntradaatualvazia; nãoatribuircausahistóricaaessecampo.
+- Auditreadonly41887595250: SHAativoPt8/rev8e190preservados. Rootprod#PG#9#226455CREATINGsemprotocolVersion/pg, digestc577742d...da9d9,ownere8942f30-e129-4d4d-b619-e1f82f06bb8e,lease1793366607452. Original30Oct13:21:57.452Z→SaveRecordinicio13:21:58.088→50313:21:59.030→END/REPORT1.58s. Request4a422f5f-566c-4f32-895a-00ad2d72041e.
+- Cobertura58páginascompleta; retentativasNov3ehoje18:25/26/27UTC409antesnovoSaveRecord. Hoje121–295ms. Nãoéreservaoriginadapelodeploy04Nov.
+- Auditclassificado41888545977 confirmouliteralfixa RM_RETURN_WITHOUT_EXPECTED_KEY no[RM-ERRO]original: respostaSaveRecordnãoforneceuchaveesperada. Nãohátextonativodetalhadopreservado; nãoconcluirtimeout/data/duplicidadecomoeroriginal.
+- SQLcommittedindependenteTMOV/FLANporfornecedor/número/dataorticketzero; nativeRETRY0/0,DOC1672577/1CODTMV1.2.01CODTDO055semcolisão. Currentrenderdigest9ad932e3...0189≠original; templatearquivado/nãocapturaHTTP, nãoinferequalcampofoialterado.
+- Revisãoindependentedocódigo: guardseautoretomadapublicadossãorestritos1.2.03; Material1.2.01nãoabrangido. AmpliarMaterialsozinhonãoliberaCREATINGlegadocomzerolookup. Precisaintençãoatualválida+regularizaçãoespecíficacomprovas/histórico/CAS.
+- Nenhumdeploy,escritaDynamo,SaveRecordoualteraçãoZeev; ticketnãoliberado. RelatórionoDesktop/ProblemasTesouraria2.0 e evidênciasemartifacts/zeev-226455-20261104.
