@@ -499,3 +499,12 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - Causa do 401 da manutenção: credencial do executor. Configurado secret temporário exclusivo RECONCILE_226374_ZEEV_TOKEN com a credencial local já validada, sem alterar TOKEN_ZEEV global nem ambiente Lambda. Remover ao terminar a operação e sua releitura independente.
 - Dry-run 41876425609 avançou após autenticação e parou com ValueError antes de qualquer escrita. A data nativa real contém fração de duas casas (15:15:27.53), aceita no Python local, mas incompatível com o parser ISO antigo. Executor fixado em Python 3.12, guard 3.11+ e teste com o dado real, mantendo o bloqueio para alteração posterior à tentativa.
 - Preparados workflow de aplicação única e releitura em executor independente. Todos os controles de ausência, fechamento, histórico imutável e CAS permanecem obrigatórios. Não repetir CAS após resposta incerta.
+
+## 2026-11-04 — regularização 226374 aplicada e relida
+
+- Dry-run 41876835298 passou com Python 3.12, 17 testes e todas as leituras ao vivo: zero MOV/FLAN do ticket, documento 1141/série1 sem conflito, banco3/9ativo, somente78497/161973históricos na observação independente, zero despacho posterior à chamada original encerrada.
+- Primeiro workflow de aplicação 41877135301 não iniciou jobs por erro YAML no texto da condição. Corrigido como bloco, validado por parser; nenhuma escrita nessa tentativa.
+- Run 41877211477, commit e5f3a0d, confirmou `applied=true`, `NEW_ATTEMPT_RESERVED`, `acknowledgementLost=false` às17:25:36UTC. Raiz exclusiva prod#PG#9#226374 passou de CREATING para RESERVED/protocolVersion2, novo digestdc134...0d9e, owner0ee8dce2-a2fd-41a3-a629-b7375011078f e leaseexpirado1793813134423. Snapshotoriginalcompleto preservado em ADJUDICATION#8429cbcee1f880078ef0103aa7494adffa3eb3fd0823523d90574537951d344d.
+- Novo executor confirmou estado, arquivo integral e novas consultas RM/Zeev às17:26:19UTC: `verified=true`, 0MOV/0LAN226374, 1141/1, IDPGTO3/CODCOLPGTO9, SHAprodPt8/rev8e190preservados. Somente duas escritas DynamoDB; nenhuma criação RM, invocação financeira ou conclusão Zeev.
+- Secret exclusivo de manutenção removido e ausência verificada. Workflows específicos arquivados com iffalse para evitar reexecução; código Lambda e credenciais globais não foram alterados nesta regularização.
+- Ticket liberado para aprovação pelo usuário. O lançamento ainda precisa ser criado pela execução normal do Zeev e ter seu IDLAN/IDPGTO conferidos; esta evidência não declara integração financeira concluída.

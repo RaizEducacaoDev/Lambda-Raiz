@@ -11,6 +11,8 @@ permissions:
   contents: read
 jobs:
   read-only:
+    # The historical root was recovered in run 41877211477; this preflight is archived.
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     steps:
