@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location('legacy226374', Path(__file__).resolve().parents[1] /
                                              'scripts/reconcile-legacy-226374.py')
@@ -111,6 +112,46 @@ def run(fake, apply=False, authorized=False, **kwargs):
 
 
 class LegacyRecovery(unittest.TestCase):
+    def test_zeev_override_is_memory_only_and_preserves_runtime_gates(self):
+        live = m.Live(False, CODE)
+        env = {'STAGE': 'prod', 'PAGAMENTO_IDPGTO_TABLE': m.TABLE,
+               'RM_PROD': m.HOST.replace(':8051', ''), 'ZEEV_PROD': m.ZEEV,
+               'USERNAME_TOTVS': 'fixture-user', 'PASSWORD_TOTVS': 'fixture-password', 'TOKEN_ZEEV': ''}
+        cfg = {'CodeSha256': CODE, 'State': 'Active', 'LastUpdateStatus': 'Successful',
+               'Environment': {'Variables': env}}
+        live.aws = Mock(return_value=cfg)
+        original = copy.deepcopy(cfg)
+        with patch.dict(m.os.environ, {'RECONCILE_ZEEV_TOKEN': 'fixture-override'}, clear=True):
+            self.assertEqual(live.config(), (cfg, env))
+            self.assertEqual(live.zeev_token(env), 'fixture-override')
+            self.assertEqual(cfg, original)
+            env['STAGE'] = 'dev'
+            with self.assertRaises(m.GateError):
+                live.config()
+            env['STAGE'] = 'prod'
+        with patch.dict(m.os.environ, {}, clear=True):
+            with self.assertRaises(m.GateError):
+                live.config()
+            self.assertEqual(live.zeev_token({'TOKEN_ZEEV': 'fixture-native'}), 'fixture-native')
+        self.assertEqual({call.args[:2] for call in live.aws.call_args_list},
+                         {('lambda', 'get-function-configuration')})
+
+    def test_http_failure_reports_stage_status_without_raw_secret(self):
+        live = m.Live(False, CODE)
+        for stage in ('ZEEV_INSTANCE', 'RM_READRECORD', 'RM_QUERY', 'AWS_PACKAGE'):
+            with self.subTest(stage=stage):
+                error = m.urllib.error.HTTPError('https://private.invalid/?secret=TOKEN', 401,
+                                                'private body TOKEN', {'Authorization': 'TOKEN'},
+                                                m.io.BytesIO(b'private response TOKEN'))
+                live.opener = Mock()
+                live.opener.open.side_effect = error
+                with self.assertRaises(m.GateError) as caught:
+                    live.http(m.urllib.request.Request('https://private.invalid/'), stage)
+                self.assertEqual(str(caught.exception), 'HTTP ' + stage + ' status=401')
+                self.assertNotIn('TOKEN', str(caught.exception))
+                self.assertNotIn('private', str(caught.exception))
+                self.assertTrue(caught.exception.__suppress_context__)
+
     def test_default_dry_run_has_no_mutations(self):
         fake = Fake()
         result = run(fake)

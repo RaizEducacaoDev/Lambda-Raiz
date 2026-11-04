@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -179,11 +180,25 @@ class Live:
             raise GateError('AWS ' + (error.group(1) if error else 'CLI_ERROR'))
         return json.loads(result.stdout or '{}')
 
-    def http(self, request):
-        with self.opener.open(request, timeout=15) as response:
-            value = response.read(15_000_001)
+    def http(self, request, stage):
+        require(stage in ('ZEEV_INSTANCE', 'RM_READRECORD', 'RM_QUERY', 'AWS_PACKAGE'), 'Unknown HTTP stage')
+        try:
+            with self.opener.open(request, timeout=15) as response:
+                value = response.read(15_000_001)
+        except urllib.error.HTTPError as error:
+            status = error.code if isinstance(error.code, int) and 100 <= error.code <= 599 else 'UNKNOWN'
+            raise GateError(f'HTTP {stage} status={status}') from None
+        except urllib.error.URLError:
+            raise GateError(f'HTTP {stage} status=NETWORK_ERROR') from None
+        except TimeoutError:
+            raise GateError(f'HTTP {stage} status=TIMEOUT') from None
         require(len(value) <= 15_000_000, 'Remote response exceeds limit')
         return value
+
+    @staticmethod
+    def zeev_token(env):
+        # Read-only, in-memory override; never mutate or return it in AWS configuration/evidence.
+        return os.environ.get('RECONCILE_ZEEV_TOKEN') or env.get('TOKEN_ZEEV', '')
 
     def config(self):
         cfg = self.aws('lambda', 'get-function-configuration', {'FunctionName': FUNCTION})
@@ -193,7 +208,8 @@ class Live:
         require(env.get('STAGE') == 'prod' and env.get('PAGAMENTO_IDPGTO_TABLE') == TABLE and
                 env.get('RM_PROD', '').rstrip('/') == HOST.replace(':8051', '') and
                 env.get('ZEEV_PROD', '').rstrip('/') == ZEEV, 'Runtime environment mismatch')
-        require(all(env.get(k) for k in ('USERNAME_TOTVS', 'PASSWORD_TOTVS', 'TOKEN_ZEEV')), 'Credentials unavailable')
+        require(all(env.get(k) for k in ('USERNAME_TOTVS', 'PASSWORD_TOTVS')) and self.zeev_token(env),
+                'Credentials unavailable')
         return cfg, env
 
     def bootstrap(self):
@@ -203,7 +219,7 @@ class Live:
         require(function['Configuration']['CodeSha256'] == self.expected_sha, 'Runtime changed during package read')
         url = function['Code']['Location']
         require(urllib.parse.urlsplit(url).scheme == 'https', 'Non-HTTPS package URL')
-        package = self.http(urllib.request.Request(url))
+        package = self.http(urllib.request.Request(url), 'AWS_PACKAGE')
         require(base64.b64encode(hashlib.sha256(package).digest()).decode() == self.expected_sha,
                 'Downloaded package hash mismatch')
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
@@ -224,7 +240,7 @@ class Live:
             ET.SubElement(op, name).text = value
         raw = self.http(urllib.request.Request(HOST + '/wsDataServer/IwsDataServer', data=ET.tostring(envelope),
                     headers={'Authorization': self.auth(env), 'Content-Type': 'text/xml;charset=UTF-8',
-                             'SOAPAction': 'http://www.totvs.com/IwsDataServer/ReadRecord'}))
+                             'SOAPAction': 'http://www.totvs.com/IwsDataServer/ReadRecord'}), 'RM_READRECORD')
         require(b'<!DOCTYPE' not in raw.upper() and b'<!ENTITY' not in raw.upper(), 'Unsafe XML')
         result = ET.fromstring(raw).find('.//{http://www.totvs.com/}ReadRecordResult')
         require(result is not None and result.text, 'ReadRecord result absent')
@@ -239,7 +255,7 @@ class Live:
         require(code in ('RAIZ.PG.ORIG', 'RAIZ.PG.RETRY', 'RAIZ.PG.DOC'), 'Native query not allowlisted')
         url = HOST + '/api/framework/v1/consultaSQLServer/RealizaConsulta/' + code + '/0/T?'
         return json.loads(self.http(urllib.request.Request(url + urllib.parse.urlencode({'parameters': params}),
-                   headers={'Authorization': self.auth(env), 'Accept': 'application/json'})))
+                   headers={'Authorization': self.auth(env), 'Accept': 'application/json'}), 'RM_QUERY'))
 
     def later_dispatches(self):
         count, token, seen = 0, None, set()
@@ -269,7 +285,7 @@ class Live:
                     normalize((ROOT / 'sql' / filename).read_text(encoding='utf-8-sig')), 'Native SQL contract drift')
         params = [('formFieldNames', key) for key in FIELDS] + [('useCache', 'false'), ('showPendingInstanceTasks', 'true')]
         raw = self.http(urllib.request.Request(ZEEV + '/api/2/instances/226374?' + urllib.parse.urlencode(params),
-                   headers={'Authorization': 'Bearer ' + env['TOKEN_ZEEV'], 'Accept': 'application/json'}))
+                   headers={'Authorization': 'Bearer ' + self.zeev_token(env), 'Accept': 'application/json'}), 'ZEEV_INSTANCE')
         data = json.loads(raw)
         require(data.get('id') == 226374 and data.get('flow', {}).get('id') == 299, 'Zeev ticket/flow mismatch')
         require(any(task.get('active') is True and task.get('task', {}).get('name') ==

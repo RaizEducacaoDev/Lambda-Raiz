@@ -29,6 +29,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: sa-east-1
           AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.TOKEN_ZEEV }}
         run: |
           python3 scripts/prepare-closure-proof-226374.py --source .payment-current-1325/readback.json --output .legacy226374/closure-proof.json --run-id "$GITHUB_RUN_ID"
           python3 scripts/reconcile-legacy-226374.py --new-digest dc1348992b3d67d49485a1ab8aef3b9dd7af7c51c0eef2e8f2817766cd1a0d9e --expected-code-sha 'Pt8n1Td1BarRUJWuGaQnMcNY5bYXcS8b3TvUaY28U0U=' --closure-proof .legacy226374/closure-proof.json --output .legacy226374/dry-run.json
