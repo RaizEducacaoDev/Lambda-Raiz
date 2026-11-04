@@ -189,11 +189,12 @@ test('SC/OC sem financeiro são preservados nos dez tipos; qualquer parcela ante
  }
 });
 
-test('CC35 com resposta perdida permanece incerta mesmo existindo movimento; contratoDOC9 não autoriza reconciliação incompleta',async()=>{
+test('CC35 com resposta perdida reutiliza movimento localizado sem segunda criação',async()=>{
  const x=await setup({codTmv:'1.2.10',createError:true,commitOnError:true});
  const input={tipoDoPagamento:'CC',contasDeConsumo:'E',numeroDaNF:'12345678901234567890123456789012345'};
  assert.equal((await x.run(input)).statusCode,503);await x.expire();const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
- assert.equal((await x.run(input)).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
+ assert.equal((await x.run(input)).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+ assert.equal((await x.all()).find(r=>r.pk===before.pk).state,'COMPLETE');
 });
 
 test('identidade bancária inválida conserva o código público e nunca reserva',async()=>{
@@ -207,12 +208,12 @@ test('retomada positiva com entrada omitida usa a data nativa sem escrever data 
  assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').DATAVENCIMENTO,'2026-11-10');
 });
 
-test('rejeição RM retorna motivo allowlisted e persiste hash sem liberar CREATING por zero',async()=>{
+test('rejeição RM retorna motivo allowlisted e nova solicitação pode tentar após expirar',async()=>{
  const raw='Já Existe Nota do Emitente com este Número e Série. CPF_PRIVATE private@example.test\n=====\nat RM.Fixture';
  const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
  const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,2);assert.equal(evidence.find(r=>r.evidence.phase==='native_result').evidence.diagnostic.reasonCode,'RM_DUPLICATE_RECORD');
  const output=JSON.stringify([result,evidence]);assert.equal(output.includes('CPF_PRIVATE'),false);assert.equal(output.includes('private@example.test'),false);
- await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,409);assert.equal(x.count.create,1);
+ await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,409);assert.equal(x.count.create,2);
 });
 
 test('PIX: criação e gravação com leitura final; replay em instância nova sem nova escrita',async()=>{
@@ -256,9 +257,15 @@ test('transferência, boleto e concessionária preservam a modalidade nativa e o
     {bank:{FORMAPAGAMENTO:'N'},fields:{chavePIX:'',codigoTipoChavePIX:'',codigoDeBarrasBoleto:'836500000002100000000008000000000000000000000000',formaPagamentoIdpgto:'Boleto'}}];
   for(const c of cases){const x=await setup({bank:c.bank});assert.equal((await x.run(c.fields)).statusCode,200);assert.equal(x.lans.get('9002').IDPGTO,'6');}
 });
-test('erros e timeout de criação nunca autorizam segunda criação após expirar lock',async()=>{
+test('erro ou timeout não bloqueia permanentemente novo envio após expirar lock',async()=>{
   for(const opts of [{createError:true},{createResult:'ambiguous'}]){
-    const x=await setup(opts);assert.notEqual((await x.run()).statusCode,200);await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+    const x=await setup(opts);assert.notEqual((await x.run()).statusCode,200);
+    assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+    await x.expire();x.setFiscal({createError:false,createResult:'8;9001'});
+    assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,2);assert.equal(x.count.update,1);
+    const history=(await x.all()).filter(r=>r.pk.includes('#HISTORY#'));
+    assert.equal(history.length,1);assert.equal(history[0].snapshot.state,'CREATING');
+    assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,2);
   }
 });
 test('timeout após checkpoint do movimento recupera PG sem duplicar',async()=>{
@@ -311,12 +318,12 @@ test('recuperação positiva recusa documento, data, valor, parcela, fornecedor 
   }
 });
 
-test('zero no RM após envio incerto nunca autoriza recriar, mesmo com NF corrigida',async()=>{
+test('zero no RM permite tentar novamente a mesma NF, preservando a intenção e as regras nativas',async()=>{
   const x=await setup({createError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
   await x.run(fiscalFields);await x.expire();
-  assert.equal((await x.run(fiscalFields)).statusCode,409);
+  assert.equal((await x.run(fiscalFields)).statusCode,503);
   assert.equal((await x.run({...fiscalFields,numeroDaNF:'9003002'})).statusCode,409);
-  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.equal(x.count.create,2);assert.equal(x.count.update,0);
   assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
 });
 
@@ -413,7 +420,7 @@ test('baseline RM sem raiz ou RESERVED expirado adota o mesmo movimento sem fisc
     const root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'COMPLETE');assert.equal(root.pg,'9001');
   }
 });
-test('CREATING ou estado desconhecido com candidato RM mantém409 e a reserva intacta',async()=>{
+test('CREATING expirado reutiliza candidato RM; estado desconhecido mantém409',async()=>{
   for(const state of ['CREATING','RNE']){
     const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},fiscalError:true});
     const fields={...payload,...fiscalFields},key=identidadePagamento(fields);
@@ -422,8 +429,9 @@ test('CREATING ou estado desconhecido com candidato RM mantém409 e a reserva in
     op=await x.repo.avancar(op,'CREATING');
     if(state==='RNE')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:op.pk},UpdateExpression:'SET #state=:state',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':state}}));
     await x.expire();const before=(await x.all())[0];
-    assert.equal((await x.run(fiscalFields)).statusCode,409);assert.deepEqual((await x.all())[0],before);
-    assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal(x.count.fiscal,0);
+    assert.equal((await x.run(fiscalFields)).statusCode,state==='CREATING'?200:409);
+    if(state==='RNE')assert.deepEqual((await x.all())[0],before);
+    assert.equal(x.count.create,0);assert.equal(x.count.update,state==='CREATING'?1:0);assert.equal(x.count.fiscal,0);
   }
 });
 test('orçamento curto bloqueia antes de CREATING e pode retomar uma reserva ainda sem efeito',async()=>{
@@ -482,7 +490,7 @@ test('erros do legado injetado registram etapa e classe sem expor Axios config, 
   assert.ok(output.includes('ERR_CANCELED'));assert.equal(output.includes(secret),false);
   assert.equal(output.includes('Authorization'),false);assert.equal((await x.all())[0].state,'CREATING');
 });
-test('retorno RM sem chave registra somente categoria e tamanho e mantém a criação bloqueada',async()=>{
+test('retorno RM sem chave registra somente categoria e tamanho e permite nova tentativa',async()=>{
   const secret='SYNTHETIC_RM_DIAGNOSTIC_MUST_NOT_APPEAR';
   const x=await setup({realLegacy:true,createResult:`Business rejection ${secret} ===== at RM.Fixture`});
   const logs=[],original={info:console.info,warn:console.warn,error:console.error};
@@ -492,9 +500,9 @@ test('retorno RM sem chave registra somente categoria e tamanho e mantém a cria
   } finally {Object.assign(console,original);}
   const output=JSON.stringify(logs);assert.ok(output.includes('rm_rejection_or_diagnostic'));assert.ok(output.includes('length'));
   assert.equal(output.includes(secret),false);assert.equal((await x.all())[0].state,'CREATING');
-  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);assert.equal(x.count.update,0);
 });
-test('rejeição1586multilinha registra motivo e hash sem dados sensíveis, preservando CREATING e409',async()=>{
+test('rejeição1586multilinha registra motivo sem dados sensíveis e permite nova tentativa',async()=>{
   const raw='Campo CODTRB não foi informado.\r\nprivate@example.test CPF12345678909 contaACCOUNT_PRIVATE\r\n=====\r\nat RM.Fixture'.padEnd(1586,'x');
   const x=await setup({realLegacy:true,createResult:raw});
   const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
@@ -503,9 +511,9 @@ test('rejeição1586multilinha registra motivo e hash sem dados sensíveis, pres
   assert.equal(diagnostic.responseSha256,require('node:crypto').createHash('sha256').update(raw).digest('hex'));
   const serialized=JSON.stringify(logs);for(const value of ['private@example.test','CPF12345678909','ACCOUNT_PRIVATE',raw])assert.equal(serialized.includes(value),false);
   assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
-  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+  await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
 });
-test('chave recebida fica distinguível de checkpoint perdido, sem atualizar banco ou criar novamente',async()=>{
+test('chave recebida fica distinguível de checkpoint perdido; nova tentativa consulta o RM',async()=>{
   const x=await setup({realLegacy:true});const advance=x.repo.avancar.bind(x.repo);
   x.repo.avancar=async(op,state,pg)=>{if(state==='CREATED')throw Object.assign(Error('PRIVATE_CHECKPOINT_DATA'),{name:'TimeoutError'});return advance(op,state,pg);};
   const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
@@ -515,7 +523,7 @@ test('chave recebida fica distinguível de checkpoint perdido, sem atualizar ban
   assert.equal(pending.creationStage,'checkpoint_created');assert.equal(pending.receivedPg,'9001');assert.equal(pending.pg,undefined);
   assert.equal(JSON.stringify(logs).includes('PRIVATE_CHECKPOINT_DATA'),false);
   assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
-  await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);
+  await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
 });
 test('falha do checkpointCREATING nunca é apresentada como despacho ou respostaRM',async()=>{
   const x=await setup({realLegacy:true});const advance=x.repo.avancar.bind(x.repo);

@@ -138,7 +138,7 @@ test('CREATING legado com prova positiva fornecida pelo serviço só vira CREATE
  assert.equal((await new DynamoPagamento(x.table,doc).consultar(result.pk)).recuperadaCriacaoIncerta,true);
 });
 
-test('dois conciliadores de CREATING só confirmam um PG; não existe caminho de reset',async()=>{
+test('dois conciliadores de CREATING só confirmam um PG',async()=>{
  const x=await fixture({state:'CREATING'});
  const results=await Promise.allSettled([x.repo.confirmarCriacaoIncerta(x.original,'99863',30000),x.repo.confirmarCriacaoIncerta(x.original,'99864',30000)]);
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await x.root()).state,'CREATED');
@@ -146,6 +146,36 @@ test('dois conciliadores de CREATING só confirmam um PG; não existe caminho de
  await assert.rejects(()=>x.repo.corrigirReserva(x.original,novoDigest,30000),ConflitoPagamento);
  const y=await fixture({state:'CREATING',lockUntil:Date.now()+120000});
  await assert.rejects(()=>y.repo.confirmarCriacaoIncerta(y.original,'99863',30000),ConflitoPagamento);
+});
+
+test('CREATING expirado volta a RESERVED com histórico, mesmo para reserva legada',async()=>{
+ for(const legacy of [false,true]){
+  const x=await fixture({state:'CREATING'});
+  if(legacy){delete x.original.protocolVersion;await x.replace(x.original);}
+  const result=await x.repo.reservar(x.original.pk,digest,undefined,30000);
+  assert.equal(result.state,'RESERVED');assert.equal(result.digest,digest);
+  assert.notEqual(result.owner,x.original.owner);assert.ok(result.lockUntil>Date.now());
+  assert.equal(Object.hasOwn(result,'pg'),false);assert.deepEqual(result.auditMetadata,x.original.auditMetadata);
+  assert.equal(result.protocolVersion,x.original.protocolVersion);
+  assert.deepEqual(histories(await x.all())[0].snapshot,x.original);
+  await assert.rejects(()=>x.repo.avancar(x.original,'CREATED','99863'),{name:'ConditionalCheckFailedException'});
+  assert.equal((await x.repo.avancar(result,'CREATING')).state,'CREATING');
+ }
+});
+
+test('duas novas tentativas sobre CREATING expirado têm um único dono',async()=>{
+ const x=await fixture({state:'CREATING'});
+ const results=await Promise.allSettled([x.repo.reservar(x.original.pk,digest,undefined,30000),x.repo.reservar(x.original.pk,digest,undefined,30000)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal((await x.root()).state,'RESERVED');assert.equal(histories(await x.all()).length,1);
+});
+
+test('nova tentativa CREATING preserva lease ativo, intenção diferente e movimento já vinculado',async()=>{
+ for(const change of [{lockUntil:Date.now()+120000},{digest:outroDigest},{pg:'99863'},{pg:null},{lockUntil:0}]){
+  const x=await fixture({state:'CREATING',...change});
+  await assert.rejects(()=>x.repo.reservar(x.original.pk,digest,undefined,30000),ConflitoPagamento);
+  assert.deepEqual(await x.root(),x.original);assert.equal(histories(await x.all()).length,0);
+ }
 });
 
 test('confirmação CREATING não aceita snapshot alterado durante a leitura da prova',async()=>{

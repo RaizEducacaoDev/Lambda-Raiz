@@ -94,7 +94,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         serie: nota.serie, tipoDocumento: nota.tipoDocumento, emissao: texto(entrada.dataDeEmissao),
         entrada: texto(entrada.dataDeEntrada), valor: texto(entrada.valorTotal), planos });
     };
-    // All PG types share the irreversible protocol. Existing replay remains
+    // All PG types share the reservation protocol. Existing replay remains
     // strict; the caller cannot supply a proof, a replacement owner or a state.
     if (!pgEntrada) {
       const anterior = await repo.consultar(pk);
@@ -121,8 +121,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
             op = await repo.confirmarCriacaoIncerta(anterior, pg, prazo.disponivel());
             console.info('[RM-IDPGTO] Retomada confirmada', { ticket, coligada, event: 'existing_creation_confirmed', idMov: pg });
           }
-          // An empty query is not proof of rollback. The original state remains
-          // irreversible unless a positively identified native movement exists.
+          // If no movement can be confirmed here, the normal reservation path
+          // may resume an expired attempt and repeat the native preflight.
         }
       }
     }
@@ -228,8 +228,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           const evidencia = prepararEvidencia(xml, entrada, codTmv, chave, filial, ticket, planos, documentoCriacao);
           if (repo.registrarEvidencia) await repo.registrarEvidencia(op!, evidencia);
           prazo.timeoutCriacao(2500);
-          // A reserva irreversível antecede o SaveRecord. Nem timeout nem falha
-          // de checkpoint podem permitir uma segunda criação automática.
+          // Record the attempt before SaveRecord. A later request may resume
+          // it after this lease expires, retaining the normal native lookups.
           etapaCriacao = 'checkpoint_creating';
           let inicioEtapa = Date.now();
           console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'creating_checkpoint_started' });
@@ -374,8 +374,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     const incerta = estado === 'CREATING' || etapaCriacao === 'checkpoint_creating';
     const mensagem = diagnosticoCriacao ? mensagemDiagnostico(diagnosticoCriacao.reasonCode) :
       erro instanceof PagamentoInvalido ? erro.message :
-      incerta ? 'Existe uma tentativa de criação sem confirmação neste ticket. A integração só retomará um movimento existente após conferir documento e todas as parcelas no TOTVS. Não altere o documento para tentar criar novamente; solicite a conferência desta tentativa.' :
       erro instanceof ConflitoPagamento ? erro.message :
+      incerta ? 'Não foi possível confirmar o resultado desta tentativa no TOTVS. Aguarde o término do processamento e reenvie a mesma solicitação.' :
       op?.pg ? 'O movimento já foi identificado no TOTVS, mas o vínculo bancário ainda não foi confirmado. Reenvie a mesma solicitação para conferir e concluir as parcelas existentes.' :
       'A validação anterior ao envio não foi concluída. Confira os dados do formulário e tente novamente; se persistir, informe o ticket ao suporte.';
     console.warn('[RM-IDPGTO] Integração pendente', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
