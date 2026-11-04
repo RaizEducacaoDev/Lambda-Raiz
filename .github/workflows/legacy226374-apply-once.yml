@@ -10,7 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
-    if: github.event.head_commit.message == 'ops: reconcile authorized ticket 226374 once'
+    if: >-
+      github.event.head_commit.message == 'ops: reconcile authorized ticket 226374 once'
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     steps:
