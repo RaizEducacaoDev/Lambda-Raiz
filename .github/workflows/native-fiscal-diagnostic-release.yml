@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: false # One-off release completed by run 41918344032; preserve evidence, do not republish.
     runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
@@ -79,4 +80,3 @@ jobs:
           path: .native-fiscal-diagnostic-release/
           include-hidden-files: true
           retention-days: 14
-
