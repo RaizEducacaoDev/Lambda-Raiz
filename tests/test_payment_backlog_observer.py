@@ -199,6 +199,20 @@ class ObserverTests(unittest.TestCase):
         observer.query=extra
         with self.assertRaisesRegex(o.m.GateError,'CENSUS_DIFFERS'):observer.observe(plan)
 
+    def test_native_bank_key_change_alters_proof_even_with_same_id_and_modality(self):
+        plan,proof=f.fixtures();observer=FakeObserver(plan,proof);original=observer.read_record
+        current=['first-private-key']
+        def read(server,key,company):
+            result=original(server,key,company)
+            if server=='FinDadosPgtoDataBR':o.ET.SubElement(result.find('FDadosPgto'),'CHAVE').text=current[0]
+            return result
+        observer.read_record=read
+        before=observer.observe(plan);current[0]='changed-private-key';after=observer.observe(plan)
+        self.assertNotEqual(before['bankDetailsSha256'],after['bankDetailsSha256'])
+        plan['expectedObservationSha256']=before['sourceReadbackSha256']
+        with self.assertRaisesRegex(o.m.GateError,'CONTENT_CHANGED'):o.m.validate_observation(plan,after)
+        self.assertNotIn('changed-private-key',json.dumps(after))
+
     def test_census_rejects_partial_pages_and_wrong_parameter_echo(self):
         plan,proof=f.fixtures();observer=FakeObserver(plan,proof)
         params={'CODCOLIGADA':'1','CODCOLCFO':'0','CODCFO':'0000157430','TICKET':'225136','NUMERO':'18','EMISSAO':'2026-10-23','INICIO':'2026-10-29T12:00:00','FIM':'2026-10-29T15:00:00'}

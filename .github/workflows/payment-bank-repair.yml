@@ -1,0 +1,75 @@
+name: Pinned existing-launch bank repair
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/payment-bank-repair.json
+      - .github/workflows/payment-bank-repair.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+jobs:
+  bank:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: python3 -m unittest discover -s tests -p 'test_payment_bank_*.py'
+      - id: config
+        run: python3 scripts/run-payment-bank-repair.py --emit-workflow-config
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41892943724
+          name: payment-bulk-readonly-evidence
+          path: .payment-bulk-readonly
+      - uses: actions/download-artifact@v4
+        if: steps.config.outputs.mode == 'apply'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.config.outputs.approved_run }}
+          name: payment-bank-repair-evidence
+          path: .approved-payment-bank-repair
+      - uses: actions/download-artifact@v4
+        if: steps.config.outputs.mode == 'apply' && steps.config.outputs.canary_run != '0'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.config.outputs.canary_run }}
+          name: payment-bank-repair-evidence
+          path: .verified-payment-bank-canary
+      - name: Prepare read-only, or apply pinned plan with per-target lease
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/run-payment-bank-repair.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-repair-evidence
+          path: .payment-bank-repair/
+          include-hidden-files: true
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-repair-lease-evidence
+          path: .payment-bank-lease/
+          include-hidden-files: true
+          retention-days: 7

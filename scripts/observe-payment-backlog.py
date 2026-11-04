@@ -29,7 +29,8 @@ HOST='https://raizeducacao160286.rm.cloudtotvs.com.br:8051'
 ZEEV='https://raizeducacao.zeev.it'
 TEMPLATE=ROOT/'scripts/payment-backlog-template.txt'
 CONTRACTS={'RAIZ.PG.RETRY':'pagamento-retomada.sql','RAIZ.PG.DOC2':'pagamento-documento-v2.sql',
-           'RAIZ.PG.FISC':'pagamento-natureza-fiscal.sql','RAIZ.PG.CENSO':'pagamento-censo-operacional.sql'}
+           'RAIZ.PG.FISC':'pagamento-natureza-fiscal.sql','RAIZ.PG.CENSO':'pagamento-censo-operacional.sql',
+           'RAIZ.PG.WINDOW':'pagamento-janela-criacao.sql'}
 EXTRA=['idPagamento','codcolpgto','formaDePagamento','novaFormaDePagamento','codigoPagamento','codigoTipoChavePIX','chavePIX','qtdParcelas','idDoLancamento']
 NODE=r"""
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
@@ -42,7 +43,8 @@ try {
  const key=m.identidadePagamento(x.payload),alias=m.identidadePagamento(x.form);
  if(JSON.stringify(key)!==JSON.stringify(alias))throw Error('alias');
  const plans=m.planosPagamento(x.payload,key),type=m.codigoMovimento(x.payload);
- if(!Array.isArray(x.payload.itens)||!x.payload.itens.length||x.payload.itens.some(i=>!/^\d+$/.test(i.codigoDoItem||'')||!i.codigoDaNatureza))throw Error('items');
+ const automaticItems=['1.2.09','1.2.10','1.2.11','1.2.12','1.2.08','1.2.17'].includes(type);
+ if(!automaticItems&&(!Array.isArray(x.payload.itens)||!x.payload.itens.length||x.payload.itens.some(i=>!/^\d+$/.test(i.codigoDoItem||'')||!i.codigoDaNatureza)))throw Error('items');
  if(x.form.qtdParcelas && (!/^[1-9]\d*$/.test(x.form.qtdParcelas)||Number(x.form.qtdParcelas)!==plans.length))throw Error('installments');
  const context={codColigada:key.codColPgto,codFilial:x.form.codigoDaFilial2,codColCfo:key.codColCfo,codCfo:key.codCfo};
  const documentKey=d.prepararDocumento(x.payload,{...context,codTmv:type});if(!documentKey)throw Error('document contract');
@@ -215,6 +217,7 @@ class Observer:
 
     def contracts(self):
         for code,filename in CONTRACTS.items():
+            if code=='RAIZ.PG.WINDOW' and self.plan.get('alternativeOriginalClosure') is None:continue
             row=unique(self.read_record('GlbConsSQLData','0;T;'+code,0),'GConsSql')
             m.require(normalized_sql(row.get('SENTENCA',''))==normalized_sql((ROOT/'sql'/filename).read_text(encoding='utf-8-sig')),'NATIVE_QUERY_CONTRACT_CHANGED')
 
@@ -280,9 +283,20 @@ class Observer:
                 if row and row.get('ticket')==self.plan['ticket'] and ((row.get('etapa')=='SaveRecord' and row.get('evento')=='inicio') or row.get('event')=='transport_call_started'):
                     m.require(row.get('requestId')==self.request and row['timestamp']<=ends[0],'LATER_NATIVE_DISPATCH_FOUND')
         source=m.sha({'auditSha256':self.plan['auditSha256'],'requestId':self.request,'termination':selected,'later':later})
-        return {'observedUtc':m.utc(),'originalRequestId':self.request,'logSourceSha256':source,
+        result={'observedUtc':m.utc(),'originalRequestId':self.request,'logSourceSha256':source,
           'originalRootSha256':m.sha(self.plan['expectedRoot']),'originalStartMs':starts[0],'originalEndMs':ends[0],'originalReportMs':reports[0],
           'endSeen':True,'reportSeen':True,'coverageComplete':True,'laterDispatches':0}
+        if self.plan.get('alternativeOriginalClosure') is not None:
+            live=[x for event in raw if (x:=a.sanitize(event)) is not None]
+            fixed=set()
+            for event in raw:
+                message,_=a.unwrap(event)
+                for code,literal in [('RM_RETURN_WITHOUT_EXPECTED_KEY','Criação RM de resultado incerto; consultar movimento do ticket'),
+                                     ('CREATION_UNCERTAIN','Criação RM incerta; requer reconciliação')]:
+                    if literal in message:fixed.add(code)
+            result['originalOutcome']=m.WINDOW.original_evidence(self.original,live,sorted(fixed),m)
+            m.WINDOW.validate_original(self.plan,result,result['originalOutcome'],m)
+        return result
 
     def observe(self,plan):
         self.deadline=time.monotonic()+180
@@ -297,9 +311,10 @@ class Observer:
         if first['fiscalKey']:
             fk=first['fiscalKey'];fiscal=self.query('RAIZ.PG.FISC',{'CODCOLIGADA':fk['codColigada'],'CODFILIAL':fk['codFilial'],'CODCOLCFO':fk['codColCfo'],'CODCFO':fk['codCfo'],'IDNAT':fk['idNat']})
         checked=self.node({'payload':payload,'form':form,'bank':bankrow,'document':doc,'fiscal':fiscal,'action':plan['action'],'idMov':plan.get('idMov'),'ticket':plan['ticket']})
+        null_document=plan.get('alternativeOriginalClosure') is not None and doc[0].get('DOC_VERSION')==2 and doc[0].get('HAS_MOVEMENT_EXTENSION')==1 and doc[0].get('DOCUMENT_TYPE_IS_NULL')==1
         expected=m.identity({'company':plan['company'],'branch':form['codigoDaFilial2'],'supplierCompany':key['codColCfo'],'supplier':key['codCfo'],
-          'movementType':checked['type'],'number':doc[0]['EFFECTIVE_NUMBER'],'series':doc[0]['EFFECTIVE_SERIES'],'documentType':doc[0]['EFFECTIVE_DOCUMENT_TYPE'],
-          'issueDate':checked['issueDate'],'entryDate':checked['entryDate'],'total':checked['total']},allow_omitted_entry=True)
+          'movementType':checked['type'],'number':doc[0]['EFFECTIVE_NUMBER'],'series':doc[0]['EFFECTIVE_SERIES'],'documentType':doc[0].get('EFFECTIVE_DOCUMENT_TYPE'),
+          'issueDate':checked['issueDate'],'entryDate':checked['entryDate'],'total':checked['total']},allow_omitted_entry=True,allow_null_document=null_document)
         selected_bank=m.bank({'company':key['codColPgto'],'supplierCompany':key['codColCfo'],'supplier':key['codCfo'],'id':key['idPgto'],'paymentCode':bankrow['FORMAPAGAMENTO']})
         params={'CODCOLIGADA':str(plan['company']),'CODCOLCFO':key['codColCfo'],'CODCFO':key['codCfo'],'TICKET':str(plan['ticket']),
           'NUMERO':expected['number'],'EMISSAO':expected['issueDate'],
@@ -314,6 +329,9 @@ class Observer:
             sql_mov=list({(r['CODCOLIGADA'],r['IDMOV']):r for r in sql_mov+old_mov}.values())
             sql_lan=list({(r['CODCOLIGADA'],r['IDLAN']):r for r in sql_lan+old_lan}.values())
         sql_time=m.utc()
+        alternative=None
+        if plan.get('alternativeOriginalClosure') is not None:
+            alternative,sql_mov,sql_lan=m.WINDOW.collect(self,plan,closed,sql_mov,sql_lan,m,unique,records)
         retry=self.query('RAIZ.PG.RETRY',{'CODCOLIGADA':str(plan['company']),'TICKET':str(plan['ticket'])})
         m.require(isinstance(retry,list) and retry,'NATIVE_CENSUS_MISSING')
         for row in retry:
@@ -345,14 +363,16 @@ class Observer:
             'launches':[launch(r,r.get('TICKET'),r['BOLETO_COUNT'],True) for r in sql_lan]},
           'reconstruction':{'templateSha256':template_sha(),'capturedHttp':False},
           'validationCodeSha256':m.sha({str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted((ROOT/'src/functions/rm/post').glob('pagamento*.ts'))}),
-          'bankDetailsSha256':m.sha({k:bankrow.get(k,'') for k in ('CODCOLIGADA','CODCOLCFO','CODCFO','IDPGTO','ATIVO','FORMAPAGAMENTO','TIPOPIX','CAMARACOMPENSACAO','CHAVEPIX','BANCO','AGENCIA','CONTA')})}
+          'bankDetailsSha256':m.sha(bankrow)}
         m.require(self.config()==runtime,'RUNTIME_CHANGED_DURING_OBSERVATION')
+        if alternative is not None:result['alternativeOriginalClosure']=alternative
+        if null_document:result['documentNullProof']={'version':2,'hasMovementExtension':1,'documentTypeIsNull':1,'rowSourceSha256':m.sha(doc)}
         result['sourceReadbackSha256']=m.observation_sha(result)
         return result
 
 def create_observer(plan):return Observer(plan)
 
-def prepare_plan(audit_path,company,ticket,action,id_mov=None,historical=None):
+def prepare_plan(audit_path,company,ticket,action,id_mov=None,historical=None,alternative=False):
     audit=json.loads(audit_path.read_text(encoding='utf-8-sig'))
     case=next((r for r in audit['tickets'] if r['company']==company and r['ticket']==ticket),None)
     m.require(case is not None,'TICKET_ABSENT_FROM_AUDIT')
@@ -363,6 +383,7 @@ def prepare_plan(audit_path,company,ticket,action,id_mov=None,historical=None):
       'templateSha256':template_sha(),'observerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     if id_mov is not None:plan['idMov']=id_mov
     if historical is not None:plan['historicalIdentity']=historical
+    if alternative:plan['alternativeOriginalClosure']=m.WINDOW.policy(company,ticket,m)
     m.root_key(plan)
     actual=a.aws('dynamodb','get-item','--table-name',m.TABLE,'--consistent-read','--key',json.dumps({'pk':{'S':m.root_key(plan)}}),deadline=time.monotonic()+30).get('Item',{})
     m.require(actual==case['root'],'ROOT_CHANGED_SINCE_AUDIT')
@@ -377,8 +398,9 @@ def main():
     parser.add_argument('--audit',type=Path,required=True);parser.add_argument('--company',type=int,required=True);parser.add_argument('--ticket',type=int,required=True)
     parser.add_argument('--action',choices=['RESERVE_NEW','ADOPT_EXISTING'],required=True);parser.add_argument('--id-mov',type=int)
     parser.add_argument('--historical-identity',type=Path);parser.add_argument('--output-plan',type=Path,required=True);parser.add_argument('--output-proof',type=Path,required=True)
+    parser.add_argument('--alternative-original-window',action='store_true')
     args=parser.parse_args();historical=json.loads(args.historical_identity.read_text(encoding='utf-8-sig')) if args.historical_identity else None
-    plan,proof=prepare_plan(args.audit,args.company,args.ticket,args.action,args.id_mov,historical)
+    plan,proof=prepare_plan(args.audit,args.company,args.ticket,args.action,args.id_mov,historical,args.alternative_original_window)
     args.output_plan.write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding='utf-8');args.output_proof.write_text(json.dumps(proof,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({'ticket':args.ticket,'prepared':True,'businessWrites':False,'digestMatchesLegacy':plan['currentDigest']==plan['expectedRoot']['digest']['S']}))
 

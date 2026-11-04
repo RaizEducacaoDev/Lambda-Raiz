@@ -19,7 +19,11 @@ import re
 import subprocess
 import tempfile
 import time
+import types
 import uuid
+
+_window_spec=importlib.util.spec_from_file_location('payment_backlog_window',Path(__file__).with_name('payment_backlog_window.py'))
+WINDOW=importlib.util.module_from_spec(_window_spec);_window_spec.loader.exec_module(WINDOW)
 
 ACCOUNT = '757843862365'
 REGION = 'sa-east-1'
@@ -40,6 +44,8 @@ UUID = r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
 
 class GateError(RuntimeError):
     pass
+
+def window_api():return types.SimpleNamespace(**globals())
 
 def require(value, code):
     if not value:
@@ -88,14 +94,17 @@ def money(value):
     except (InvalidOperation,ValueError):
         raise GateError('INVALID_MONEY') from None
 
-def identity(value, allow_omitted_entry=False):
+def identity(value, allow_omitted_entry=False, allow_null_document=False):
     require(isinstance(value,dict) and all(k in value for k in IDENTITY), 'INCOMPLETE_IDENTITY')
-    require(all(isinstance(value[k],str) for k in ('supplier','movementType','number','series','documentType','issueDate','entryDate')), 'INVALID_IDENTITY_TEXT')
+    proven_null=allow_null_document and value.get('documentType') is None
+    require(all(isinstance(value[k],str) for k in ('supplier','movementType','number','series','documentType','issueDate','entryDate') if k!='documentType' or not proven_null), 'INVALID_IDENTITY_TEXT')
     result={k:str(value[k]) for k in IDENTITY}
+    if proven_null:result['documentType']=None
     for k in ('company','branch','supplierCompany'):
         result[k]=identifier(value[k],zero=k=='supplierCompany')
     require(re.fullmatch(r'\d{1,20}',result['supplier']) and re.fullmatch(r'1\.2\.\d{2}',result['movementType']), 'INVALID_SUPPLIER_OR_TYPE')
     for k in ('number','series','documentType'):
+        if k=='documentType' and proven_null:continue
         require(re.fullmatch(r'[A-Za-z0-9.-]{1,35}',result[k]), 'INVALID_DOCUMENT_IDENTITY')
     for k in ('issueDate','entryDate'):
         if k=='entryDate' and allow_omitted_entry and value[k]=='':
@@ -149,9 +158,12 @@ def validate_plan(plan):
     require(all(k not in before for k in CRITICAL if k!='pg'),'ROOT_ALREADY_RECOVERED_OR_NEW_PROTOCOL')
     if plan['action']=='RESERVE_NEW':
         require(before['state']['S'] in ('CREATING','RESERVED') and 'pg' not in before,'ROOT_HAS_POSSIBLE_EFFECT')
-        if plan['currentDigest']!=before['digest']['S']:
+        if plan.get('alternativeOriginalClosure') is not None:
+            WINDOW.validate_policy(plan,window_api())
+        elif plan['currentDigest']!=before['digest']['S']:
             require(identity(plan.get('historicalIdentity'),allow_omitted_entry=True)['company']==str(plan['company']),'HISTORICAL_COMPANY_MISMATCH')
     else:
+        require(plan.get('alternativeOriginalClosure') is None,'ALTERNATIVE_POLICY_CANNOT_ADOPT')
         require(before['state']['S'] in ('CREATING','CREATED'),'ROOT_NOT_ADOPTABLE')
         identifier(plan.get('idMov'))
         if 'pg' in before:
@@ -165,7 +177,14 @@ def validate_observation(plan, proof):
     signature=observation_sha(proof)
     require(proof.get('sourceReadbackSha256')==signature==plan['expectedObservationSha256'],'OBSERVATION_CONTENT_CHANGED')
     require(proof.get('runtime')==plan['expectedRuntime'],'RUNTIME_CHANGED')
-    expected=identity(proof.get('identity'),allow_omitted_entry=True)
+    null_proof=proof.get('documentNullProof')
+    if null_proof is not None:
+        require(isinstance(null_proof,dict) and set(null_proof)=={'version','hasMovementExtension','documentTypeIsNull','rowSourceSha256'} and
+          all(type(null_proof.get(k)) is int for k in ('version','hasMovementExtension','documentTypeIsNull')) and
+          plan.get('alternativeOriginalClosure') is not None and null_proof.get('version')==2 and
+          null_proof.get('hasMovementExtension')==1 and null_proof.get('documentTypeIsNull')==1 and
+          re.fullmatch(HEX,null_proof.get('rowSourceSha256','')),'NULL_DOCUMENT_NOT_PROVEN')
+    expected=identity(proof.get('identity'),allow_omitted_entry=True,allow_null_document=null_proof is not None)
     selected_bank=bank(proof.get('bank'))
     require(proof['bank'].get('active') is True,'BANK_INACTIVE')
     require(expected['company']==str(plan['company'])==selected_bank['company'] and all(selected_bank[k]==expected[k] for k in ('supplierCompany','supplier')),'BANK_DESTINATION_MISMATCH')
@@ -174,7 +193,7 @@ def validate_observation(plan, proof):
     z=proof.get('zeev',{})
     fresh(z.get('observedUtc'))
     require(z.get('active') is True and z.get('flowId')==299 and z.get('ticket')==plan['ticket'] and z.get('company')==plan['company'],'ZEEV_CONTEXT_MISMATCH')
-    require(z.get('currentDigest')==plan['currentDigest'] and identity(z.get('identity'),allow_omitted_entry=True)==expected and bank(z.get('bank'))==selected_bank and plans(z.get('plans'),selected_bank)==planned,'ZEEV_INTENTION_MISMATCH')
+    require(z.get('currentDigest')==plan['currentDigest'] and identity(z.get('identity'),allow_omitted_entry=True,allow_null_document=null_proof is not None)==expected and bank(z.get('bank'))==selected_bank and plans(z.get('plans'),selected_bank)==planned,'ZEEV_INTENTION_MISMATCH')
     require(expected['entryDate']!='' or z.get('entryDateOmitted') is True,'ENTRY_DATE_OMISSION_NOT_EXPLICIT')
     require(z.get('validation')=={'payload':True,'bank':True,'document':True,'fiscal':True},'CURRENT_INTENTION_NOT_VALIDATED')
     closure=proof.get('closure',{})
@@ -183,6 +202,9 @@ def validate_observation(plan, proof):
     require(closure.get('originalRootSha256')==sha(before) and closure.get('endSeen') is True and closure.get('reportSeen') is True and closure.get('coverageComplete') is True and type(closure.get('laterDispatches')) is int and closure['laterDispatches']==0,'ORIGINAL_CLOSURE_NOT_PROVEN')
     start,end,report=(closure.get(k) for k in ('originalStartMs','originalEndMs','originalReportMs'))
     require(all(type(x) is int for x in (start,end,report)) and int(before['lockUntil']['N'])-300000<=start<=int(before['lockUntil']['N']) and start<=end<=report<int(time.time()*1000),'INVALID_ORIGINAL_TIMELINE')
+    if plan.get('alternativeOriginalClosure') is not None:
+        WINDOW.validate(plan,proof.get('alternativeOriginalClosure',{}),closure,window_api())
+    else:require(proof.get('alternativeOriginalClosure') is None,'UNEXPECTED_ALTERNATIVE_PROOF')
     required_lookups={sha(expected)}
     if plan.get('historicalIdentity') is not None:
         required_lookups.add(sha(identity(plan['historicalIdentity'],allow_omitted_entry=True)))
@@ -194,7 +216,7 @@ def validate_observation(plan, proof):
         require(set(census.get('lookupIdentities',[]))==required_lookups and census.get('ticket')==plan['ticket'] and census.get('company')==plan['company'],'CENSUS_SCOPE_MISMATCH')
         require(all(isinstance(census.get(k),list) for k in ('movements','launches','documentCandidates')),'CENSUS_RECORDS_MISSING')
         document=census.get('document',{})
-        require(document.get('configured') is True and {k:str(document.get(k,'')) for k in DOCUMENT}=={k:expected[k] for k in DOCUMENT},'DOCUMENT_PREFLIGHT_MISMATCH')
+        require(document.get('configured') is True and {k:None if k=='documentType' and null_proof is not None and document.get(k) is None else str(document.get(k,'')) for k in DOCUMENT}=={k:expected[k] for k in DOCUMENT},'DOCUMENT_PREFLIGHT_MISMATCH')
         movements,launches,candidates=census['movements'],census['launches'],census['documentCandidates']
         if plan['action']=='RESERVE_NEW':
             require(not movements and not launches and not candidates,'PERSISTED_EFFECT_OR_DOCUMENT_CANDIDATE')
