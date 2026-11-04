@@ -18,7 +18,9 @@ obs=o.Observer.__new__(o.Observer);obs.plan={'ticket':225136};obs.opener=urllib.
 obs.rm_user=env['USERNAME_TOTVS'];obs.rm_auth='Basic '+base64.b64encode((obs.rm_user+':'+env['PASSWORD_TOTVS']).encode()).decode()
 template=o.TEMPLATE.read_text(encoding='utf-8-sig');names=set(re.findall(r'\{Form\.(\w+)\}',template))|set(o.EXTRA)
 snapshot,_=obs.zeev_snapshot(names);payload,fields=o.render(snapshot,template)
-assert payload['serie']=='' and payload['idDaNaturezaFiscal']=='3' and payload['codigoDaNaturezaFiscal']=='1.949.01'
+assert payload['serie']=='' and payload['idDaNaturezaFiscal']=='9' and payload['codigoDaNaturezaFiscal']=='2.949.01'
+fiscal=obs.query('RAIZ.PG.FISC',{'CODCOLIGADA':1,'CODFILIAL':1,'CODCOLCFO':0,'CODCFO':'0000157430','IDNAT':9})
+assert len(fiscal)==1 and fiscal[0]['NATURE_CODE']=='2.949.01' and fiscal[0]['NATURE_ACTIVE']==1 and fiscal[0]['NATURE_ROUTE']=='F'
 assert payload['dataDeEmissao']=='23/10/2026' and payload['dataDeEntrada']=='23/10/2026' and payload['dataDeVencimento']=='10/11/2026'
 assert fields.get('idDoLancamento','')==''
 root=a.aws('dynamodb','get-item','--table-name',a.TABLE,'--consistent-read','--key',json.dumps({'pk':{'S':'prod#PG#1#225136'}}),deadline=deadline)['Item']
