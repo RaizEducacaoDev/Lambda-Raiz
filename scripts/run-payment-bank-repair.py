@@ -36,6 +36,7 @@ def load(name, path):
 
 
 operator = load('bank_runner_operator', ROOT / 'scripts/repair-payment-bank-backlog.py')
+claim_gate = load('bank_runner_claim_gate', ROOT / 'scripts/payment_bank_claim_gate.py')
 lease = operator.lease_module
 TARGETS = dict(operator.TARGETS)
 
@@ -99,6 +100,8 @@ def code_hashes():
              Path('scripts/payment-backlog-template.txt'), Path('tests/load-ts.cjs'), Path('package.json'),
              Path('package-lock.json'), Path(WORKFLOW), Path('tests/test_payment_bank_repair_runner.py'),
              Path('tests/test_payment_bank_repair.py'), Path('tests/test_payment_bank_lease.py')]
+    paths += [Path('scripts/payment_bank_claim_gate.py'), Path('scripts/adjudicate-payment-bank-no-effect.py'),
+              Path('tests/test_payment_bank_claim_gate.py')]
     paths += [p.relative_to(ROOT) for pattern in ['src/**/*.ts', 'sql/*.sql', 'tsconfig*.json'] for p in ROOT.glob(pattern)]
     return {p.as_posix(): file_sha(ROOT / p) for p in sorted(set(paths))}
 
@@ -187,8 +190,9 @@ def verified_canary(c, ctx, expected_runtime):
 def apply_one(ticket, plan, audit, ctx):
     company, *_ = TARGETS[ticket]
     require(lease.aws('sts', 'get-caller-identity', {})['Account'] == lease.ACCOUNT, 'AWS_ACCOUNT_MISMATCH')
-    claim = lease.get(f'prod#PG#{company}#{ticket}#BANK_REPAIR_ATTEMPT')
+    claim = lease.get(claim_gate.attempt_key(company, ticket))
     require(type(claim) is dict and claim == {}, 'DURABLE_BANK_ATTEMPT_ALREADY_EXISTS_NO_RETRY')
+    claim_gate.assert_ready(lease.get, company, ticket)
     lease.OUT.mkdir(exist_ok=True)
     lease.acquire({'ticket': ticket}, audit)
     proof_path = lease.OUT / f'lease-{ticket}.json'

@@ -138,6 +138,13 @@ class AwsBoundary(unittest.TestCase):
  def setUp(self):
   self.proof=proof();self.pk=self.proof['before']['pk']['S'];self.events=[]
   self.store={self.pk:copy.deepcopy(self.proof['leasedRoot']),self.proof['archiveKey']:{'pk':{'S':self.proof['archiveKey']},'original':{'M':self.proof['before']},'leaseOwner':self.proof['leasedRoot']['owner'],'leaseUntil':self.proof['leasedRoot']['lockUntil']}}
+  c=r.claim_gate.receipt_contract
+  old={'pk':{'S':c.OLD_ATTEMPT_KEY},'nonce':{'S':'11111111-1111-1111-1111-111111111111'},
+   'ticket':{'N':'228007'},'company':{'N':'5'},'idlan':{'N':'634500'},'leaseOwner':{'S':c.LEASE_OWNER},
+   'planSha256':{'S':c.PLAN_SHA},'targetFieldsSha256':{'S':c.sha({'IDPGTO':'1','CODCOLPGTO':'5'})},
+   'state':{'S':'CLAIMED_NO_AUTOMATIC_RETRY'},'observedUtc':{'S':'2026-11-04T20:22:00+00:00'}}
+  receipt=c.make_receipt(old,'2026-11-04T20:45:00+00:00','https://github.com/RaizEducacaoDev/Lambda-Raiz/actions/runs/41909999999')
+  self.store[c.OLD_ATTEMPT_KEY]=old;self.store[c.receipt_key(old)]=receipt
  def get(self,key):self.events.append(('get',key));return copy.deepcopy(self.store.get(key,{}))
  def aws(self,service,op,payload):
   self.assertEqual((service,op),('dynamodb','put-item'));self.assertEqual(payload['ConditionExpression'],'attribute_not_exists(pk)')
@@ -155,6 +162,12 @@ class AwsBoundary(unittest.TestCase):
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
    a.claim_dispatch(228007,'review-sha',self.proof,fields);a.save(228007,r.xml_for(228007,fields,a.reference_identity))
   self.assertEqual(self.events[-2:],[('get',self.pk),('post','native')])
+ def test_missing_no_effect_receipt_blocks_versioned_claim_and_native_post(self):
+  c=r.claim_gate.receipt_contract;self.store.pop(c.receipt_key(self.store[c.OLD_ATTEMPT_KEY]))
+  a=self.adapter()
+  with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
+   with self.assertRaises(r.GuardError):a.claim_dispatch(228007,'review-sha',self.proof,{'IDPGTO':'1','CODCOLPGTO':'5'})
+  self.assertFalse(any(e[0]in('post','put')for e in self.events))
  def test_revoked_or_replaced_owner_after_claim_stops_native_post(self):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
@@ -201,7 +214,7 @@ class AwsBoundary(unittest.TestCase):
       xml=r.xml_for(228007,fields,a.reference_identity)
       xml=xml.replace('<CODCFO>0000000001</CODCFO>',''if problem=='missing'else'<CODCFO>0000000099</CODCFO>')
       a.save(228007,xml)
-   self.assertFalse(any(e[0]=='post'for e in self.events));self.store.pop(self.pk+'#BANK_REPAIR_ATTEMPT',None)
+   self.assertFalse(any(e[0]=='post'for e in self.events));self.store.pop(r.claim_gate.attempt_key(5,228007),None)
 
 class NativeDiagnostic(unittest.TestCase):
  def test_multiline_1586_chars_has_only_fixed_codes_and_no_native_values(self):

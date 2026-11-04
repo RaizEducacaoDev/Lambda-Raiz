@@ -193,6 +193,7 @@ class RunnerTests(unittest.TestCase):
         with patch.object(r, 'OUT', base / 'output'), patch.object(r.lease, 'OUT', base / 'leases'), \
              patch.object(r.lease, 'aws', return_value={'Account': r.lease.ACCOUNT}), \
              patch.object(r.lease, 'get', return_value={'exists': True} if claim else {}), \
+             patch.object(r.claim_gate, 'assert_ready'), \
              patch.object(r.lease, 'acquire', side_effect=acquire) as acq, \
              patch.object(r.operator, 'RemoteLiveAdapter', return_value=Mock()), \
              patch.object(r.operator, 'execute', side_effect=apply) as execute, \

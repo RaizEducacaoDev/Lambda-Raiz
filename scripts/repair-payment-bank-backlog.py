@@ -260,6 +260,7 @@ def load_module(name,path):
 
 observer=load_module('bank_remote_observer',ROOT/'scripts/observe-payment-backlog.py')
 lease_module=load_module('bank_remote_lease',ROOT/'scripts/lease-payment-bank-backlog.py')
+claim_gate=load_module('bank_remote_claim_gate',ROOT/'scripts/payment_bank_claim_gate.py')
 CONTRACTS={'RAIZ.PG.DOC2':'pagamento-documento-v2.sql','RAIZ.PG.BANK2':'pagamento-bank-readback.sql'}
 
 NODE=r"""
@@ -404,7 +405,8 @@ class RemoteLiveAdapter(observer.Observer):
   pk=self.assert_live_lease(ticket,archive=True);company,_,lan,_,_,target,targetcol=TARGETS[ticket]
   require(set(fields)<=WRITABLE and fields.get('IDPGTO')==str(target)and fields.get('CODCOLPGTO')==str(targetcol),'CLAIM_FIELDS_NOT_ALLOWLISTED')
   if ticket==228007:require(set(fields)=={'IDPGTO','CODCOLPGTO'},'CANARY_FIELDS_NOT_MINIMAL')
-  key=pk+'#BANK_REPAIR_ATTEMPT'
+  try:key=claim_gate.assert_ready(lease_module.get,company,ticket)
+  except(RuntimeError,claim_gate.receipt_contract.GuardError)as exc:raise GuardError(str(exc))from None
   claim={'pk':{'S':key},'nonce':{'S':str(uuid.uuid4())},'ticket':{'N':str(ticket)},'company':{'N':str(company)},'idlan':{'N':str(lan)},'leaseOwner':{'S':proof['owner']},'planSha256':{'S':plan_sha},'targetFieldsSha256':{'S':digest(fields)},'state':{'S':'CLAIMED_NO_AUTOMATIC_RETRY'},'observedUtc':{'S':utc()}}
   try:lease_module.aws('dynamodb','put-item',{'TableName':lease_module.TABLE,'Item':claim,'ConditionExpression':'attribute_not_exists(pk)'})
   except Exception:pass
