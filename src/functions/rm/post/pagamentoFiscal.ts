@@ -26,15 +26,8 @@ const inteiro = (valor: unknown, zero = false): string => {
 const flag = (valor: unknown): string => {
   return [0, 1, '0', '1'].includes(valor as string | number) ? String(valor) : contratoInvalido();
 };
-const ufs = new Set(['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
-  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']);
-const ufBrasileira = (valor: unknown): string => {
-  const uf = typeof valor === 'string' ? valor.trim().toUpperCase() : '';
-  return ufs.has(uf) ? uf : contratoInvalido();
-};
-
-// This only rejects a confirmed geographic mismatch; it never selects a CFOP,
-// changes the input or authorizes retry of an uncertain RM creation.
+// Confirm identity and availability only. Fiscal geography is validated by RM;
+// never select a CFOP, change the input or authorize an uncertain creation retry.
 export function validarContextoFiscal(retorno: unknown, esperado: ContextoFiscalEsperado): void {
   if (!Array.isArray(retorno) || retorno.length !== 1 || !retorno[0] || typeof retorno[0] !== 'object' || Array.isArray(retorno[0])) return contratoInvalido();
   const row = retorno[0] as Record<string, unknown>;
@@ -50,17 +43,5 @@ export function validarContextoFiscal(retorno: unknown, esperado: ContextoFiscal
   if (typeof row.NATURE_CODE !== 'string' || !/^[A-Za-z0-9._-]+$/.test(row.NATURE_CODE)) contratoInvalido();
   if (esperado.codigoNatureza && esperado.codigoNatureza !== row.NATURE_CODE) {
     throw new NaturezaFiscalInvalida('O código informado não corresponde à natureza fiscal selecionada no destino. Revise a natureza na tarefa Fiscal.');
-  }
-  if (typeof row.NATURE_ROUTE !== 'string' || !/^[A-Za-z0-9_-]{1,16}$/.test(row.NATURE_ROUTE)) contratoInvalido();
-  const paisFornecedor = inteiro(row.SUPPLIER_COUNTRY_ID), paisFilial = inteiro(row.BRANCH_COUNTRY_ID);
-  // Other countries/routes remain under native fiscal validation. A foreign UF
-  // may be SQL NULL and therefore omitted by the native JSON serializer.
-  if (paisFornecedor !== '1' || paisFilial !== '1' || !['D', 'F'].includes(row.NATURE_ROUTE as string)) return;
-  const origem = ufBrasileira(row.SUPPLIER_UF), destino = ufBrasileira(row.BRANCH_UF);
-  if (row.NATURE_ROUTE === 'D' && origem !== destino) {
-    throw new NaturezaFiscalInvalida(`A natureza fiscal selecionada é interna, mas o fornecedor está em ${origem} e a filial em ${destino}. Revise a natureza na tarefa Fiscal antes de integrar.`);
-  }
-  if (row.NATURE_ROUTE === 'F' && origem === destino) {
-    throw new NaturezaFiscalInvalida(`A natureza fiscal selecionada é interestadual, mas fornecedor e filial estão em ${origem}. Revise a natureza na tarefa Fiscal antes de integrar.`);
   }
 }

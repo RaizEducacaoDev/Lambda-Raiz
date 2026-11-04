@@ -12,11 +12,11 @@ preservado integralmente no pacote. O deploy é restrito a esta função.
 - Cadastro exato ativo confirmado por FinDadosPgtoDataBR antes dos efeitos.
   Dados PIX e modalidade enviados não podem contradizer esse cadastro.
 - Para uma nova NF de serviço (1.2.03) com natureza informada, a consulta nativa
-  RAIZ.PG.FISC confirma cadastro, natureza ativa e coerência do trajeto brasileiro
-  antes da reserva. Uma natureza interna com UFs distintas, ou interestadual com
-  UFs iguais, retorna 422 NATUREZA_FISCAL_INCOMPATIVEL sem criar ou reservar.
-  Nenhum CFOP é escolhido ou substituído pelo código. Outros países e regras
-  fiscais continuam sujeitos à validação nativa do RM.
+  RAIZ.PG.FISC confirma identidade dos cadastros, natureza ativa e correspondência
+  ID/código antes da reserva. Por autorização expressa de 04/11/2026, a Lambda
+  não compara classificação interna/interestadual com as UFs do fornecedor e da
+  filial. O enquadramento geográfico fica sujeito à validação nativa do RM.
+  Nenhum CFOP é escolhido ou substituído pelo código.
 - O preflight não impede retomar PG durável ou movimento remoto único cujo
   fornecedor, filial e ticket tenham sido confirmados pelo ReadRecord. A lista
   remota completa vem de RAIZ.PG.RECON e exige versão, contagem e identidade de
