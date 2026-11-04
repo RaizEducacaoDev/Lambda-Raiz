@@ -48,7 +48,7 @@ export function validarEvidencia(e: EvidenciaPagamento): void {
     const d = e.diagnostic;
     // Generate the set of allowed keys/names from the diagnostic's fixed contract.
     const empty = diagnosticarRetornoRm('');
-    const reasons = ['RM_PRIMARY_KEY_COMPANY_MISMATCH', 'RM_INVALID_REFERENCE', 'RM_DUPLICATE_RECORD', 'RM_REQUIRED_FIELD',
+    const reasons = ['RM_PRIMARY_KEY_COMPANY_MISMATCH', 'RM_INVALID_FISCAL_NATURE', 'RM_INVALID_REFERENCE', 'RM_DUPLICATE_RECORD', 'RM_REQUIRED_FIELD',
       'RM_PERIOD_CLOSED', 'RM_PERMISSION_DENIED', 'RM_INVALID_DATE', 'RM_INVALID_FORMAT', 'RM_SQL_EXCEPTION', 'RM_UNCLASSIFIED_REJECTION', 'RM_UNEXPECTED_RESULT'];
     const fields = diagnosticarRetornoRm('CODTRB CODTRBBASE CODIGOIRRF IDNAT CODTMV IDPRD CODCCUSTO SERIE DATAEMISSAO DATASAIDA DATAVENCIMENTO NUMEROMOV IDPGTO CODCOLPGTO').mentionedFields;
     const types = diagnosticarRetornoRm('SqlException ConstraintException NoNullAllowedException FormatException InvalidCastException NullReferenceException InvalidOperationException ArgumentException').nativeErrorTypes;
@@ -62,6 +62,7 @@ export function validarEvidencia(e: EvidenciaPagamento): void {
 
 export function mensagemDiagnostico(code: string, mensagemNativa?: string): string {
   const motivos: Record<string, string> = {
+    RM_INVALID_FISCAL_NATURE: 'O TOTVS rejeitou a natureza fiscal informada. Revise a natureza de operação na tarefa Fiscal.',
     RM_DUPLICATE_RECORD: 'O RM indicou documento ou registro duplicado. Revise número e série do documento fiscal.',
     RM_INVALID_REFERENCE: 'O RM indicou uma referência cadastral inválida. Revise os cadastros fiscal, de itens e de destino.',
     RM_REQUIRED_FIELD: 'O RM indicou um campo obrigatório ausente. Revise os dados do documento na tarefa de origem.',

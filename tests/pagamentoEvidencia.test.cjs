@@ -35,3 +35,15 @@ test('mensagem informa diagnóstico nativo sem proibir novo envio ou declarar su
  assert.equal(mensagemDiagnostico('RM_UNCLASSIFIED_REJECTION','Série não permitida para este movimento.'),
   'O TOTVS retornou: Série não permitida para este movimento.');
 });
+
+test('natureza inválida tem mensagem fixa e evidência aceita a categoria sem armazenar resposta nativa',()=>{
+ const raw='Movimento 000000018 - Série 1: Natureza inválida.&#xD;=====\nat RM.Mov.Movimento.MovMovConsistencia.ConsisteIntegracaoFiscal';
+ const diagnostic=diagnosticarRetornoRm(raw),evidence={...create(),phase:'native_result',diagnostic};
+ assert.equal(diagnostic.reasonCode,'RM_INVALID_FISCAL_NATURE');assert.doesNotThrow(()=>validarEvidencia(evidence));
+ const message=mensagemDiagnostico(diagnostic.reasonCode);
+ assert.match(message,/TOTVS rejeitou a natureza fiscal/);assert.match(message,/tarefa Fiscal/);
+ for(const value of ['000000018','ConsisteIntegracaoFiscal','2.949.01']){
+  assert.equal(message.includes(value),false);assert.equal(JSON.stringify(evidence).includes(value),false);
+ }
+ assert.doesNotMatch(message,/não autoriza|conferirá um movimento existente/);
+});

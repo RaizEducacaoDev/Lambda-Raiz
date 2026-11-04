@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   execute:
-    if: contains(github.event.head_commit.message, '[execute-225136-once]')
+    if: false # Closed: movement 45370 / financial entry 70183 were independently verified.
     runs-on: ubuntu-22.04
     timeout-minutes: 6
     steps:

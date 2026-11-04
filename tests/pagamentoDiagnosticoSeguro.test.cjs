@@ -82,6 +82,21 @@ test('resposta1586chars preserva impressão digital estável e motivo desconheci
  assert.equal(JSON.stringify(result).includes('PRIVATE_NATIVE_MESSAGE'),false);
 });
 
+test('natureza inválida retornada pelo RM é classificada sem refletir número, stack ou selecionar outra natureza',()=>{
+ const raw='Movimento 000000018 - Série 1: Natureza inválida.&#xD;Possíveis causas: natureza interestadual em movimentação interna e vice-versa.\n=====\nat RM.Mov.Movimento.MovMovConsistencia.ConsisteIntegracaoFiscal';
+ const result=diagnosticarRetornoRm(raw);
+ assert.equal(result.reasonCode,'RM_INVALID_FISCAL_NATURE');assert.deepEqual(result.mentionedFields,['SERIE']);
+ assert.equal(resumirMensagemNegocioRm(raw),undefined);
+ for(const value of ['000000018','Natureza inválida','ConsisteIntegracaoFiscal','2.949.01'])assert.equal(JSON.stringify(result).includes(value),false);
+ for(const phrase of ['Natureza inválida.','NATUREZA INVALIDA','Natureza fiscal inválida.','Natureza de operação inválida.']){
+  assert.equal(diagnosticarRetornoRm(phrase).reasonCode,'RM_INVALID_FISCAL_NATURE');
+ }
+ for(const phrase of ['Natureza válida.','Confira a natureza fiscal.','Série inválida.']){
+  assert.notEqual(diagnosticarRetornoRm(phrase).reasonCode,'RM_INVALID_FISCAL_NATURE');
+ }
+ assert.equal(diagnosticarRetornoRm(raw,true).reasonCode,'RM_PRIMARY_KEY_COMPANY_MISMATCH');
+});
+
 test('chave de outra coligada e resultado inesperado têm códigos fixos sem liberar criação',()=>{
  assert.equal(diagnosticarRetornoRm('99;9001',true).reasonCode,'RM_PRIMARY_KEY_COMPANY_MISMATCH');
  const raw='PRIVATE_NATIVE_RESPONSE';assert.equal(diagnosticarRetornoRm(raw).reasonCode,'RM_UNEXPECTED_RESULT');
