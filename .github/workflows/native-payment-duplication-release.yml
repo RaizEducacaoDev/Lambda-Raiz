@@ -1,0 +1,83 @@
+name: Use native RM duplicate-document decisions
+on:
+  push:
+    branches: [fix/native-payment-duplication-20261104]
+    paths:
+      - .github/workflows/native-payment-duplication-release.yml
+      - scripts/release-native-duplication.py
+      - src/functions/rm/post/pagamentoDiagnosticoSeguro.ts
+      - src/functions/rm/post/pagamentoEvidencia.ts
+      - src/functions/rm/post/pagamentoV2Idempotencia.ts
+      - src/functions/rm/post/solicitacaoDePagamentoSeguro.ts
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 -m unittest discover -s tests -p test_native_duplication_release.py
+      - run: python3 scripts/release-native-duplication.py prepare
+      - name: Publish the reviewed payment wrapper with RM duplication decisions
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-duplication.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-duplication-release
+          path: .native-duplication-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-duplication-release
+          path: .release-evidence
+      - name: Independently verify the active AWS package
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-duplication.py readback --evidence .release-evidence
+      - name: Observe execution errors and reread after five minutes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-duplication.py monitor --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-duplication-independent-readback
+          path: .native-duplication-release/
+          include-hidden-files: true
+          retention-days: 14

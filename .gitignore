@@ -21,6 +21,7 @@ dist/
 .idpgto-recovery/
 .fiscal-uf-release/
 .uncertain-creation-release/
+.native-duplication-release/
 .verification.log
 __pycache__/
 *.pyc
