@@ -46,7 +46,13 @@ def stamp(value,m):
     m.require(isinstance(value,str) and bool(value),'WINDOW_TIMESTAMP_MISSING')
     try:
         parsed=dt.datetime.fromisoformat(value.replace('Z','+00:00'))
-        m.require(parsed.tzinfo is None or parsed.utcoffset()==dt.timedelta(0),'WINDOW_TIMESTAMP_ZONE_INVALID')
+        # RAIZ.PG.WINDOW returns SQL datetime/datetime2, never datetimeoffset.
+        # Independent SQL readback of 226348/226455 proved the RM JSON serializer
+        # appends exactly -03:00 without changing those naive wall-clock values.
+        # Evidence SHA256: 939716f678f175a645c34aad83cc2a1f213cbea289796fcb3d28b068d97bebea.
+        # Do not astimezone(): REQUEST_*_UTC would incorrectly move by +3 hours.
+        proven_rm_suffix=value.endswith('-03:00') and parsed.utcoffset()==dt.timedelta(hours=-3)
+        m.require(parsed.tzinfo is None or parsed.utcoffset()==dt.timedelta(0) or proven_rm_suffix,'WINDOW_TIMESTAMP_ZONE_INVALID')
         return parsed.replace(tzinfo=None).isoformat(timespec='milliseconds')
     except ValueError:raise m.GateError('WINDOW_TIMESTAMP_INVALID') from None
 

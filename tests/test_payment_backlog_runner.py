@@ -19,6 +19,19 @@ def config(mode='prepare'):
 CTX={'repository':'example/payments','runId':'2345','commit':'a'*40,'branch':r.BRANCH,'workflow':r.WORKFLOW}
 
 class RunnerTests(unittest.TestCase):
+    def test_elapsed_age_is_ignored_but_business_task_state_is_preserved(self):
+        data={'id':225136,'leadTimeInDays':None,'instanceTasks':[{'id':5,'active':True,
+          'leadTimeInDays':7.26,'expectedEndDateTime':'2026-10-29T18:34:00','task':{'id':7,'timeout':16}}],
+          'formFields':[{'name':'dataDeEntrada','value':'2026-10-23'}]}
+        instance=r.RecoveryObserver.__new__(r.RecoveryObserver)
+        with patch.object(r.RecoveryObserver.__bases__[0],'zeev_snapshot',return_value=(data,'clock')):
+            actual,clock=instance.zeev_snapshot(['dataDeEntrada'])
+        self.assertEqual(clock,'clock');self.assertNotIn('leadTimeInDays',actual)
+        self.assertNotIn('leadTimeInDays',actual['instanceTasks'][0])
+        self.assertEqual(actual['instanceTasks'][0],{k:v for k,v in data['instanceTasks'][0].items() if k!='leadTimeInDays'})
+        self.assertEqual(actual['formFields'],data['formFields'])
+        self.assertIn('leadTimeInDays',data['instanceTasks'][0])
+
     def test_default_config_is_prepare_and_only_reviewed_targets_exist(self):
         current=r.validate_config(config())
         self.assertEqual(current['mode'],'prepare');self.assertFalse(current['authorizedBacklogRecovery'])

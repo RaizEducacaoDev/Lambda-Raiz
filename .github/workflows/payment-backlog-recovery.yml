@@ -9,7 +9,9 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: payment-backlog-bank-lease
+  # The root-level CAS rejects bank leases and any concurrent state change.
+  # This queue contains only recovery jobs; bank repairs have their own queue.
+  group: payment-backlog-recovery
   cancel-in-progress: false
 jobs:
   recover:

@@ -54,6 +54,24 @@ def load_module(name,path):
 observer=load_module('backlog_runner_observer',OBSERVER)
 operator=observer.m
 
+class RecoveryObserver(observer.Observer):
+    """Do not pin the elapsed-age counter as if it were a business edit.
+
+    The parent still checks both complete snapshots and all task/header data.
+    Only the two documented elapsed-age paths are excluded from the long-lived
+    approval fingerprint; deadlines, task identities and business dates remain.
+    """
+    def zeev_snapshot(self,names):
+        data,observed=super().zeev_snapshot(names)
+        data=copy.deepcopy(data)
+        data.pop('leadTimeInDays',None)
+        for task in data.get('instanceTasks',[]):task.pop('leadTimeInDays',None)
+        return data,observed
+
+# Both prepare_plan and create_observer resolve this class within this private
+# imported module. The shared bank-repair observer and its pinned code are intact.
+observer.Observer=RecoveryObserver
+
 def require(ok,code):operator.require(ok,code)
 def file_sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def write_json(path,value):

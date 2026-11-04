@@ -116,6 +116,31 @@ class WindowTests(unittest.TestCase):
         plan,proof=fixtures();proof['alternativeOriginalClosure']['rows']*=1001
         with self.assertRaisesRegex(m.GateError,'TRUNCATED'):self.check(plan,proof)
 
+    def test_proven_rm_minus_three_suffix_preserves_sql_naive_wall_clock(self):
+        self.assertEqual(w.stamp('2026-10-30T13:21:57.452-03:00',m),'2026-10-30T13:21:57.452')
+        for suffix in ('','Z','+00:00'):
+            self.assertEqual(w.stamp('2026-10-30T13:21:57.452'+suffix,m),'2026-10-30T13:21:57.452')
+        for ticket in (226025,226348,226455):
+            plan,proof=fixtures(ticket)
+            for row in proof['alternativeOriginalClosure']['rows']:
+                for name in ('REQUEST_START_UTC','REQUEST_END_UTC','WINDOW_START_UTC','WINDOW_END_UTC',
+                             'WINDOW_START_LOCAL','WINDOW_END_LOCAL','RECCREATEDON','RECMODIFIEDON',
+                             'COMPLEMENT_CREATED','COMPLEMENT_MODIFIED'):
+                    if row.get(name):row[name]+='-03:00'
+            # SQL JSON has a suffix; native XML and normalized exclusion proofs
+            # have none. Both must identify the same original clocks and records.
+            with self.subTest(ticket=ticket):self.check(plan,proof)
+
+    def test_unproven_offsets_and_moved_wall_clock_remain_rejected(self):
+        for suffix in ('-02:00','-04:00','+03:00','-03:30','-0300','-03','-03:00:00'):
+            with self.subTest(suffix=suffix),self.assertRaisesRegex(m.GateError,'ZONE_INVALID'):
+                w.stamp('2026-10-30T13:21:57.452'+suffix,m)
+        plan,proof=fixtures()
+        row=proof['alternativeOriginalClosure']['rows'][0]
+        shifted=dt.datetime.fromisoformat(row['REQUEST_START_UTC'])+dt.timedelta(hours=3)
+        row['REQUEST_START_UTC']=shifted.isoformat()+'-03:00'
+        with self.assertRaisesRegex(m.GateError,'INTERVAL_MISMATCH'):self.check(plan,proof)
+
     def test_unknown_candidate_or_orphan_or_own_ticket_block_even_if_ids_are_known(self):
         mutations=[('ORFAO',1),('TICKET','226348'),('IDMOV',888888)]
         for key,value in mutations:
