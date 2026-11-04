@@ -4,7 +4,7 @@ import base64, datetime, hashlib, importlib.util, io, json, pathlib, time, urlli
 source=pathlib.Path(__file__).with_name('audit-payment-conflict-20261103-0609.py')
 spec=importlib.util.spec_from_file_location('audit_payment_current',source)
 audit=importlib.util.module_from_spec(spec);spec.loader.exec_module(audit)
-audit.AWS_READS=audit.AWS_READS | {('lambda','get-function')}
+audit.AWS_READS=audit.AWS_READS | {('lambda','get-function'),('cloudtrail','lookup-events')}
 deadline=time.monotonic()+210
 assert audit.aws('sts','get-caller-identity',deadline=deadline)['Account']==audit.ACCOUNT
 active=audit.aws('lambda','get-function','--function-name',audit.FUNCTION,deadline=deadline)
@@ -20,6 +20,25 @@ for hour in [1,4,13,16]:
  events,coverage=audit.read_log_window('"[RM-IDPGTO]"',int((center-datetime.timedelta(minutes=2)).timestamp()*1000),int(end.timestamp()*1000),deadline)
  out['windows'].append({'centerUtc':center.isoformat(),'endUtc':end.isoformat(),'coverage':coverage,
    'events':[v for event in events if (v:=audit.sanitize(event)) is not None]})
+original_start=datetime.datetime(2026,11,2,14,43,45,tzinfo=datetime.timezone.utc)
+original_end=original_start+datetime.timedelta(minutes=2)
+original_events,coverage=audit.read_log_window('"4efffdfd-b6d7-4a87-857f-fe99421654d3"',int(original_start.timestamp()*1000),int(original_end.timestamp()*1000),deadline)
+out['originalInvocation']={'requestId':'4efffdfd-b6d7-4a87-857f-fe99421654d3','coverage':coverage,
+ 'events':[v for event in original_events if (v:=audit.sanitize(event)) is not None]}
+try:
+ provenance=audit.aws('cloudtrail','lookup-events','--lookup-attributes',json.dumps([{'AttributeKey':'ResourceName','AttributeValue':audit.FUNCTION}]),
+  '--start-time','2026-11-04T14:40:00Z','--end-time','2026-11-04T14:55:00Z','--max-results','50',deadline=deadline)
+ safe=[]
+ for event in provenance.get('Events',[]):
+  detail=json.loads(event.get('CloudTrailEvent','{}'));name=detail.get('eventName','')
+  if not name.startswith('UpdateFunction'):continue
+  identity=detail.get('userIdentity',{});agent=str(detail.get('userAgent',''))
+  safe.append({'eventTime':detail.get('eventTime'),'eventName':name,'identityType':identity.get('type'),
+   'agentClass':'AWS_CLI' if 'aws-cli' in agent else 'CONSOLE' if 'console' in agent.lower() else 'OTHER',
+   'requestId':detail.get('requestID'),'codeSha256':(detail.get('responseElements') or {}).get('codeSha256')})
+ out['publicationProvenance']={'available':True,'events':safe}
+except audit.AuditError:
+ out['publicationProvenance']={'available':False,'reason':'CloudTrail read unavailable; no permission changes requested'}
 out['reservations']=[]
 for company,ticket in [(9,226374),(11,228310)]:
  item=audit.aws('dynamodb','get-item','--table-name',audit.TABLE,'--consistent-read','--key',json.dumps({'pk':{'S':f'prod#PG#{company}#{ticket}'}}),deadline=deadline).get('Item',{})
