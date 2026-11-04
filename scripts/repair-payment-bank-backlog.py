@@ -8,7 +8,7 @@ from pathlib import Path
 from decimal import Decimal
 import argparse, datetime as dt, hashlib, importlib.util, json, os, re
 import subprocess, sys, time, uuid, xml.etree.ElementTree as ET
-import base64, copy, urllib.request, urllib.parse, urllib.error
+import base64, copy, unicodedata, urllib.request, urllib.parse, urllib.error
 
 ROOT=Path(__file__).resolve().parents[1]
 TARGETS={
@@ -21,10 +21,14 @@ TARGETS={
  228275:(8,565014,870367,1,8,24,8),
  228793:(2,278473,751379,1,2,7,2),
 }
-AUDIT={'RECMODIFIEDBY','RECMODIFIEDON'}
+AUDIT={'RECMODIFIEDBY','RECMODIFIEDON','DATAALTERACAO'}
 WRITABLE={'IDPGTO','CODCOLPGTO','CODIGOBARRA','IPTE'}
+REFERENCE={'CODCOLCFO','CODCFO'}
 
 class GuardError(Exception):pass
+class NativeSaveError(GuardError):
+ def __init__(self,code,diagnostic):
+  super().__init__(code);self.diagnostic=diagnostic
 def require(ok,code):
  if not ok:raise GuardError(code)
 def utc():return dt.datetime.now(dt.timezone.utc).isoformat()
@@ -53,6 +57,23 @@ def normalized_record_value(value):
 def fingerprint(row,exclude=()):return digest({k:normalized_record_value(v)for k,v in row.items()if k not in exclude})
 def safe_fields(row,fields):
  return {k:{'present':row.get(k)not in(None,''),'sha256':hashlib.sha256(text(row.get(k)).strip().encode()).hexdigest(),**({'value':row.get(k)}if k in('IDPGTO','CODCOLPGTO')else{})}for k in fields}
+
+def native_diagnostic(value,expected_key=None):
+ """Fixed classifications only. Never retain native text or captured field values."""
+ raw=value if isinstance(value,bytes)else text(value).encode('utf-8')
+ decoded=raw.decode('utf-8',errors='replace')
+ normalized=''.join(c for c in unicodedata.normalize('NFD',decoded).lower()if unicodedata.category(c)!='Mn')
+ fields=[f for f in ('CODCOLIGADA','IDLAN','CODCOLPGTO','IDPGTO','CODCOLCFO','CODCFO','CODFILIAL','NUMERODOCUMENTO','DATAVENCIMENTO','DATAEMISSAO','STATUSLAN')if re.search(r'\b'+f.lower()+r'\b',normalized)]
+ flags={
+  'requiredField':bool(re.search(r'nao (?:pode|podem) ser nul|nao permite(?:m)? (?:valores? )?nul|does not allow null|cannot be null|campo.{0,40}obrigatori',normalized)),
+  'permission':bool(re.search(r'sem permissao|nao (?:tem|possui) permissao|acesso negado|access denied|permission denied',normalized)),
+  'closedPeriod':bool(re.search(r'periodo.{0,40}(?:fechado|encerrado)|exercicio.{0,40}fechado',normalized)),
+  'soapFault':bool(re.search(r'<(?:[a-z0-9_]+:)?fault(?:\s|>)',normalized)),
+ }
+ reason='RM_REQUIRED_FIELD'if flags['requiredField']and fields else'RM_PERMISSION_DENIED'if flags['permission']else'RM_CLOSED_PERIOD'if flags['closedPeriod']else'RM_SOAP_FAULT'if flags['soapFault']else'RM_UNCLASSIFIED_RESPONSE'
+ exact=expected_key is not None and decoded.strip()==expected_key
+ return {'reasonCode':'RM_EXPECTED_KEY'if exact else reason,'responseSha256':hashlib.sha256(raw).hexdigest(),
+  'length':len(decoded),'byteLength':len(raw),'lineCount':len(decoded.splitlines()),'mentionedFields':fields,'flags':flags,'exactKey':exact,'rawRetained':False}
 
 def qualify(s,ticket,after=False):
  require(ticket in TARGETS,'TICKET_NOT_ALLOWLISTED')
@@ -125,11 +146,22 @@ def review(s,ticket):
   'scope':'existing bank association only; no document creation or financial amounts/dates',
   'requiresControlWindow':True}
 
-def xml_for(ticket,fields,dataset='FinLAN'):
+def reference_for(snapshot,ticket):
+ # Native, independent SQL, form, bank owner and payment plan must agree first.
+ qualify(snapshot,ticket)
+ reference={k:text(snapshot['nativeLan'][0].get(k))for k in REFERENCE}
+ require(bool(re.fullmatch(r'0|[1-9][0-9]*',reference['CODCOLCFO']))and bool(reference['CODCFO'])and reference['CODCFO'].strip()==reference['CODCFO'],'INVALID_IMMUTABLE_CFO_REFERENCE')
+ return reference
+
+def xml_for(ticket,fields,reference,dataset='FinLAN'):
  company,_,lan,*_=TARGETS[ticket]
  require(set(fields)<=WRITABLE and {'IDPGTO','CODCOLPGTO'}<=set(fields),'INVALID_WRITE_ALLOWLIST')
+ require(set(reference)==REFERENCE and all(isinstance(v,str)and v and v.strip()==v for v in reference.values()),'INVALID_IMMUTABLE_REFERENCE_FIELDS')
+ require(bool(re.fullmatch(r'0|[1-9][0-9]*',reference['CODCOLCFO'])),'INVALID_IMMUTABLE_REFERENCE_COMPANY')
  root=ET.Element(dataset);row=ET.SubElement(root,'FLAN')
- for k,v in [('CODCOLIGADA',str(company)),('IDLAN',str(lan)),*sorted(fields.items())]:ET.SubElement(row,k).text=v
+ ordered=[('CODCOLIGADA',str(company)),('IDLAN',str(lan)),('CODCOLPGTO',fields['CODCOLPGTO']),('CODCOLCFO',reference['CODCOLCFO']),('CODCFO',reference['CODCFO']),('IDPGTO',fields['IDPGTO'])]
+ ordered += sorted((k,v)for k,v in fields.items()if k not in('IDPGTO','CODCOLPGTO'))
+ for k,v in ordered:ET.SubElement(row,k).text=v
  return ET.tostring(root,encoding='unicode')
 
 def validate_after(before,after,ticket,fields):
@@ -175,7 +207,7 @@ def execute(adapter,ticket,expected,expected_sha,output,control_reference,lease_
  marker=output/f'attempt-{ticket}.json'
  # Exclusive persistent marker also prohibits repeat after success, failure or unknown response.
  write_json(marker,{'ticket':ticket,'state':'LOCKED_PREFLIGHT','createdUtc':utc(),'reviewSha256':expected_sha,'controlReference':control_reference,'leaseOwner':lease['owner'],'leaseFileSha256':lease_sha},exclusive=True)
- dispatched=False
+ dispatched=False;response_diagnostic=None
  try:
   read_started=time.monotonic()
   first=adapter.read(ticket);require(review(first,ticket)==expected,'STALE_REVIEW_OR_CONCURRENT_CHANGE')
@@ -183,6 +215,8 @@ def execute(adapter,ticket,expected,expected_sha,output,control_reference,lease_
   require(time.monotonic()-read_started<=60,'PREFLIGHT_OLDER_THAN_60_SECONDS')
   require(validate_lease(lease_path,lease_sha,ticket)==lease,'LEASE_CHANGED')
   fields=qualify(fresh,ticket)
+  reference=reference_for(fresh,ticket)
+  adapter.bind_reference(fresh,ticket)
   adapter.preflight_deadline=read_started+60
   adapter.claim_dispatch(ticket,expected_sha,lease,fields)
   require(time.monotonic()-read_started<=60,'PREFLIGHT_OLDER_THAN_60_SECONDS')
@@ -190,9 +224,11 @@ def execute(adapter,ticket,expected,expected_sha,output,control_reference,lease_
   write_json(marker,{'ticket':ticket,'state':'DISPATCHING','atUtc':utc(),'reviewSha256':expected_sha,'controlReference':control_reference})
   dispatched=True
   response=None;save_error=None
-  try:response=adapter.save(ticket,xml_for(ticket,fields,fresh['dataset']))
+  try:response=adapter.save(ticket,xml_for(ticket,fields,reference,fresh['dataset']))
   except Exception as exc:save_error=exc
   company,_,lan,*_=TARGETS[ticket]
+  response_diagnostic=native_diagnostic(response,f'{company};{lan}')if response is not None else save_error.diagnostic if isinstance(save_error,NativeSaveError)else{'reasonCode':'TRANSPORT_OUTCOME_UNCERTAIN','errorType':type(save_error).__name__,'rawRetained':False}
+  write_json(output/f'native-response-{ticket}.json',{'ticket':ticket,'observedUtc':utc(),'stage':'FINLAN_SAVE_RESPONSE','diagnostic':response_diagnostic})
   after_checks=[];independent=None
   for separate in(False,True):
    label='independent'if separate else'same-session'
@@ -204,7 +240,7 @@ def execute(adapter,ticket,expected,expected_sha,output,control_reference,lease_
     if separate:independent=observed
    except Exception as exc:
     after_checks.append({'mode':label,'valid':False,'errorType':type(exc).__name__,'code':str(exc)if isinstance(exc,GuardError)else'READBACK_FAILED'})
-  write_json(output/f'readback-checks-{ticket}.json',{'checks':after_checks,'saveErrorType':type(save_error).__name__ if save_error else None,'responseExactKey':text(response).strip()==f'{company};{lan}'})
+  write_json(output/f'readback-checks-{ticket}.json',{'checks':after_checks,'saveErrorType':type(save_error).__name__ if save_error else None,'responseExactKey':text(response).strip()==f'{company};{lan}','nativeDiagnostic':response_diagnostic})
   if save_error:raise save_error
   require(text(response).strip()==f'{company};{lan}','SAVE_RESPONSE_NOT_EXACT_KEY')
   require(all(x['valid']for x in after_checks),'READBACK_NOT_FULLY_VERIFIED')
@@ -215,7 +251,7 @@ def execute(adapter,ticket,expected,expected_sha,output,control_reference,lease_
   write_json(output/f'result-{ticket}.json',result);write_json(marker,result);return result
  except Exception as exc:
   failure={'ticket':ticket,'state':'OUTCOME_UNCERTAIN_NO_RETRY'if dispatched else'BLOCKED_BEFORE_DISPATCH','observedUtc':utc(),'reviewSha256':expected_sha,
-   'errorType':type(exc).__name__,'errorCode':str(exc)if isinstance(exc,GuardError)else'EXTERNAL_FAILURE','retryAllowed':False}
+   'errorType':type(exc).__name__,'errorCode':str(exc)if isinstance(exc,GuardError)else'EXTERNAL_FAILURE','retryAllowed':False,'nativeDiagnostic':response_diagnostic}
   write_json(marker,failure);raise
 
 def load_module(name,path):
@@ -283,7 +319,7 @@ class RemoteLiveAdapter(observer.Observer):
   self.plan={'ticket':ticket};self.deadline=time.monotonic()+600
   self.opener=urllib.request.build_opener(observer.NoRedirect())
   self.template=observer.TEMPLATE.read_text(encoding='utf-8-sig')
-  self.proof=proof;self.claimed=None;self.save_attempted=False;self.preflight_deadline=None
+  self.proof=proof;self.claimed=None;self.save_attempted=False;self.preflight_deadline=None;self.reference_identity=None
   self.rm_auth=None;self.rm_user=None;self.zeev_token=None
 
  def config(self):
@@ -358,6 +394,10 @@ class RemoteLiveAdapter(observer.Observer):
   require(lease_module.get(pk)==self.proof['leasedRoot'],'LIVE_DYNAMODB_LEASE_CHANGED')
   return pk
 
+ def bind_reference(self,snapshot,ticket):
+  require(ticket==self.plan['ticket']and self.claimed is None and not self.save_attempted,'REFERENCE_BINDING_AFTER_DISPATCH_FORBIDDEN')
+  self.reference_identity=reference_for(snapshot,ticket)
+
  def claim_dispatch(self,ticket,plan_sha,proof,fields):
   require(self.proof==proof and self.claimed is None,'DISPATCH_LEASE_PROOF_CHANGED')
   require(self.preflight_deadline is not None and time.monotonic()<=self.preflight_deadline,'FRESH_PREFLIGHT_REQUIRED')
@@ -374,21 +414,27 @@ class RemoteLiveAdapter(observer.Observer):
  def native_save_http(self,raw,headers):
   try:
    with self.opener.open(urllib.request.Request(observer.HOST+'/wsDataServer/IwsDataServer',data=raw,headers=headers),timeout=15)as response:value=response.read(8000001)
-  except urllib.error.HTTPError as error:raise GuardError(f'BANK_SAVE_HTTP_{error.code}')from None
+  except urllib.error.HTTPError as error:
+   try:body=error.read(8000001)
+   except Exception:body=b''
+   raise NativeSaveError(f'BANK_SAVE_HTTP_{error.code}',native_diagnostic(body))from None
   except(urllib.error.URLError,TimeoutError):raise GuardError('BANK_SAVE_NETWORK_OUTCOME_UNCERTAIN')from None
-  require(len(value)<=8000000,'BANK_SAVE_RESPONSE_TOO_LARGE')
-  root=observer.xml_dataset(value)
-  require(not any(x.tag.endswith('Fault')for x in root.iter()),'BANK_SAVE_SOAP_FAULT')
+  if len(value)>8000000:raise NativeSaveError('BANK_SAVE_RESPONSE_TOO_LARGE',native_diagnostic(value))
+  try:root=observer.xml_dataset(value)
+  except Exception:raise NativeSaveError('BANK_SAVE_INVALID_XML',native_diagnostic(value))from None
+  if any(x.tag.endswith('Fault')for x in root.iter()):raise NativeSaveError('BANK_SAVE_SOAP_FAULT',native_diagnostic(value))
   result=root.find('.//{http://www.totvs.com/}SaveRecordResult')
-  require(result is not None and result.text,'BANK_SAVE_RESULT_MISSING');return result.text
+  if result is None or not result.text:raise NativeSaveError('BANK_SAVE_RESULT_MISSING',native_diagnostic(value))
+  return result.text
 
  def save(self,ticket,xml):
   require(ticket==self.plan['ticket']and self.claimed is not None and not self.save_attempted,'SAVE_NOT_CLAIMED_OR_ALREADY_ATTEMPTED')
   self.save_attempted=True;company,_,lan,*_=TARGETS[ticket]
   dataset=observer.xml_dataset(xml);rows=observer.records(dataset,'FLAN')
   require(len(rows)==1 and len(dataset)==1,'SAVE_RECORD_NOT_MINIMAL')
-  row=rows[0];require(row.get('CODCOLIGADA')==str(company)and row.get('IDLAN')==str(lan)and set(row)<={'CODCOLIGADA','IDLAN'}|WRITABLE,'SAVE_RECORD_SCOPE_INVALID')
-  require({k:v for k,v in row.items()if k not in('CODCOLIGADA','IDLAN')}==self.claimed_fields,'SAVE_FIELDS_DIFFER_FROM_CLAIM')
+  row=rows[0];require(row.get('CODCOLIGADA')==str(company)and row.get('IDLAN')==str(lan)and set(row)<={'CODCOLIGADA','IDLAN'}|REFERENCE|WRITABLE,'SAVE_RECORD_SCOPE_INVALID')
+  require(self.reference_identity is not None and {k:row.get(k)for k in REFERENCE}==self.reference_identity,'SAVE_IMMUTABLE_CFO_REFERENCE_CHANGED')
+  require({k:v for k,v in row.items()if k not in({'CODCOLIGADA','IDLAN'}|REFERENCE)}==self.claimed_fields,'SAVE_FIELDS_DIFFER_FROM_CLAIM')
   envelope=ET.Element('{http://schemas.xmlsoap.org/soap/envelope/}Envelope');body=ET.SubElement(envelope,'{http://schemas.xmlsoap.org/soap/envelope/}Body');operation=ET.SubElement(body,'SaveRecord',xmlns='http://www.totvs.com/')
   for k,v in {'DataServerName':'FinLanDataBR','XML':xml,'Contexto':f'CODCOLIGADA={company};CODSISTEMA=F;CODUSUARIO={self.rm_user}'}.items():ET.SubElement(operation,k).text=v
   raw=ET.tostring(envelope);headers={'Authorization':self.rm_auth,'Content-Type':'text/xml;charset=UTF-8','SOAPAction':'http://www.totvs.com/IwsDataServer/SaveRecord'}

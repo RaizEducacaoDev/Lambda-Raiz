@@ -33,6 +33,7 @@ class Adapter:
   if self.failure=='readback'and self.saves:raise TimeoutError()
   return copy.deepcopy(self.s)
  def claim_dispatch(self,*args):self.claims+=1
+ def bind_reference(self,snapshot,ticket):self.reference_identity=r.reference_for(snapshot,ticket)
  def save(self,ticket,xml):
   self.saves+=1;self.saved_xml=xml
   if self.failure=='timeout':raise TimeoutError()
@@ -51,7 +52,10 @@ class CoreSafety(unittest.TestCase):
   a=Adapter(fixture())
   with tempfile.TemporaryDirectory()as d:
    result=self.run_case(a,d);self.assertEqual(result['state'],'VERIFIED');self.assertEqual((a.saves,a.claims,a.reads),(1,1,4))
-   self.assertEqual({x.tag for x in r.ET.fromstring(a.saved_xml).find('FLAN')},{'CODCOLIGADA','IDLAN','IDPGTO','CODCOLPGTO'})
+   fields={x.tag:x.text for x in r.ET.fromstring(a.saved_xml).find('FLAN')}
+   self.assertEqual(set(fields),{'CODCOLIGADA','IDLAN','IDPGTO','CODCOLPGTO','CODCOLCFO','CODCFO'})
+   self.assertEqual({k:fields[k]for k in r.REFERENCE},{'CODCOLCFO':'0','CODCFO':'0000000001'})
+   self.assertEqual(result['changedFields'],['CODCOLPGTO','IDPGTO'])
  def test_each_of_eight_targets_qualifies_only_exact_ids(self):
   for ticket in r.TARGETS:
    s=fixture(ticket);r.review(s,ticket);s['nativeLan'][0]['IDLAN']='999'
@@ -103,6 +107,32 @@ class CoreSafety(unittest.TestCase):
   with tempfile.TemporaryDirectory()as d:
    path=Path(d)/'lease.json';p=proof();p['expiresAtEpoch']=int(time.time())+30;r.write_json(path,p)
    with self.assertRaises(r.GuardError):r.validate_lease(path,r.hashlib.sha256(path.read_bytes()).hexdigest(),228007)
+ def test_native_rejection_is_durably_sanitized_before_failed_readback(self):
+  a=Adapter(fixture());a.failure='readback'
+  a.response="Column 'CODCFO' does not allow nulls.\nCliente Maria; CPF 123.456.789-00; pix=maria@example.com\nAuthorization: Bearer secret-value"
+  with tempfile.TemporaryDirectory()as d:
+   with self.assertRaises(r.GuardError):self.run_case(a,d)
+   evidence=json.loads((Path(d)/'native-response-228007.json').read_text())['diagnostic']
+   self.assertEqual(evidence['reasonCode'],'RM_REQUIRED_FIELD');self.assertEqual(evidence['mentionedFields'],['CODCFO'])
+   self.assertEqual(evidence['responseSha256'],r.hashlib.sha256(a.response.encode()).hexdigest())
+   exported=''.join(p.read_text()for p in Path(d).glob('*.json'))
+   for secret in ('Maria','123.456.789','maria@example.com','secret-value',a.response):self.assertNotIn(secret,exported)
+   self.assertEqual(a.saves,1);self.assertEqual(json.loads((Path(d)/'attempt-228007.json').read_text())['state'],'OUTCOME_UNCERTAIN_NO_RETRY')
+ def test_modification_audit_only_may_change_financial_dates_remain_immutable(self):
+  for changed in ('DATAALTERACAO','DATAEMISSAO','DATAVENCIMENTO','DATAPREVBAIXA','CODCFO','CODCOLCFO'):
+   before=fixture();after=copy.deepcopy(before)
+   fields=r.qualify(before,228007)
+   for row in after['sqlLan']+after['nativeLan']:row.update(fields);row[changed]='2026-11-04'if changed.startswith('DATA')else'other'
+   if changed=='DATAALTERACAO':r.validate_after(before,after,228007,fields)
+   else:
+    with self.assertRaises(r.GuardError):r.validate_after(before,after,228007,fields)
+ def test_reference_must_match_both_native_and_sql_and_global_supplier_keeps_zeros(self):
+  s=fixture();self.assertEqual(r.reference_for(s,228007),{'CODCOLCFO':'0','CODCFO':'0000000001'})
+  for key in r.REFERENCE:
+   wrong=copy.deepcopy(s);wrong['nativeLan'][0][key]='9'
+   with self.assertRaises(r.GuardError):r.reference_for(wrong,228007)
+  with self.assertRaises(r.GuardError):r.xml_for(228007,{'IDPGTO':'1','CODCOLPGTO':'5'}, {'CODCOLCFO':'0','CODCFO':''})
+  with self.assertRaises(r.GuardError):r.xml_for(228007,{'IDPGTO':'1','CODCOLPGTO':'5','CODCFO':'foreign'},r.reference_for(s,228007))
 
 class AwsBoundary(unittest.TestCase):
  def setUp(self):
@@ -116,19 +146,20 @@ class AwsBoundary(unittest.TestCase):
   self.store[key]=copy.deepcopy(payload['Item']);return{}
  def adapter(self):
   a=r.RemoteLiveAdapter(228007,self.proof);a.rm_auth='Basic synthetic';a.rm_user='synthetic'
+  a.bind_reference(fixture(),228007)
   a.preflight_deadline=time.monotonic()+60
   a.native_save_http=lambda *args:self.events.append(('post','native'))or'5;634500'
   return a
  def test_last_external_call_before_post_is_consistent_exact_root_get(self):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
-   a.claim_dispatch(228007,'review-sha',self.proof,fields);a.save(228007,r.xml_for(228007,fields))
+   a.claim_dispatch(228007,'review-sha',self.proof,fields);a.save(228007,r.xml_for(228007,fields,a.reference_identity))
   self.assertEqual(self.events[-2:],[('get',self.pk),('post','native')])
  def test_revoked_or_replaced_owner_after_claim_stops_native_post(self):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
    a.claim_dispatch(228007,'review-sha',self.proof,fields);self.store[self.pk]['owner']={'S':'other-owner'}
-   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields))
+   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields,a.reference_identity))
   self.assertFalse(any(e[0]=='post'for e in self.events))
  def test_second_workflow_process_cannot_claim_same_ticket(self):
   first=self.adapter();second=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
@@ -145,20 +176,52 @@ class AwsBoundary(unittest.TestCase):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
    a.claim_dispatch(228007,'sha',self.proof,fields)
-   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,{'IDPGTO':'99','CODCOLPGTO':'5'}))
+   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,{'IDPGTO':'99','CODCOLPGTO':'5'},a.reference_identity))
   self.assertFalse(any(e[0]=='post'for e in self.events))
  def test_same_adapter_never_resubmits_native(self):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
-   a.claim_dispatch(228007,'sha',self.proof,fields);a.save(228007,r.xml_for(228007,fields))
-   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields))
+   a.claim_dispatch(228007,'sha',self.proof,fields);a.save(228007,r.xml_for(228007,fields,a.reference_identity))
+   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields,a.reference_identity))
   self.assertEqual(sum(e[0]=='post'for e in self.events),1)
  def test_slow_last_aws_get_cannot_send_stale_snapshot(self):
   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
    a.claim_dispatch(228007,'sha',self.proof,fields);a.preflight_deadline=time.monotonic()-1
-   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields))
+   with self.assertRaises(r.GuardError):a.save(228007,r.xml_for(228007,fields,a.reference_identity))
   self.assertFalse(any(e[0]=='post'for e in self.events))
+ def test_reference_is_mandatory_immutable_and_cannot_rebind_after_claim(self):
+  for problem in ('missing','foreign','rebind'):
+   a=self.adapter();fields={'IDPGTO':'1','CODCOLPGTO':'5'}
+   with patch.object(r.lease_module,'get',self.get),patch.object(r.lease_module,'aws',self.aws):
+    a.claim_dispatch(228007,'sha',self.proof,fields)
+    with self.assertRaises(r.GuardError):
+     if problem=='rebind':a.bind_reference(fixture(),228007)
+     else:
+      xml=r.xml_for(228007,fields,a.reference_identity)
+      xml=xml.replace('<CODCFO>0000000001</CODCFO>',''if problem=='missing'else'<CODCFO>0000000099</CODCFO>')
+      a.save(228007,xml)
+   self.assertFalse(any(e[0]=='post'for e in self.events));self.store.pop(self.pk+'#BANK_REPAIR_ATTEMPT',None)
+
+class NativeDiagnostic(unittest.TestCase):
+ def test_multiline_1586_chars_has_only_fixed_codes_and_no_native_values(self):
+  raw="CODCFO: nao pode ser nulo\n"+'fornecedor=José; conta=12345; chave=person@example.com; senha=private-value\n'*24
+  raw=raw[:1586].ljust(1586,'x');d=r.native_diagnostic(raw)
+  self.assertEqual(d['length'],1586);self.assertEqual(d['reasonCode'],'RM_REQUIRED_FIELD');self.assertEqual(d['mentionedFields'],['CODCFO'])
+  self.assertFalse(d['rawRetained']);self.assertNotIn('private-value',json.dumps(d));self.assertNotIn('person@example.com',json.dumps(d))
+ def test_unclassified_response_does_not_become_safe_retry_or_success(self):
+  d=r.native_diagnostic('Erro desconhecido; retorno sem chave','5;634500')
+  self.assertFalse(d['exactKey']);self.assertEqual(d['reasonCode'],'RM_UNCLASSIFIED_RESPONSE');self.assertNotIn('retryAllowed',d)
+ def test_native_http_fault_keeps_sanitized_diagnostic_without_raw(self):
+  body=b'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultstring>CODCOLCFO cannot be null; password=secret-value</faultstring></s:Fault></s:Body></s:Envelope>'
+  class Response:
+   def __enter__(self):return self
+   def __exit__(self,*a):pass
+   def read(self,*a):return body
+  a=r.RemoteLiveAdapter(228007);a.opener=type('Opener',(),{'open':lambda *args,**kwargs:Response()})()
+  with self.assertRaises(r.NativeSaveError)as ctx:a.native_save_http(b'fake',{})
+  self.assertEqual(str(ctx.exception),'BANK_SAVE_SOAP_FAULT');self.assertTrue(ctx.exception.diagnostic['flags']['soapFault'])
+  self.assertEqual(ctx.exception.diagnostic['reasonCode'],'RM_REQUIRED_FIELD');self.assertNotIn('secret-value',json.dumps(ctx.exception.diagnostic))
 
 class QueryContract(unittest.TestCase):
  def row(self):
