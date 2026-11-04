@@ -1,0 +1,35 @@
+name: Read new payment attempts during backlog recovery
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - scripts/audit-payment-new-attempts.py
+      - .github/workflows/payment-new-attempts-readonly.yml
+permissions:
+  contents: read
+jobs:
+  read-only:
+    if: ${{ github.event_name == 'push' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/audit-payment-new-attempts.py --self-test
+      - name: Read exact roots and sanitized request logs
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-new-attempts.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-new-attempts-readonly-evidence
+          path: .payment-new-attempts-readonly/
+          include-hidden-files: true
+          retention-days: 7
