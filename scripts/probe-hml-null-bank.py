@@ -1,4 +1,4 @@
-"""Reviewed DEV fixture only: one full NULL clear, then at most one reattachment.
+"""Reviewed DEV fixture only: one minimal NULL clear, then at most one reattachment.
 
 Never retries or restores after an ambiguous result. No PROD financial access.
 """
@@ -20,16 +20,24 @@ def minimal_xml():
  return ET.tostring(root,encoding='unicode')
 
 def clear_xml(original):
- root=copy.deepcopy(original);rows=[n for n in root if n.tag=='FLAN'];require(len(rows)==1,'FULL_CLEAR_REQUIRES_ONE_FLAN')
+ rows=[n for n in original if n.tag=='FLAN'];require(original.tag=='FinLAN'and len(rows)==1,'CLEAR_BASELINE_REQUIRES_ONE_FLAN')
+ expected_identity={'CODCOLIGADA':'11','IDLAN':'148481','CODCOLCFO':'0','CODCFO':'0000173261'}
+ for name,value in expected_identity.items():require(len(rows[0].findall(name))==1 and rows[0].findtext(name)==value,'CLEAR_BASELINE_IDENTITY_CHANGED')
  for name,value in [('IDPGTO','2'),('CODCOLPGTO','11')]:
   nodes=rows[0].findall(name);require(len(nodes)==1 and nodes[0].text==value and not nodes[0].attrib,'BASELINE_BANK_NOT_EXACT')
-  nodes[0].text=None;nodes[0].set(NIL,'true')
+ root=ET.Element('FinLAN');row=ET.SubElement(root,'FLAN')
+ # Full XML was natively rejected for protected ValorOriginal on this fixture.
+ # Only immutable identity references and the two explicit NULL values are sent.
+ for name in('CODCOLIGADA','IDLAN','CODCOLPGTO','CODCOLCFO','CODCFO','IDPGTO'):
+  cell=ET.SubElement(row,name)
+  if name in('IDPGTO','CODCOLPGTO'):cell.set(NIL,'true')
+  else:cell.text=expected_identity[name]
  return ET.tostring(root,encoding='unicode')
 
 def validate_clear(original,xml):
  actual=ET.fromstring(xml);expected=ET.fromstring(clear_xml(original))
- # ET representation preserves every cell, row, attribute and child order.
- require(ET.tostring(actual)==ET.tostring(expected),'FULL_CLEAR_CHANGED_OTHER_FIELDS')
+ # Reject every additional cell, row or attribute, even a protected unchanged value.
+ require(ET.tostring(actual)==ET.tostring(expected),'CLEAR_NOT_EXACT_MINIMAL_SIX_FIELDS')
 
 def read_snapshot(p):
  p.environment();p.contract()
