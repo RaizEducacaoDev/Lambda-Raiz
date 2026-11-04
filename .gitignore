@@ -19,6 +19,7 @@ dist/
 .idpgto-readback/
 .idpgto-incident/
 .idpgto-recovery/
+.fiscal-uf-release/
 __pycache__/
 *.pyc
 .serverless/
