@@ -3,24 +3,21 @@ const assert=require('node:assert/strict');
 const path=require('node:path');
 const modules=new Map(),load=file=>require('./load-ts.cjs')(path.resolve(__dirname,'../src/functions/rm/post',file),{},modules);
 const {NaturezaFiscalInvalida,prepararContextoFiscal,validarContextoFiscal}=load('pagamentoFiscal.ts');
-const {PagamentoInvalido}=load('pagamentoIdentidade.ts');
 const expected={codColigada:'11',codFilial:'1',codColCfo:'0',codCfo:'0000000001',idNat:'121',codigoNatureza:'1.949.01'};
 const native=changes=>({FISCAL_VERSION:1,REQUEST_COMPANY:11,REQUEST_BRANCH:1,REQUEST_SUPPLIER_COMPANY:0,
  REQUEST_SUPPLIER:'0000000001',REQUEST_NATURE:121,HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,
  NATURE_COMPANY:11,NATURE_ID:121,NATURE_CODE:'1.949.01',NATURE_ACTIVE:1,NATURE_ROUTE:'D',
  SUPPLIER_UF:'RJ',SUPPLIER_COUNTRY_ID:1,BRANCH_UF:'RS',BRANCH_COUNTRY_ID:1,...changes});
 
-test('natureza interna RJ/RS recebe422 tipado com UFs e instrução fiscal, sem escolher alternativa',()=>{
- assert.throws(()=>validarContextoFiscal([native()],expected),error=>{
-  assert.ok(error instanceof PagamentoInvalido);assert.ok(error instanceof NaturezaFiscalInvalida);
-  assert.equal(error.code,'NATUREZA_FISCAL_INCOMPATIVEL');assert.match(error.message,/RJ.*RS/);assert.match(error.message,/tarefa Fiscal/);
-  assert.equal(error.message.includes('166'),false);return true;
- });
+test('natureza interna SP/RJ segue para validação nativa sem substituir a seleção',()=>{
+ const row=native({SUPPLIER_UF:'SP',BRANCH_UF:'RJ'}),snapshot=JSON.stringify({row,expected});
+ assert.doesNotThrow(()=>validarContextoFiscal([row],expected));
+ assert.equal(JSON.stringify({row,expected}),snapshot);
 });
-test('rotas D/RJ_RJ e F/RJ_RS são válidas; F/RJ_RJ é incompatível',()=>{
+test('UF não bloqueia natureza interna ou interestadual na integração',()=>{
  assert.doesNotThrow(()=>validarContextoFiscal([native({BRANCH_UF:'RJ'})],expected));
  assert.doesNotThrow(()=>validarContextoFiscal([native({NATURE_ROUTE:'F',NATURE_CODE:'2.949.01'})],{...expected,codigoNatureza:'2.949.01'}));
- assert.throws(()=>validarContextoFiscal([native({NATURE_ROUTE:'F',NATURE_CODE:'2.949.01',BRANCH_UF:'RJ'})],{...expected,codigoNatureza:'2.949.01'}),NaturezaFiscalInvalida);
+ assert.doesNotThrow(()=>validarContextoFiscal([native({NATURE_ROUTE:'F',NATURE_CODE:'2.949.01',BRANCH_UF:'RJ'})],{...expected,codigoNatureza:'2.949.01'}));
 });
 test('cadastro ausente, natureza inativa ou código divergente são inválidos, sem inferirCFOP',()=>{
  for(const changes of [{HAS_SUPPLIER:0},{HAS_BRANCH:0},{HAS_NATURE:0},{NATURE_ACTIVE:0},{NATURE_CODE:'2.949.01'}]){
@@ -28,13 +25,10 @@ test('cadastro ausente, natureza inativa ou código divergente são inválidos, 
  }
 });
 test('contrato incompleto/corrompido, eco divergente e resposta ambígua falham como indisponíveis',()=>{
- const missing=native();delete missing.SUPPLIER_COUNTRY_ID;
- const missingUf=native();delete missingUf.SUPPLIER_UF;
- const missingNature=native();delete missingNature.NATURE_ROUTE;
- for(const data of [[],[native(),native()],{},null,[missing],[missingUf],[missingNature],
+ for(const data of [[],[native(),native()],{},null,
   ...[{FISCAL_VERSION:2},{FISCAL_VERSION:'01'},{REQUEST_COMPANY:31},{REQUEST_BRANCH:2},{REQUEST_SUPPLIER_COMPANY:1},{REQUEST_SUPPLIER:'PRIVATE_OTHER'},
-   {REQUEST_NATURE:122},{NATURE_COMPANY:31},{NATURE_ID:122},{NATURE_ACTIVE:2},{HAS_BRANCH:true},{HAS_BRANCH:'01'},{SUPPLIER_UF:'XX'},
-   {BRANCH_COUNTRY_ID:0},{NATURE_CODE:null},{NATURE_ROUTE:null}].map(changes=>[native(changes)])]){
+   {REQUEST_NATURE:122},{NATURE_COMPANY:31},{NATURE_ID:122},{NATURE_ACTIVE:2},{HAS_BRANCH:true},{HAS_BRANCH:'01'},
+   {NATURE_CODE:null}].map(changes=>[native(changes)])]){
   assert.throws(()=>validarContextoFiscal(data,expected),error=>{assert.ok(error instanceof Error);assert.equal(error instanceof NaturezaFiscalInvalida,false);assert.equal(error.message.includes('PRIVATE'),false);return true;});
  }
 });
@@ -42,6 +36,8 @@ test('globalCFO0 é preservado; outros países/rotas permanecem sob controle nat
  assert.doesNotThrow(()=>validarContextoFiscal([native({REQUEST_SUPPLIER_COMPANY:'0',BRANCH_UF:'RJ'})],expected));
  assert.doesNotThrow(()=>validarContextoFiscal([native({SUPPLIER_COUNTRY_ID:2,SUPPLIER_UF:null})],expected));
  assert.doesNotThrow(()=>validarContextoFiscal([native({NATURE_ROUTE:'X'})],expected));
+ const row=native();for(const key of ['NATURE_ROUTE','SUPPLIER_UF','SUPPLIER_COUNTRY_ID','BRANCH_UF','BRANCH_COUNTRY_ID'])delete row[key];
+ assert.doesNotThrow(()=>validarContextoFiscal([row],expected));
 });
 test('preparação valida ID informado sem alterar entrada e permite ausência de ambos campos',()=>{
  const base={codColigada:'11',codFilial:'1',codColCfo:'0',codCfo:'0000000001'};

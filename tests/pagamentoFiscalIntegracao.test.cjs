@@ -56,11 +56,12 @@ function setup(options={}){
  return {fields,calls,records,run,digest};
 }
 
-test('novo121/RJ_RS retorna422 específico antes de qualquer reserva ou efeito',async()=>{
- const x=setup(),snapshot=JSON.stringify(x.fields),digest=x.digest();const result=await x.run();
- assert.equal(result.statusCode,422);assert.equal(parse(result).code,'NATUREZA_FISCAL_INCOMPATIVEL');assert.match(parse(result).message,/RJ.*RS/);
- assert.equal(x.calls.fiscal,1);assert.deepEqual(x.calls.order,['concluida','bank','movimentoConhecido','lookup','document','fiscal']);
- assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.records.size,0);
+test('natureza interna SP/RJ alcança criação simulada com a seleção original',async()=>{
+ const x=setup({native:{SUPPLIER_UF:'SP',BRANCH_UF:'RJ'}}),snapshot=JSON.stringify(x.fields),digest=x.digest();const result=await x.run();
+ assert.equal(result.statusCode,200);assert.equal(parse(result).PG,'9001');
+ assert.equal(x.calls.fiscal,1);assert.equal(x.calls.order.indexOf('fiscal')<x.calls.order.indexOf('reservar'),true);
+ assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,1);
+ const root=[...x.records.values()].find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'COMPLETE');assert.equal(root.digest,digest);
  assert.equal(JSON.stringify(x.fields),snapshot);assert.equal(x.digest(),digest);
 });
 test('F/RJ_RS e D/RJ_RJ válidos seguem protocolo completo sem mudar intenção ou natureza',async()=>{
@@ -80,7 +81,7 @@ test('ID inválido, código divergente, FK ausente ou inativa nunca reserva',asy
 test('consulta indisponível, contrato errado ou incompleto retorna503 sem reserva',async()=>{
  for(const options of [{fiscalError:true},{fiscalResponse:[]},{fiscalResponse:[{},{}]},{native:{REQUEST_COMPANY:31}},
   {native:{REQUEST_SUPPLIER_COMPANY:1}},{native:{REQUEST_SUPPLIER:'OTHER'}},{native:{REQUEST_NATURE:122}},
-  {native:{NATURE_ID:122}},{native:{NATURE_COMPANY:31}},{native:{SUPPLIER_COUNTRY_ID:undefined}},{native:{SUPPLIER_UF:undefined}}]){
+  {native:{NATURE_ID:122}},{native:{NATURE_COMPANY:31}}]){
   const x=setup(options);assert.equal((await x.run()).statusCode,503);assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);
  }
 });
