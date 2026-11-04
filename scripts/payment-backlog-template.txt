@@ -1,0 +1,86 @@
+{
+  "atividadeAtual": "{Form.atividadeAtual}",
+  "idpgto": "{Form.idpgto}",
+  "idPagamento": "{Form.idPagamento}",
+  "CODCOLPGTO":"{Form.codigoDaColigada2}",
+  "dataInstancia": "{Instance.StartDateTime}",
+  "codigoDaColigada": "{Form.codigoDaColigada}",
+  "tipoDaSolicitacao": "{Form.tipoDaSolicitacao}",
+  "tipoDoPagamento": "{Form.tipoDoPagamento}",
+  "contasDeConsumo": "{Form.contasDeConsumo}",
+  "tipoDeItem": "{Form.tipoDeItem}",
+  "tipoDoLocador": "{Form.tipoDoLocador}",
+  "outrosGastos": "{Form.outrosGastos}",
+  "codigoDoEstado": "{Form.codigoDoEstado}",
+  "codigoDoMunicipio": "{Form.codigoDoMunicipio}",
+  "valorContaDeEnergia": "{Form.luz}",
+  "valorContaDeAgua": "{Form.agua}",
+  "ValorContaDeGas": "{Form.gas}",
+  "valorDoIPTU": "{Form.iptu}",
+  "valorTaxaDeIncendio": "{Form.incendio}",
+  "valorDoCondominio": "{Form.condominio}",
+  "idDoMovimento": "{Form.idDoMovimento}",
+  "movimentoExistente": "{DataSource.a18c2270-0a1e-4a29-b251-0c7348f36eb7}",
+  "codigoDaColigada2": "{Form.codigoDaColigada2}",
+  "codigoDaFilial": "{Form.codigoDaFilial}",
+  "codigoDaFilial2": "{Form.codigoDaFilial2}",
+  "codigoDoCentroDeCusto": "{Form.codigoDoCentroDeCusto}",
+  "codigoDoFornecedor": "{Form.codigoDoFornecedor}",
+  "codigoDoFornecedor2": "{Form.codigoDoFornecedor2}",
+  "localDeEstoque": "{Form.localDeEstoque}",
+  "dataDeEmissao": "{Form.dataDeEmissao}",
+  "dataDeVencimento": "{Form.dataDeVencimento}",
+  "inicioDaPrestacao": "{Form.inicioDaPrestacao}",
+  "terminoDaPrestacao": "{Form.terminoDaPrestacao}",
+  "remetente": "{Form.remetente}",
+  "destinatario": "{Form.destinatario}",
+  "informacoes": "{Form.informacoes}",
+  "chaveDeAcesso": "{Form.chaveDeAcesso}",
+  "serie": "{Form.serieDaNF}",
+  "numeroDaNF": "{Form.numeroDaNF}",
+  "tipoDeFrete": "{Form.tipoDeFrete}",
+  "linkDaSolicitacao": "{Instance.LinkReport}",
+  "valorDoFrete": "{Form.frete}",
+  "outrasDespesas": "{Form.outras}",
+  "codigoDaFormaPagamento": "{Form.codigoDaCondicaoPagamento}",
+  "ticketRaiz": "{Instance.Id}",
+  "valorTotal": "{Form.valorTotalDoPagamento}",
+  "valorDoAluguel": "{Form.aluguel}",
+  "codigoDaNaturezaFiscal": "{Form.codigoDaNaturezaFiscal}",
+  "idDaNaturezaFiscal": "{Form.idDaNaturezaFiscal}",
+  "tributosCodigoDaReceita": "{Form.tributosCodigoDaReceita}",
+  "dataDeEntrada": "{Form.dataDeEntrada}",
+  "codigoDeBarrasBoleto":"{Form.codigoDeBarrasBoletoAVista}",
+  "codigoTipoChavePIX": "{Form.codigoTipoChavePIX}",
+  "chavePIX": "{Form.chavePIX}",
+  "itens": [
+    {Form.Loop.codigoDoItem}
+    {
+      "codigoDaNatureza": "{Form.codigoDaNaturezaOrcamentaria}",
+      "codigoDoItem": "{Form.codigoDoItem}",
+      "coligadaDaNatureza": "{Form.coligadaDaNatureza}",
+      "qtdDoItem": "{Form.qtdDoItem}",
+      "valorDoItem": "{Form.precoUnitario}",
+      "desconto": "{Form.desconto}"
+    }
+    {/Form.Loop.codigoDoItem}
+  ],
+  "listaDeParcelas": [
+    {Form.Loop.valorDaParcela}
+    {
+      "vencimentoDaParcela": "{Form.vencimentoDaParcela}",
+      "valorDaParcela": "{Form.valorDaParcela}"
+    }
+    {/Form.Loop.valorDaParcela}
+  ],
+  "tributos": [
+    {Form.Loop.codigoDoTributo}
+    {
+      "codigoDoTributo": "{Form.codigoDoTributo}",
+      "baseDeCalculo": "{Form.baseDeCalculoR}",
+      "aliquota": "{Form.aliquota}",
+      "valorDaAliquota": "{Form.valorDaAliquota}"
+    }
+    {/Form.Loop.codigoDoTributo}
+  ]
+}
