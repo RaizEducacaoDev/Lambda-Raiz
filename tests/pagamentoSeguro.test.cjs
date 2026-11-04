@@ -96,6 +96,19 @@ test('PIX: criação e gravação com leitura final; replay em instância nova s
   assert.equal(second.statusCode,200);assert.equal(parse(second).integracaoBancaria,'ja_gravada');assert.equal(x.count.create,1);assert.equal(x.count.update,1);
   assert.equal((await x.all()).filter(r=>r.state==='COMPLETE').length,2);
 });
+
+test('preserva patch PIX CNPJ ativo: máscara só na comparação, sem mudar entrada ou digest',async()=>{
+ const x=await setup({bank:{TIPOPIX:'4',CHAVE:'12345678000199'}});
+ const fields={codigoTipoChavePIX:'4',chavePIX:'12.345.678/0001-99'};
+ assert.equal((await x.run(fields)).statusCode,200);assert.equal(fields.chavePIX,'12.345.678/0001-99');
+ const current={...payload,...fields},key=identidadePagamento(current);
+ assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').digest,hashIntencao(intencaoPagamento(current,key,planosPagamento(current,key),'1.2.16')));
+ for(const invalid of [{codigoTipoChavePIX:'4',chavePIX:'12.345.678/0001-98'},{codigoTipoChavePIX:'4',chavePIX:'./ -'}]){
+  const y=await setup({bank:{TIPOPIX:'4',CHAVE:'12345678000199'}});assert.equal((await y.run(invalid)).statusCode,422);assert.equal(y.count.create,0);
+ }
+ const email=await setup({bank:{TIPOPIX:'2',CHAVE:'fixture@example.test'}});
+ assert.equal((await email.run({chavePIX:'fixture@example-test'})).statusCode,422);assert.equal(email.count.create,0);
+});
 test('cadastro é validado por chave completa, modalidade, fornecedor e destino antes de criar',async()=>{
   for(const bad of [{idpgto:''},{idpgto:'0'},{IDPGTO:'7'},{CODCOLPGTO:'9'},{idPagamento:'8$_$0$_$outro$_$6'},
     {idPagamento:'8$_$1$_$0000000001$_$6'},{chavePIX:'other'},{codigoTipoChavePIX:'3'},

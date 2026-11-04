@@ -7,8 +7,8 @@ import base64,datetime,hashlib,io,json,os,pathlib,re,subprocess,urllib.request,x
 
 FUNCTION='lambda-raiz-prod-solicitacaoDePagamento'
 TABLE='lambda-raiz-prod-pagamento-idpgto'
-BASELINE='6Mf0NJD8HIyDhId6FzbAGKqWu13Strj23mIvnBhKmxQ='
-REVISION='61c06ae6-76ad-4e20-95c9-a06d9eae1d22'
+BASELINE='rRubhd20rr3yhbQkdzbyCvDJrnAtozxO/Q8sN0XpJtA='
+REVISION='a2cf38ea-8857-4e06-847e-614b57f9d844'
 HOST='https://raizeducacao160286.rm.cloudtotvs.com.br:8051'
 OUT=pathlib.Path('.pagamento-retomada-release');OUT.mkdir(exist_ok=True)
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()

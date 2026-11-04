@@ -475,3 +475,12 @@ somente no registro privado da sessão; este arquivo é adequado ao repositório
 - 159testes+typecheck+bundle passaram. Revisão detectou bloqueio indevidoSC/OCno último censo; corrigido preservando RECONcompleto+filtroPG e bloqueando qualquerLANprévio. Novo testeverde.
 - HML real readonly: reserva simulada emDynamoLOCALCREATING recuperou MOV99863/LAN188433 existente, COMPLETE/histórico1, SaveRecordnativoTOTALMENTEdesabilitado,0tentativaswrites. Original226374fixtureficou422/CREATINGsemalteração.
 - Publicação escopada preparada, ainda pendente no momento deste registro. Sem nova criação financeira. 226374não está liberado: NF114/série1colide com2025; reserva original não é ressetada/convertida emRESERVED2.
+
+## 2026-11-04 — publicação bloqueada por drift identificado e incorporado
+
+- Run41862532529 terminou failure15:55UTC noassertbaseline/revision, ANTESUpdateCode. Statusqueuedanteriorera informação desatualizada; novalogcompletaconfirmafalha, nãofila.
+- Auditreadonly41867431178 confirmou novoCodeSHArRubhd20rr3yhbQkdzbyCvDJrnAtozxO/Q8sN0XpJtA=,revisiona2cf38ea-8857-4e06-847e-614b57f9d844,publicado14:47:43UTC. Correlation202611040125-5→226374às16:25:20.768UTC,request190edb2e-9862-4931-9a03-eea1c7737f3c,409antescriação,reservaoriginalintocada.
+- ComparaçãoJSreal×pacote6Mf:únicohunknormalizaCNPJTIPOPIX4removendomáscarasóparacomparação,rejeitavazio. IncorporadonafonteTScomteste; valor/digestoriginaispreservados. Core/package.json/mapbytesiguais. SourceMapestáobsoletoe NÃOrepresentaJSativo.
+- NovoZIPativo temnomesbackslash; montadornormalizaapenasnomes, rejeitacolisaonormalizada,preservatodosbytesforaentry/core. Buildrealatual+smoke0networkpassaram.
+- 160testes+typecheck+bundle+2Pythonpassaram. Retargetbaseline/revisionatualaprovadoporrevisãoindependente. Ainda nãoéliberaçãofinanceirado226374.
+- Usuárioconfirmouusar226374comoteste;perguntafactualpendentesobre114realvs1141testeemprodução, pois1141foraexplicitamentedeclaradocontorno.

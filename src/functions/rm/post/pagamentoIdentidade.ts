@@ -143,8 +143,14 @@ export function validarCadastro(dado: Record<string, string>, chave: ChaveDadoPa
     throw new PagamentoInvalido('Boleto informado para cadastro de outra modalidade');
   }
   if (texto(c.chavePIX)) {
+    // Preserve the normalization already active in production: CNPJ masks are
+    // ignored only for comparison. Never change the submitted value/digest.
+    const chavePixParaComparacao = (valor: unknown) => texto(dado.TIPOPIX) === '4'
+      ? texto(valor).replace(/[.\/\-\s]/g, '') : texto(valor);
+    const chaveDoCadastro = chavePixParaComparacao(dado.CHAVE);
+    const chaveInformada = chavePixParaComparacao(c.chavePIX);
     if (forma !== 'S' || (texto(c.codigoTipoChavePIX) && texto(dado.TIPOPIX) !== texto(c.codigoTipoChavePIX)) ||
-        (texto(c.codigoTipoChavePIX) !== '6' && texto(dado.CHAVE) !== texto(c.chavePIX))) {
+        (texto(c.codigoTipoChavePIX) !== '6' && (!chaveInformada || chaveDoCadastro !== chaveInformada))) {
       throw new PagamentoInvalido('Chave/tipo PIX diverge do cadastro selecionado');
     }
   }
