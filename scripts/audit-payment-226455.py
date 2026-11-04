@@ -2,7 +2,11 @@
 import datetime as dt
 import importlib.util
 import json
+import hashlib
+import os
 from pathlib import Path
+import re
+import sys
 import time
 
 spec = importlib.util.spec_from_file_location('incident_base', Path(__file__).with_name('audit-payment-conflict-20261103-0609.py'))
@@ -11,6 +15,33 @@ spec.loader.exec_module(a)
 a.TICKET, a.COMPANY, a.BRANCH, a.PK = '226455', '9', '2', 'prod#PG#9#226455'
 deadline = time.monotonic() + 300
 assert a.aws('sts', 'get-caller-identity', deadline=deadline)['Account'] == a.ACCOUNT
+if os.environ.get('INCIDENT_ORIGINAL_ONLY') == '1':
+    request='4a422f5f-566c-4f32-895a-00ad2d72041e'
+    raw, covered=a.read_log_window('"'+request+'"',1793366400000,1793366700000,deadline)
+    markers=['DATASAIDA','DATAEMISSAO','DATAVENCIMENTO','CHAVEACESSONFE','NUMEROMOV','SERIE','IDPRD','CODLOC','CODCCUSTO','IDPGTO','CODIGOBARRA','IPTE']
+    phrases={'entry_date':'DATA DE ENTRADA','access_key':'CHAVE DE ACESSO','barcode':'CODIGO DE BARRAS',
+             'duplicate':'DUPLIC','required':'OBRIGATOR','invalid':'INVALID','period':'PERIODO',
+             'timeout':'TIMEOUT','reset':'ECONNRESET','soap_fault':'FAULT','return_without_key':'CHAVE',
+             'stock':'ESTOQUE','permission':'PERMISSAO','format':'FORMAT','product':'PRODUTO'}
+    import unicodedata
+    rows=[]
+    for event in raw:
+        message,_=a.unwrap(event)
+        normalized=''.join(c for c in unicodedata.normalize('NFD',message) if not unicodedata.combining(c)).upper()
+        safe=a.sanitize(event)
+        row={'timestamp':event['timestamp'],'known':safe,'length':len(message),
+             'messageSha256':hashlib.sha256(message.encode()).hexdigest(),
+             'labels':[label for label in ['[RM-INFO]','[RM-ERRO]','[RM-WARN]','[RM-DIAG]','[RM-IDPGTO]'] if label in message],
+             'mentionedFields':[v for v in markers if re.search(r'\b'+v+r'\b',normalized)],
+             'fixedIndicators':[k for k,v in phrases.items() if v in normalized]}
+        # Export only the date field if explicitly present and matching a bounded date grammar.
+        value=a.scalar(message,'dataDeEntrada')
+        if value is not None and re.fullmatch(r'[0-9T:/ .+Z-]{0,35}',value): row['dataDeEntradaIfLogged']=value
+        rows.append(row)
+    out={'ticket':226455,'requestId':request,'businessWrites':False,'coverage':covered,'events':rows}
+    directory=Path('.payment-226455-audit');directory.mkdir(exist_ok=True)
+    (directory/'original-detail.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
+    print(json.dumps(out,indent=2));assert covered['complete'];sys.exit(0)
 cfg = a.aws('lambda', 'get-function-configuration', '--function-name', a.FUNCTION, deadline=deadline)
 assert cfg.get('Environment', {}).get('Variables', {}).get('PAGAMENTO_IDPGTO_TABLE') == a.TABLE
 item = a.aws('dynamodb', 'get-item', '--table-name', a.TABLE, '--consistent-read', '--key',
