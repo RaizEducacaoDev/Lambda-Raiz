@@ -1,0 +1,51 @@
+name: Restore failed pre-dispatch bank lease 228007
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-bank-cleanup-228007.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+jobs:
+  restore:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests -p 'test_payment_bank_cleanup_228007.py'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41902970926
+          name: payment-bank-repair-evidence
+          path: .failed-bank-228007
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41902970926
+          name: payment-bank-repair-lease-evidence
+          path: .failed-bank-lease-228007
+      - name: Restore only the two lease fields, with atomic absence of bank attempt
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/cleanup-payment-bank-228007.py --apply
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-cleanup-228007-evidence
+          path: .payment-bank-cleanup-228007/
+          include-hidden-files: true
+          retention-days: 7
