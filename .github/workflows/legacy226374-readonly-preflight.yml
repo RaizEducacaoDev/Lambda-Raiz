@@ -1,0 +1,41 @@
+name: Legacy payment 226374 read-only recovery preflight
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/legacy226374-readonly-preflight.yml
+      - scripts/reconcile-legacy-226374.py
+      - scripts/prepare-closure-proof-226374.py
+      - tests/test_legacy_226374_recovery.py
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/test_legacy_226374_recovery.py
+      - name: Collect fresh closed-invocation proof without invocation or writes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-20261104-1325.py
+      - name: Validate the specific legacy case, without applying recovery
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: |
+          python3 scripts/prepare-closure-proof-226374.py --source .payment-current-1325/readback.json --output .legacy226374/closure-proof.json --run-id "$GITHUB_RUN_ID"
+          python3 scripts/reconcile-legacy-226374.py --new-digest dc1348992b3d67d49485a1ab8aef3b9dd7af7c51c0eef2e8f2817766cd1a0d9e --expected-code-sha 'Pt8n1Td1BarRUJWuGaQnMcNY5bYXcS8b3TvUaY28U0U=' --closure-proof .legacy226374/closure-proof.json --output .legacy226374/dry-run.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy226374-readonly-preflight
+          path: .legacy226374/
+          include-hidden-files: true
+          retention-days: 7
