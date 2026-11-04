@@ -39,14 +39,14 @@ async function setup(opts={}) {
     await new Promise(resolve=>setTimeout(resolve,10));
   }
   let repo=new DynamoPagamento(table,doc), remaining=30000;
-  const count={create:0,update:0,lookup:0,read:0,fiscal:0,censo:0};
+  const count={create:0,update:0,lookup:0,read:0,fiscal:0,censo:0,document:0};
   let bank={CODCOLIGADA:'8',CODCOLCFO:'0',CODCFO:'0000000001',IDPGTO:'6',ATIVO:'1',FORMAPAGAMENTO:'S',TIPOPIX:'2',CHAVE:'fixture@example.test',...opts.bank};
   const rows=opts.parcelas || [{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'100.0000'}];
   let lans=new Map(rows.map(p=>[p.IDLAN,{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',IDLAN:p.IDLAN,CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,
     DATAVENCIMENTO:p.DATAVENCIMENTO,VALORORIGINAL:p.VALOR,STATUSLAN:'0',VALORBAIXADO:'0.0000',BAIXAPENDENTE:'0',...opts.lan}]));
   const movement=()=>`<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:opts.codTmv||'1.2.16',STATUS:'F',NUMEROMOV:payload.numeroDaNF,SERIE:'1',CODTDO:'002',DATAEMISSAO:payload.dataDeEmissao,DATASAIDA:payload.dataDeEntrada,VALORLIQUIDO:'100.0000',VALORBRUTO:'100.0000',...opts.mov})}${xml('TMOVCOMPL',{CODCOLIGADA:'8',IDMOV:'9001',TICKET:'9003',...opts.compl})}${rows.map(r=>xml('TMOVPAGTO',{CODCOLIGADA:'8',IDMOV:'9001',...r})).join('')}</MovMovimento>`;
   const rm={
-    async consultarDocumento(key){if(opts.documentError)throw Error('document unavailable');return opts.documentResponse || [documentoFixture(key, opts.nativeAfterLost ? {
+    async consultarDocumento(key){count.document++;if(opts.documentError)throw Error('document unavailable');return opts.documentResponse || [documentoFixture(key, opts.nativeAfterLost ? {
       DOC_MATCH_COUNT:1,CODCOLIGADA:8,CODFILIAL:4,IDMOV:9001,CODCOLCFO:0,CODCFO:'0000000001',CODTMV:opts.codTmv||'1.2.03',
       SERIE:key.serie||opts.documentNative?.EFFECTIVE_SERIES||'1',NUMEROMOV:key.numero.padStart(9,'0'),CODTDO:opts.documentNative?.DOCUMENT_TYPE_IS_NULL===1?null:opts.documentNative?.EFFECTIVE_DOCUMENT_TYPE||'002',CODCOLCFOAUX:0,CODCFOAUX:'0000000001',TICKET:'9003',...opts.documentNative
     } : opts.documentNative||{})];},
@@ -108,11 +108,11 @@ const tiposPG = [
 test('dez tipos PG usam XML real, contrato nativo por tipo, IDPGTO e replay sem segunda criação',async()=>{
  for(const [codTmv,fields,series,documentType] of tiposPG){
   const x=await setup({realLegacy:true,codTmv,documentNative:{EFFECTIVE_SERIES:series,EFFECTIVE_DOCUMENT_TYPE:documentType||null,DOCUMENT_TYPE_IS_NULL:documentType?0:1},mov:{SERIE:series,CODTDO:documentType}});
-  const input={...fields,valorDoAluguel:'100,00',valorDoIPTU:'',valorDoCondominio:'',valorTaxaDeIncendio:'',valorContaDeEnergia:'',valorContaDeAgua:'',ValorContaDeGas:''};
+  const input={...fields,...(['1.2.01','1.2.03','1.2.25'].includes(codTmv)?{serie:series}:{}),valorDoAluguel:'100,00',valorDoIPTU:'',valorDoCondominio:'',valorTaxaDeIncendio:'',valorContaDeEnergia:'',valorContaDeAgua:'',ValorContaDeGas:''};
   const raw={...payload,...input},before=JSON.stringify(raw),key=identidadePagamento(raw);
   const first=await x.run(input);assert.equal(first.statusCode,200,`${codTmv}: ${first.body}`);
   const header=registroUnico(x.count.createdXml.slice(9,-3),'TMOV');
-  assert.equal(header.CODTMV,codTmv);assert.equal(header.SERIE,series);assert.equal(header.NUMEROMOV,raw.numeroDaNF);
+  assert.equal(header.CODTMV,codTmv);assert.equal(header.SERIE||'',input.serie||'');assert.equal(header.NUMEROMOV,raw.numeroDaNF);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
   assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').digest,hashIntencao(intencaoPagamento(raw,key,planosPagamento(raw,key),codTmv)));
   assert.equal(JSON.stringify(raw),before);assert.equal(x.lans.get('9002').IDPGTO,'6');assert.equal(x.lans.get('9002').CODCOLPGTO,'8');
   x.newRepo();assert.equal((await x.run(input)).statusCode,200,codTmv);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
@@ -128,16 +128,15 @@ test('dez tipos permitem corrigir reserva2 pré-envio e mantêm histórico, sem 
  }
 });
 
-test('dez tipos recuperam timeout após commit e todas as parcelas sem um segundo SaveMOV',async()=>{
- for(const [codTmv,fields,series,documentType] of tiposPG){
-  const x=await setup({codTmv,createError:true,commitOnError:true,
-   documentNative:{EFFECTIVE_SERIES:series,EFFECTIVE_DOCUMENT_TYPE:documentType||null,DOCUMENT_TYPE_IS_NULL:documentType?0:1},mov:{SERIE:series,CODTDO:documentType},
-   parcelas:[{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'40.00'},{IDLAN:'9004',DATAVENCIMENTO:'2026-12-10',VALOR:'60.00'}]});
-  const input={...fields,listaDeParcelas:[{vencimentoDaParcela:'2026-12-10',valorDaParcela:'60,00'},{vencimentoDaParcela:'2026-11-10',valorDaParcela:'40,00'}]};
-  assert.equal((await x.run(input)).statusCode,503,codTmv);await x.expire();
-  const results=await Promise.all([x.run(input),x.run(input)]);assert.equal(results.filter(r=>r.statusCode===200).length,1,codTmv);
-  assert.equal(x.count.create,1);assert.equal(x.count.update,2);assert.equal(x.lans.get('9002').IDPGTO,'6');assert.equal(x.lans.get('9004').IDPGTO,'6');
-  assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').recuperadaCriacaoIncerta,true);
+test('dez tipos reenviam ao RM após timeout sem tentar decidir duplicidade por consultas locais',async()=>{
+ for(const [codTmv,fields] of tiposPG){
+  const x=await setup({codTmv,createError:true,commitOnError:true});
+  assert.equal((await x.run(fields)).statusCode,503,codTmv);assert.equal(x.count.create,1);
+  await x.expire();x.setFiscal({createError:false,createResult:'Já Existe Nota do Emitente com este Número e Série.\n=====\nat RM.Fixture'});
+  const results=await Promise.all([x.run(fields),x.run(fields)]);
+  assert.equal(results.filter(r=>parse(r).code==='RM_DUPLICATE_RECORD').length,1,codTmv);
+  assert.equal(x.count.create,2);assert.equal(x.count.update,0);
+  assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
  }
 });
 
@@ -174,38 +173,39 @@ test('falha de evidência é antes de CREATING e permite corrigir a reserva, sem
  x.repo.registrarEvidencia=original;assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,200);assert.equal(x.count.create,1);
 });
 
-test('série vazia no XML é preenchida uma única vez com default nativo sem duplicar tag',async()=>{
+test('série vazia permanece vazia para o RM aplicar seu default sem seleção pela Lambda',async()=>{
  const x=await setup({createMov:{SERIE:''},documentNative:{EFFECTIVE_SERIES:'REC'}});
- const result=await x.run();assert.equal(result.statusCode,200,result.body);
- assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').SERIE,'REC');assert.equal((x.count.createdXml.match(/<SERIE>/g)||[]).length,1);
+ assert.equal((await x.run()).statusCode,200);
+ assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').SERIE,'');
+ assert.equal(x.count.document,0);
 });
 
-test('SC/OC sem financeiro são preservados nos dez tipos; qualquer parcela anterior bloqueia novo envio',async()=>{
+test('dez tipos deixam a decisão de duplicidade ao RM sem chamadas RECON RETRY ou DOC',async()=>{
  for(const [codTmv,fields] of tiposPG){
-  const census={movimentos:[{coligada:'8',idMov:'8000'}],lancamentos:[]};
-  const x=await setup({codTmv,censo:census});assert.equal((await x.run(fields)).statusCode,200,codTmv);assert.equal(x.count.create,1);
-  const y=await setup({codTmv,censo:{...census,lancamentos:[{coligada:'8',idMov:'8000',idLan:'8001',boletos:0}]}});
-  assert.notEqual((await y.run(fields)).statusCode,200,codTmv);assert.equal(y.count.create,0);assert.equal((await y.all()).find(r=>r.pk==='dev#PG#8#9003').state,'RESERVED');
+  const x=await setup({codTmv,lookupError:true,censoError:true,documentError:true});
+  assert.equal((await x.run(fields)).statusCode,200,codTmv);
+  assert.equal(x.count.create,1);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
  }
 });
 
-test('CC35 com resposta perdida reutiliza movimento localizado sem segunda criação',async()=>{
+test('CC35 pode ser reenviada sem truncar número e RM decide a duplicidade',async()=>{
  const x=await setup({codTmv:'1.2.10',createError:true,commitOnError:true});
  const input={tipoDoPagamento:'CC',contasDeConsumo:'E',numeroDaNF:'12345678901234567890123456789012345'};
- assert.equal((await x.run(input)).statusCode,503);await x.expire();const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
- assert.equal((await x.run(input)).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
- assert.equal((await x.all()).find(r=>r.pk===before.pk).state,'COMPLETE');
+ assert.equal((await x.run(input)).statusCode,503);await x.expire();
+ x.setFiscal({createError:false,createResult:'Já Existe Nota do Emitente com este Número e Série.'});
+ assert.equal(parse(await x.run(input)).code,'RM_DUPLICATE_RECORD');assert.equal(x.count.create,2);assert.equal(x.count.update,0);
+ assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').NUMEROMOV,input.numeroDaNF);
 });
 
 test('identidade bancária inválida conserva o código público e nunca reserva',async()=>{
  const x=await setup(),result=await x.run({idpgto:''});assert.equal(result.statusCode,422);assert.equal(parse(result).code,'IDPGTO_NAO_CONFIRMADO');assert.equal((await x.rawAll()).length,0);assert.equal(x.count.create,0);
 });
 
-test('retomada positiva com entrada omitida usa a data nativa sem escrever data ou criar outro MOV',async()=>{
- const x=await setup({codTmv:'1.2.01',createError:true,commitOnError:true});
+test('data de entrada omitida preserva default nativo sem consulta de reconciliação',async()=>{
+ const x=await setup({codTmv:'1.2.01'});
  const fields={tipoDoPagamento:'NF',tipoDeItem:'Material',dataDeEntrada:''};
- assert.equal((await x.run(fields)).statusCode,503);await x.expire();assert.equal((await x.run(fields)).statusCode,200);
- assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').DATAVENCIMENTO,'2026-11-10');
+ assert.equal((await x.run(fields)).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.count.censo,0);
 });
 
 test('rejeição RM retorna motivo allowlisted e nova solicitação pode tentar após expirar',async()=>{
@@ -288,34 +288,34 @@ test('corrigir uma NF recusada antes do envio retoma imediatamente, arquiva a in
   assert.equal(history[0].snapshot.digest,before.digest);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
 });
 
-test('correção de nota continua bloqueada se o censo achar outro movimento ou IDLAN, ou estiver indisponível',async()=>{
-  for(const changes of [{censo:{movimentos:[{coligada:'9',idMov:'9100'}],lancamentos:[]}}, {censoError:true}]){
-    const x=await setup({stockError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
-    await x.run(fiscalFields);const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
-    x.setFiscal({stockError:false,...changes});
-    assert.notEqual((await x.run({...fiscalFields,numeroDaNF:'9003002'})).statusCode,200);
-    assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
-  }
+test('corrigir intenção sem PG dispensa censo de ausência e mantém histórico antes de reenviar',async()=>{
+ const x=await setup({stockError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
+ await x.run(fiscalFields);const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
+ x.setFiscal({stockError:false,censoError:true,lookupError:true,documentError:true});
+ assert.equal((await x.run({...fiscalFields,numeroDaNF:'9003002'})).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.censo+x.count.lookup+x.count.document,0);
+ assert.deepEqual((await x.all()).find(r=>r.pk.includes('#HISTORY#')).snapshot,before);
 });
 
-test('resposta de criação perdida recupera MOV e todos os IDLANs confirmados sem segundo SaveMOV',async()=>{
-  const x=await setup({createError:true,commitOnError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
-  assert.notEqual((await x.run(fiscalFields)).statusCode,200);await x.expire();
-  const result=await x.run(fiscalFields);assert.equal(result.statusCode,200,JSON.stringify(result));
-  assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').IDPGTO,'6');
-  const root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(root.recuperadaCriacaoIncerta,true);
-  assert.equal(root.state,'COMPLETE');assert.equal(root.pg,'9001');
+test('rejeição nativa permite corrigir série após expirar sem recuperar outro movimento automaticamente',async()=>{
+ const x=await setup({createResult:'Série não permitida para este movimento.\n=====\nat RM.Fixture',mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
+ const first=await x.run({...fiscalFields,serie:'1'});assert.equal(first.statusCode,503);
+ assert.equal(parse(first).message.includes('não autoriza uma nova criação'),false);
+ await x.expire();const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
+ x.setFiscal({createResult:'8;9001'});
+ assert.equal((await x.run({...fiscalFields,serie:'2'})).statusCode,200);
+ assert.equal(x.count.create,2);assert.equal(x.count.update,1);
+ assert.deepEqual((await x.all()).find(r=>r.pk.includes('#HISTORY#')).snapshot,before);
+ assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').SERIE,'2');
 });
 
-test('recuperação positiva recusa documento, data, valor, parcela, fornecedor ou baixa divergentes',async()=>{
-  for(const changes of [{mov:{CODTMV:'1.2.03',NUMEROMOV:'999'}},{mov:{CODTMV:'1.2.03',SERIE:'2'}},
-    {mov:{CODTMV:'1.2.03',VALORBRUTO:'200'}},{mov:{CODTMV:'1.2.03',DATAEMISSAO:'2025-10-29'}},
-    {lan:{STATUSLAN:'1',VALORBAIXADO:'100'}},{lan:{CODCFO:'another'}},{lan:{IDBOLETO:'99'}}]){
-    const x=await setup({createError:true,commitOnError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'},...changes});
-    await x.run(fiscalFields);await x.expire();
-    assert.notEqual((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
-    assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
-  }
+test('PG já conhecido continua verificando fornecedor unidade e parcelas sem criar outro',async()=>{
+ for(const changes of [{mov:{CODTMV:'1.2.03',CODCFO:'other'}},{mov:{CODTMV:'1.2.03',CODFILIAL:'9'}},
+  {lan:{STATUSLAN:'1',VALORBAIXADO:'100'}},{lan:{CODCFO:'other'}},{lan:{IDBOLETO:'99'}}]){
+  const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'},...changes});
+  await x.run(fiscalFields);await x.expire();assert.notEqual((await x.run(fiscalFields)).statusCode,200);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+ }
 });
 
 test('zero no RM permite tentar novamente a mesma NF, preservando a intenção e as regras nativas',async()=>{
@@ -327,37 +327,32 @@ test('zero no RM permite tentar novamente a mesma NF, preservando a intenção e
   assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
 });
 
-test('mudança nativa depois de confirmar CREATING é detectada novamente antes de qualquer escrita bancária',async()=>{
- const x=await setup({createError:true,commitOnError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
- await x.run(fiscalFields);await x.expire();
- const original=x.repo.confirmarCriacaoIncerta.bind(x.repo);
- x.repo.confirmarCriacaoIncerta=async(...args)=>{const result=await original(...args);x.setFiscal({mov:{CODTMV:'1.2.03',NUMEROMOV:'999'}});return result;};
- assert.notEqual((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
- const root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(root.state,'CREATED');assert.equal(root.recuperadaCriacaoIncerta,true);
- await x.expire();assert.notEqual((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.update,0);assert.equal(x.count.create,1);
+test('resposta RM sem identificador nunca vira sucesso nem associação de FLAN',async()=>{
+ for(const result of ['erro nativo','9;9001','8;0','8;9001;extra']){
+  const x=await setup({createResult:result});const response=await x.run();
+  assert.notEqual(response.statusCode,200);assert.equal(parse(response).PG,undefined);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+ }
 });
 
-test('SC ou OC sem financeiro não bloqueia criação normal de serviço; qualquer IDLAN prévio bloqueia',async()=>{
- const censo={movimentos:[{coligada:'8',idMov:'8000'}],lancamentos:[]};
- const x=await setup({censo,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
+test('nova criação não depende da resposta de censo ou de documento duplicado da Lambda',async()=>{
+ const x=await setup({censoError:true,lookupError:true,documentError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
  assert.equal((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,1);
- const y=await setup({censo:{...censo,lancamentos:[{coligada:'8',idMov:'8000',idLan:'8001',boletos:0}]},
-   mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
- assert.notEqual((await y.run(fiscalFields)).statusCode,200);assert.equal(y.count.create,0);assert.equal(y.count.update,0);
+ assert.equal(x.count.censo+x.count.lookup+x.count.document,0);
 });
 
-test('serviço fixa a série principal validada no XML real sem alterar a intenção da entrada',async()=>{
+test('serviço preserva série omitida para default nativo sem alterar a intenção da entrada',async()=>{
  const x=await setup({realLegacy:true,mov:{CODTMV:'1.2.03'}}),fields={...fiscalFields,serie:''};
  assert.equal((await x.run(fields)).statusCode,200);assert.equal(fields.serie,'');
  const header=registroUnico(x.count.createdXml.slice(9,-3),'TMOV');
- assert.equal(header.SERIE,'1');assert.equal(header.NUMEROMOV,payload.numeroDaNF);
+ assert.equal(header.SERIE,undefined);assert.equal(header.NUMEROMOV,payload.numeroDaNF);
  const root=(await x.all()).find(r=>!r.pk.includes('#FLAN#')),raw={...payload,...fields},key=identidadePagamento(raw);
  assert.equal(root.digest,hashIntencao(intencaoPagamento(raw,key,planosPagamento(raw,key),'1.2.03')));
 });
 
 test('XML divergente da identidade documental validada nunca atravessa o checkpointCREATING',async()=>{
  const x=await setup({mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03',SERIE:'2'}});
- assert.notEqual((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+ assert.notEqual((await x.run({...fiscalFields,serie:'1'})).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
  assert.equal((await x.all())[0].state,'RESERVED');
 });
 test('CREATED/UPDATING duráveis retomam sem PG na entrada nem nova consulta fiscal, com Dynamo real emulado',async()=>{
@@ -408,21 +403,19 @@ test('snapshot de PG não autoriza criação se o registro adquirido perdeu o mo
   x.setFiscal({fiscalError:true});assert.equal((await x.run(fiscalFields)).statusCode,409);
   assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
 });
-test('baseline RM sem raiz ou RESERVED expirado adota o mesmo movimento sem fiscal stale nem criação',async()=>{
-  for(const reserved of [false,true])for(const failure of ['incompativel','indisponivel']){
-    const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'},
-      ...(failure==='incompativel'?{fiscalResponse:[fiscalIncompativel]}:{fiscalError:true})});
-    if(reserved){const fields={...payload,...fiscalFields},key=identidadePagamento(fields);
-      const digest=hashIntencao(intencaoPagamento(fields,key,planosPagamento(fields,key),'1.2.03'));
-      await x.repo.reservar(`${process.env.STAGE||'dev'}#PG#8#9003`,digest,undefined,30000);await x.expire();}
-    const result=await x.run(fiscalFields);assert.equal(result.statusCode,200);assert.equal(parse(result).PG,'9001');assert.equal(parse(result).LF,'9002');
-    assert.equal(x.count.fiscal,0);assert.equal(x.count.create,0);assert.equal(x.count.update,1);assert.equal(x.count.lookup,2);
-    const root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'COMPLETE');assert.equal(root.pg,'9001');
-  }
+test('sem PG conhecido o RM decide se pode criar, sem adotar outro movimento por consulta',async()=>{
+ for(const reserved of [false,true]){
+  const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
+  if(reserved){const raw={...payload,...fiscalFields},key=identidadePagamento(raw);
+   const digest=hashIntencao(intencaoPagamento(raw,key,planosPagamento(raw,key),'1.2.03'));
+   await x.repo.reservar('dev#PG#8#9003',digest,undefined,30000);await x.expire();}
+  assert.equal((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.lookup,0);
+ }
 });
-test('CREATING expirado reutiliza candidato RM; estado desconhecido mantém409',async()=>{
+
+test('CREATING expirado reenvia ao RM; estado desconhecido mantém409',async()=>{
   for(const state of ['CREATING','RNE']){
-    const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},fiscalError:true});
+    const x=await setup({lookup:['9001'],mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
     const fields={...payload,...fiscalFields},key=identidadePagamento(fields);
     const digest=hashIntencao(intencaoPagamento(fields,key,planosPagamento(fields,key),'1.2.03'));
     let op=await x.repo.reservar(`${process.env.STAGE||'dev'}#PG#8#9003`,digest,undefined,30000);
@@ -431,7 +424,7 @@ test('CREATING expirado reutiliza candidato RM; estado desconhecido mantém409',
     await x.expire();const before=(await x.all())[0];
     assert.equal((await x.run(fiscalFields)).statusCode,state==='CREATING'?200:409);
     if(state==='RNE')assert.deepEqual((await x.all())[0],before);
-    assert.equal(x.count.create,0);assert.equal(x.count.update,state==='CREATING'?1:0);assert.equal(x.count.fiscal,0);
+    assert.equal(x.count.create,state==='CREATING'?1:0);assert.equal(x.count.update,state==='CREATING'?1:0);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
   }
 });
 test('orçamento curto bloqueia antes de CREATING e pode retomar uma reserva ainda sem efeito',async()=>{
@@ -451,15 +444,15 @@ test('concorrência cria apenas um movimento e só um retorno pode confirmar',as
 });
 test('movimento histórico, pago/cancelado, com boleto ou outra identidade nunca é sobrescrito',async()=>{
   for(const lan of [{IDPGTO:'9',CODCOLPGTO:'8'},{STATUSLAN:'1'},{VALORBAIXADO:'1.0'},{BAIXAPENDENTE:'1'},{IDBOLETO:'5'},{CODFILIAL:'3'},{CODCFO:'wrong'}]){
-    const x=await setup({lookup:['9001'],lan});assert.equal((await x.run()).statusCode,409,JSON.stringify(lan));assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+    const x=await setup({lan});assert.equal((await x.run({idDoMovimento:'9001'})).statusCode,409,JSON.stringify(lan));assert.equal(x.count.create,0);assert.equal(x.count.update,0);
   }
-  for(const opts of [{mov:{STATUS:'C'}},{compl:{TICKET:'other'}},{lookup:['9001','9001']},{lookupError:true}]){
-    const x=await setup({lookup:['9001'],...opts});assert.notEqual((await x.run()).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+  for(const opts of [{mov:{STATUS:'C'}},{compl:{TICKET:'other'}},{mov:{CODCOLIGADA:'9'}},{readError:true}]){
+    const x=await setup(opts);assert.notEqual((await x.run({idDoMovimento:'9001'})).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
   }
 });
 test('default do RM só é substituído na chamada que acabou de criar o lançamento',async()=>{
   const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});assert.equal((await x.run()).statusCode,200);assert.equal(x.lans.get('9002').IDPGTO,'6');
-  const y=await setup({lookup:['9001'],lan:{IDPGTO:'1',CODCOLPGTO:'8'}});assert.equal((await y.run()).statusCode,409);assert.equal(y.count.update,0);
+  const y=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});assert.equal((await y.run({idDoMovimento:'9001'})).statusCode,409);assert.equal(y.count.update,0);
 });
 test('parcelas fora da ordem são pareadas por valor/vencimento e têm checkpoint independente',async()=>{
   const x=await setup({afterFirstUpdate:true,parcelas:[{IDLAN:'9004',DATAVENCIMENTO:'2026-12-10',VALOR:'60.0000'},{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'40.0000'}]});
