@@ -115,6 +115,11 @@ class PublicationRecovery(unittest.TestCase):
 
 
 class ScopeAndCanaries(unittest.TestCase):
+    def test_release_preserves_reviewed_fiscal_geography_removal_baseline(self):
+        self.assertEqual(m.BASELINE, 'oHgRl53dlYR3Z/98HuB1GRelxAvWFUIKth0WHagkRnc=')
+        self.assertEqual(m.REVISION, '00ae2c0f-6801-4c07-8ff3-6b74497b2614')
+        self.assertEqual(m.CORE, 'cf802a6ef20cd6047e94e0ebdfe45da7ea923a36aafd103dada801cde6bb352e')
+
     def test_native_timing_proxy_is_only_reads_sanitized_and_reports_budget_overrun(self):
         for elapsed, fits in [(0.1, True), (0.4, False)]:
             requests = []
