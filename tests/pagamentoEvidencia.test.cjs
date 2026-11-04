@@ -28,8 +28,10 @@ test('fronteira de persistência rejeita campos inesperados, valores pessoais em
   assert.throws(()=>validarEvidencia({...e,diagnostic:{...e.diagnostic,...change}}));
  }
 });
-test('mensagem usa apenas motivo fixo e não declara rollback ou autoriza nova criação',()=>{
+test('mensagem informa diagnóstico nativo sem proibir novo envio ou declarar sucesso',()=>{
  for(const code of ['RM_DUPLICATE_RECORD','RM_REQUIRED_FIELD','RM_PERIOD_CLOSED','RM_INVALID_DATE','PRIVATE_UNKNOWN']){
-  const message=mensagemDiagnostico(code);assert.match(message,/não autoriza uma nova criação/);assert.equal(message.includes('PRIVATE'),false);
+  const message=mensagemDiagnostico(code);assert.doesNotMatch(message,/não autoriza uma nova criação|conferirá um movimento existente/);assert.equal(message.includes('PRIVATE'),false);
  }
+ assert.equal(mensagemDiagnostico('RM_UNCLASSIFIED_REJECTION','Série não permitida para este movimento.'),
+  'O TOTVS retornou: Série não permitida para este movimento.');
 });
