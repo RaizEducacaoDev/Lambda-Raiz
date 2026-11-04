@@ -1,7 +1,9 @@
 {
   "version": 1,
   "mode": "apply",
-  "tickets": [228007],
+  "tickets": [
+    228007
+  ],
   "authorizedBankRepair": true,
   "approvedPrepareRunId": "41902530831",
   "approvedManifestSha256": "9b5fa5512e8dfd4bbcbb44588130c85df1d8a399cc75b5fa3c1a66a5760b5c32",
