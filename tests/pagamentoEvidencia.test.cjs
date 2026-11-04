@@ -1,0 +1,35 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const cache=new Map(),load=file=>require('./load-ts.cjs')(path.resolve(__dirname,'../src/functions/rm/post',file),{},cache);
+const {prepararEvidencia,validarEvidencia,mensagemDiagnostico}=load('pagamentoEvidencia.ts');
+const {diagnosticarRetornoRm}=load('pagamentoDiagnosticoSeguro.ts');
+const create=()=>prepararEvidencia('<TMOV>PRIVATE_XML_TOKEN</TMOV>',{
+ numeroDaNF:'000114',dataDeEmissao:'22/10/2026',dataDeEntrada:'',valorTotal:'5.273,40',
+ chavePIX:'private@example.test',Conta:'PRIVATE_ACCOUNT',informacoes:'PRIVATE_DOCUMENT'},'1.2.01',
+ {codColPgto:'9',codColCfo:'0',codCfo:'0000000001',idPgto:6},'2','226455',
+ [{vencimento:'2026-11-04',valor:'5273.4',campos:[['IPTE','PRIVATE_BARCODE'],['QRCODEPIX','PRIVATE_QR']]}],
+ {numero:'000114',serie:'1',tipoDocumento:'055'});
+
+test('evidência seleciona intenção permitida e hashes sem modificar entrada, XML ou banco',()=>{
+ const value=create();assert.doesNotThrow(()=>validarEvidencia(value));assert.equal(value.number,'000114');assert.equal(value.entryDate,'');assert.equal(value.issueDate,'2026-10-22');
+ const output=JSON.stringify(value);for(const secret of ['PRIVATE_XML_TOKEN','private@example.test','PRIVATE_ACCOUNT','PRIVATE_DOCUMENT','PRIVATE_BARCODE','PRIVATE_QR','<TMOV>'])assert.equal(output.includes(secret),false);
+ assert.match(value.xmlSha256,/^[a-f0-9]{64}$/);assert.match(value.installments[0].destinationSha256,/^[a-f0-9]{64}$/);
+});
+test('fronteira de persistência rejeita campos inesperados, valores pessoais em campos permitidos e diagnóstico bruto',()=>{
+ for(const mutate of [e=>e.rawXml='PRIVATE',e=>e.company={private:'PRIVATE'},e=>e.ticket='private@example.test',
+  e=>e.number='114;PRIVATE',e=>e.installments[0].barcode='PRIVATE',e=>e.installments[0].destinationSha256='PRIVATE',
+  e=>e.phase='native_result',e=>e.diagnostic={rawResponse:'PRIVATE'}]){
+  const e=create();mutate(e);assert.throws(()=>validarEvidencia(e),/Evidência sanitizada inválida/);
+ }
+ const e={...create(),phase:'native_result',diagnostic:diagnosticarRetornoRm('Campo IDNAT não foi informado PRIVATE =====')};
+ assert.doesNotThrow(()=>validarEvidencia(e));assert.equal(JSON.stringify(e).includes('PRIVATE'),false);
+ for(const change of [{reasonCode:'PRIVATE'},{mentionedFields:['PRIVATE']},{nativeErrorTypes:['PRIVATE']},{rawResponse:'PRIVATE'}]){
+  assert.throws(()=>validarEvidencia({...e,diagnostic:{...e.diagnostic,...change}}));
+ }
+});
+test('mensagem usa apenas motivo fixo e não declara rollback ou autoriza nova criação',()=>{
+ for(const code of ['RM_DUPLICATE_RECORD','RM_REQUIRED_FIELD','RM_PERIOD_CLOSED','RM_INVALID_DATE','PRIVATE_UNKNOWN']){
+  const message=mensagemDiagnostico(code);assert.match(message,/não autoriza uma nova criação/);assert.equal(message.includes('PRIVATE'),false);
+ }
+});

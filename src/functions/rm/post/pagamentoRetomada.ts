@@ -68,8 +68,11 @@ export function validarCriacaoEncontrada(censo: CensoRetomada, xmlMov: string, x
       mov.CODCOLCFO !== e.coligadaFornecedor || mov.CODCFO !== e.fornecedor || !/^[A-Z0-9]$/.test(mov.STATUS || '') || mov.STATUS === 'C' ||
       compl.CODCOLIGADA !== e.coligada || compl.IDMOV !== e.idMov || compl.TICKET !== e.ticket ||
       !/^\d{1,9}$/.test(mov.NUMEROMOV || '') || BigInt(mov.NUMEROMOV) !== BigInt(e.numero) ||
-      mov.SERIE !== e.serie || mov.CODTDO !== e.tipoDocumento ||
-      dataCanonica(mov.DATAEMISSAO) !== dataCanonica(e.emissao) || dataCanonica(mov.DATASAIDA) !== dataCanonica(e.entrada) ||
+      mov.SERIE !== e.serie || (e.tipoDocumento === '' ? (mov.CODTDO != null && mov.CODTDO !== '') : mov.CODTDO !== e.tipoDocumento) ||
+      dataCanonica(mov.DATAEMISSAO) !== dataCanonica(e.emissao) ||
+      // An omitted entry date delegates this field to RM. Require a valid
+      // native date, but never invent an expected date or write one back.
+      !dataCanonica(mov.DATASAIDA) || (e.entrada.trim() !== '' && dataCanonica(mov.DATASAIDA) !== dataCanonica(e.entrada)) ||
       valorCanonico(mov.VALORLIQUIDO) !== valorCanonico(e.valor) || valorCanonico(mov.VALORBRUTO) !== valorCanonico(e.valor)) return falhar();
   const pagamentos = registrosRm(xmlMov, 'TMOVPAGTO');
   if (pagamentos.length !== e.planos.length || new Set(pagamentos.map(p => p.IDLAN)).size !== pagamentos.length) return falhar();

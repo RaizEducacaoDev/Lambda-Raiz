@@ -9,7 +9,7 @@ const load = file => require('./load-ts.cjs')(path.resolve(__dirname, '../src/fu
 const { executarPagamentoSeguro } = load('solicitacaoDePagamentoSeguro.ts');
 const { DynamoPagamento } = load('pagamentoV2Idempotencia.ts');
 const { registroUnico } = load('pagamentoV2Rm.ts');
-const { identidadePagamento, planosPagamento, intencaoPagamento, hashIntencao } = load('pagamentoIdentidade.ts');
+const { identidadePagamento, planosPagamento, intencaoPagamento, hashIntencao, codigoMovimento } = load('pagamentoIdentidade.ts');
 const xml = (table, obj) => `<${table}>${Object.entries(obj).map(([k,v]) => `<${k}>${v}</${k}>`).join('')}</${table}>`;
 const dataset = (table, obj) => `<DataSet>${xml(table, obj)}</DataSet>`;
 const payload = { tipoDaSolicitacao:'PG', tipoDoPagamento:'OG', outrosGastos:'FR', atividadeAtual:'analiseFiscal',
@@ -44,12 +44,12 @@ async function setup(opts={}) {
   const rows=opts.parcelas || [{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'100.0000'}];
   let lans=new Map(rows.map(p=>[p.IDLAN,{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',IDLAN:p.IDLAN,CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,
     DATAVENCIMENTO:p.DATAVENCIMENTO,VALORORIGINAL:p.VALOR,STATUSLAN:'0',VALORBAIXADO:'0.0000',BAIXAPENDENTE:'0',...opts.lan}]));
-  const movement=()=>`<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:'1.2.16',STATUS:'F',NUMEROMOV:payload.numeroDaNF,SERIE:'1',CODTDO:'002',DATAEMISSAO:payload.dataDeEmissao,DATASAIDA:payload.dataDeEntrada,VALORLIQUIDO:'100.0000',VALORBRUTO:'100.0000',...opts.mov})}${xml('TMOVCOMPL',{CODCOLIGADA:'8',IDMOV:'9001',TICKET:'9003',...opts.compl})}${rows.map(r=>xml('TMOVPAGTO',{CODCOLIGADA:'8',IDMOV:'9001',...r})).join('')}</MovMovimento>`;
+  const movement=()=>`<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',IDMOV:'9001',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:opts.codTmv||'1.2.16',STATUS:'F',NUMEROMOV:payload.numeroDaNF,SERIE:'1',CODTDO:'002',DATAEMISSAO:payload.dataDeEmissao,DATASAIDA:payload.dataDeEntrada,VALORLIQUIDO:'100.0000',VALORBRUTO:'100.0000',...opts.mov})}${xml('TMOVCOMPL',{CODCOLIGADA:'8',IDMOV:'9001',TICKET:'9003',...opts.compl})}${rows.map(r=>xml('TMOVPAGTO',{CODCOLIGADA:'8',IDMOV:'9001',...r})).join('')}</MovMovimento>`;
   const rm={
     async consultarDocumento(key){if(opts.documentError)throw Error('document unavailable');return opts.documentResponse || [documentoFixture(key, opts.nativeAfterLost ? {
-      DOC_MATCH_COUNT:1,CODCOLIGADA:8,CODFILIAL:4,IDMOV:9001,CODCOLCFO:0,CODCFO:'0000000001',CODTMV:'1.2.03',
-      SERIE:key.serie||'1',NUMEROMOV:key.numero.padStart(9,'0'),CODTDO:'002',CODCOLCFOAUX:0,CODCFOAUX:'0000000001',TICKET:'9003'
-    } : {})];},
+      DOC_MATCH_COUNT:1,CODCOLIGADA:8,CODFILIAL:4,IDMOV:9001,CODCOLCFO:0,CODCFO:'0000000001',CODTMV:opts.codTmv||'1.2.03',
+      SERIE:key.serie||opts.documentNative?.EFFECTIVE_SERIES||'1',NUMEROMOV:key.numero.padStart(9,'0'),CODTDO:opts.documentNative?.DOCUMENT_TYPE_IS_NULL===1?null:opts.documentNative?.EFFECTIVE_DOCUMENT_TYPE||'002',CODCOLCFOAUX:0,CODCFOAUX:'0000000001',TICKET:'9003',...opts.documentNative
+    } : opts.documentNative||{})];},
     async consultarRetomada(){count.censo++;if(opts.censoError)throw Error('census unavailable');
       return opts.censo || {movimentos:opts.nativeAfterLost?[{coligada:'8',idMov:'9001'}]:[],
         lancamentos:opts.nativeAfterLost?rows.map(p=>({coligada:'8',idMov:'9001',idLan:p.IDLAN,boletos:0})):[]};},
@@ -79,15 +79,141 @@ async function setup(opts={}) {
     }
     try {
       await transport.buscarEstoque('8','4');
-      const result=await transport.saveRecord(`<![CDATA[<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:'1.2.16',NUMEROMOV:c.numeroDaNF.slice(0,9),...(c.serie?{SERIE:c.serie}:{}),...opts.createMov})}${xml('TMOVCOMPL',{TICKET:'9003'})}</MovMovimento>]]>`,'MovMovimentoTBCData','ctx');
+      const result=await transport.saveRecord(`<![CDATA[<MovMovimento>${xml('TMOV',{CODCOLIGADA:'8',CODFILIAL:'4',CODCFO:'0000000001',CODCOLCFO:bank.CODCOLCFO,CODTMV:codigoMovimento(c),NUMEROMOV:c.numeroDaNF.slice(0,9),...(c.serie?{SERIE:c.serie}:{}),...opts.createMov})}${xml('TMOVCOMPL',{TICKET:'9003'})}</MovMovimento>]]>`,'MovMovimentoTBCData','ctx');
       return {statusCode:200,body:JSON.stringify({PG:result.split(';')[1]})};
     } catch { return {statusCode:500,body:'{}'}; }
   };
   const run=(fields={})=>executarPagamentoSeguro({...payload,...fields},{getRemainingTimeInMillis:()=>remaining},create,{repositorio:repo,rm});
-  const all=async()=>(await doc.send(new ScanCommand({TableName:table,ConsistentRead:true}))).Items;
-  const expire=async()=>{for(const op of await all())await doc.send(new UpdateCommand({TableName:table,Key:{pk:op.pk},UpdateExpression:'SET lockUntil=:old',ExpressionAttributeValues:{':old':Date.now()-1}}));remaining=30000;};
-  return {run,count,expire,all,setBank(v){bank={...bank,...v};},setLan(id,v){lans.set(id,{...lans.get(id),...v});},setFiscal(options){Object.assign(opts,options);},get lans(){return lans;},setTime(t){remaining=t;},newRepo(){repo=new DynamoPagamento(table,DynamoDBDocumentClient.from(client));},get repo(){return repo;},table};
+  const rawAll=async()=>(await doc.send(new ScanCommand({TableName:table,ConsistentRead:true}))).Items;
+  const all=async()=>(await rawAll()).filter(r=>!r.pk.includes('#EVIDENCE#'));
+  const expire=async()=>{for(const op of (await all()).filter(r=>r.state))await doc.send(new UpdateCommand({TableName:table,Key:{pk:op.pk},UpdateExpression:'SET lockUntil=:old',ExpressionAttributeValues:{':old':Date.now()-1}}));remaining=30000;};
+  return {run,count,expire,all,rawAll,setBank(v){bank={...bank,...v};},setLan(id,v){lans.set(id,{...lans.get(id),...v});},setFiscal(options){Object.assign(opts,options);},get lans(){return lans;},setTime(t){remaining=t;},newRepo(){repo=new DynamoPagamento(table,DynamoDBDocumentClient.from(client));},get repo(){return repo;},table};
 }
+
+// Native read-only DOC contracts, company9: default series and CODTDO vary by
+// type. They are observations, never automatic choices of a new fiscal series.
+const tiposPG = [
+ ['1.2.01',{tipoDoPagamento:'NF',tipoDeItem:'Material'},'1','055'],
+ ['1.2.03',{tipoDoPagamento:'NF',tipoDeItem:'Serviço'},'1','002'],
+ ['1.2.25',{tipoDoPagamento:'TM'},'0','057'],
+ ['1.2.09',{tipoDoPagamento:'CC',contasDeConsumo:'A'},'1','029'],
+ ['1.2.10',{tipoDoPagamento:'CC',contasDeConsumo:'E'},'1','006'],
+ ['1.2.11',{tipoDoPagamento:'CC',contasDeConsumo:'I'},'1','022'],
+ ['1.2.12',{tipoDoPagamento:'CC',contasDeConsumo:'G'},'1','028'],
+ ['1.2.16',{tipoDoPagamento:'OG',outrosGastos:'FR'},'REC',''],
+ ['1.2.08',{tipoDoPagamento:'OG',outrosGastos:'',tipoDoLocador:'PF'},'AL',''],
+ ['1.2.17',{tipoDoPagamento:'OG',outrosGastos:'',tipoDoLocador:'PJ'},'ALPJ',''],
+];
+
+test('dez tipos PG usam XML real, contrato nativo por tipo, IDPGTO e replay sem segunda criação',async()=>{
+ for(const [codTmv,fields,series,documentType] of tiposPG){
+  const x=await setup({realLegacy:true,codTmv,documentNative:{EFFECTIVE_SERIES:series,EFFECTIVE_DOCUMENT_TYPE:documentType||null,DOCUMENT_TYPE_IS_NULL:documentType?0:1},mov:{SERIE:series,CODTDO:documentType}});
+  const input={...fields,valorDoAluguel:'100,00',valorDoIPTU:'',valorDoCondominio:'',valorTaxaDeIncendio:'',valorContaDeEnergia:'',valorContaDeAgua:'',ValorContaDeGas:''};
+  const raw={...payload,...input},before=JSON.stringify(raw),key=identidadePagamento(raw);
+  const first=await x.run(input);assert.equal(first.statusCode,200,`${codTmv}: ${first.body}`);
+  const header=registroUnico(x.count.createdXml.slice(9,-3),'TMOV');
+  assert.equal(header.CODTMV,codTmv);assert.equal(header.SERIE,series);assert.equal(header.NUMEROMOV,raw.numeroDaNF);
+  assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').digest,hashIntencao(intencaoPagamento(raw,key,planosPagamento(raw,key),codTmv)));
+  assert.equal(JSON.stringify(raw),before);assert.equal(x.lans.get('9002').IDPGTO,'6');assert.equal(x.lans.get('9002').CODCOLPGTO,'8');
+  x.newRepo();assert.equal((await x.run(input)).statusCode,200,codTmv);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+ }
+});
+
+test('dez tipos permitem corrigir reserva2 pré-envio e mantêm histórico, sem repetir movimento',async()=>{
+ for(const [codTmv,fields] of tiposPG){
+  const x=await setup({stockError:true,codTmv});assert.equal((await x.run(fields)).statusCode,503);
+  const original=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(original.state,'RESERVED');assert.ok(original.lockUntil<Date.now());
+  x.setFiscal({stockError:false});assert.equal((await x.run({...fields,numeroDaNF:'9003002'})).statusCode,200,codTmv);
+  assert.equal(x.count.create,1);assert.equal((await x.all()).filter(r=>r.pk.includes('#HISTORY#')).length,1);
+ }
+});
+
+test('dez tipos recuperam timeout após commit e todas as parcelas sem um segundo SaveMOV',async()=>{
+ for(const [codTmv,fields,series,documentType] of tiposPG){
+  const x=await setup({codTmv,createError:true,commitOnError:true,
+   documentNative:{EFFECTIVE_SERIES:series,EFFECTIVE_DOCUMENT_TYPE:documentType||null,DOCUMENT_TYPE_IS_NULL:documentType?0:1},mov:{SERIE:series,CODTDO:documentType},
+   parcelas:[{IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'40.00'},{IDLAN:'9004',DATAVENCIMENTO:'2026-12-10',VALOR:'60.00'}]});
+  const input={...fields,listaDeParcelas:[{vencimentoDaParcela:'2026-12-10',valorDaParcela:'60,00'},{vencimentoDaParcela:'2026-11-10',valorDaParcela:'40,00'}]};
+  assert.equal((await x.run(input)).statusCode,503,codTmv);await x.expire();
+  const results=await Promise.all([x.run(input),x.run(input)]);assert.equal(results.filter(r=>r.statusCode===200).length,1,codTmv);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,2);assert.equal(x.lans.get('9002').IDPGTO,'6');assert.equal(x.lans.get('9004').IDPGTO,'6');
+  assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').recuperadaCriacaoIncerta,true);
+ }
+});
+
+test('dados locais inválidos são422 sem reserva; datas vazias preservam default e referências CC35 permanecem completas',async()=>{
+ for(const [codTmv,fields] of tiposPG){
+  for(const invalid of [{dataDeEntrada:'31/02/2026'},{dataDeEmissao:'garbage'},{valorTotal:'NaN'},{tributos:{}},{numeroDaNF:' 123'}]){
+   const x=await setup({codTmv});assert.equal((await x.run({...fields,...invalid})).statusCode,422,codTmv);assert.equal((await x.rawAll()).length,0);assert.equal(x.count.create,0);
+  }
+ }
+ const x=await setup({codTmv:'1.2.10'}),number='12345678901234567890123456789012345';
+ const result=await x.run({tipoDoPagamento:'CC',contasDeConsumo:'E',numeroDaNF:number,dataDeEntrada:''});assert.equal(result.statusCode,200,result.body);
+ assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').NUMEROMOV,number);
+});
+
+test('material com produto vazio nas linhas6 e10 é422 antes de reservar, sem invalidar itens automáticos de consumo',async()=>{
+ const items=Array.from({length:11},(_,i)=>({codigoDoItem:[5,9].includes(i)?'':'124113',qtdDoItem:'1',valorDoItem:i===5?'30,79':i===9?'34,31':'1,00',desconto:'0'}));
+ const x=await setup({codTmv:'1.2.01'});let result=await x.run({tipoDoPagamento:'NF',tipoDeItem:'Material',itens:items});
+ assert.equal(result.statusCode,422);assert.equal(parse(result).code,'DADOS_PAGAMENTO_INVALIDOS');assert.match(parse(result).message,/6, 10.*produto/);assert.equal(x.count.create,0);assert.equal((await x.rawAll()).length,0);
+ const y=await setup({codTmv:'1.2.10'});result=await y.run({tipoDoPagamento:'CC',contasDeConsumo:'E',itens:items});assert.equal(result.statusCode,200,result.body);
+});
+
+test('evidência durável não guarda XML, chavePIX, barcode, conta, documento pessoal ou link assinado',async()=>{
+ const x=await setup({realLegacy:true});const raw={Banco:'BANK_PRIVATE',Agencia:'AGENCY_PRIVATE',Conta:'ACCOUNT_PRIVATE',
+  informacoes:'CPF_PRIVATE',linkDaSolicitacao:'https://private.invalid/?token=SECRET_PRIVATE'};
+ assert.equal((await x.run(raw)).statusCode,200);
+ const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,1);const stored=JSON.stringify(evidence);
+ for(const privateValue of [...Object.values(raw),'fixture@example.test','<TMOV>'])assert.equal(stored.includes(privateValue),false,privateValue);
+ assert.match(evidence[0].evidence.xmlSha256,/^[a-f0-9]{64}$/);assert.equal(evidence[0].evidence.installments.length,1);
+});
+
+test('falha de evidência é antes de CREATING e permite corrigir a reserva, sem despachar',async()=>{
+ const x=await setup();const original=x.repo.registrarEvidencia.bind(x.repo);x.repo.registrarEvidencia=async()=>{throw Error('PRIVATE_STORAGE')};
+ assert.equal((await x.run()).statusCode,503);const root=(await x.all())[0];assert.equal(root.state,'RESERVED');assert.ok(root.lockUntil<Date.now());assert.equal(x.count.create,0);
+ x.repo.registrarEvidencia=original;assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,200);assert.equal(x.count.create,1);
+});
+
+test('série vazia no XML é preenchida uma única vez com default nativo sem duplicar tag',async()=>{
+ const x=await setup({createMov:{SERIE:''},documentNative:{EFFECTIVE_SERIES:'REC'}});
+ const result=await x.run();assert.equal(result.statusCode,200,result.body);
+ assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').SERIE,'REC');assert.equal((x.count.createdXml.match(/<SERIE>/g)||[]).length,1);
+});
+
+test('SC/OC sem financeiro são preservados nos dez tipos; qualquer parcela anterior bloqueia novo envio',async()=>{
+ for(const [codTmv,fields] of tiposPG){
+  const census={movimentos:[{coligada:'8',idMov:'8000'}],lancamentos:[]};
+  const x=await setup({codTmv,censo:census});assert.equal((await x.run(fields)).statusCode,200,codTmv);assert.equal(x.count.create,1);
+  const y=await setup({codTmv,censo:{...census,lancamentos:[{coligada:'8',idMov:'8000',idLan:'8001',boletos:0}]}});
+  assert.notEqual((await y.run(fields)).statusCode,200,codTmv);assert.equal(y.count.create,0);assert.equal((await y.all()).find(r=>r.pk==='dev#PG#8#9003').state,'RESERVED');
+ }
+});
+
+test('CC35 com resposta perdida permanece incerta mesmo existindo movimento; contratoDOC9 não autoriza reconciliação incompleta',async()=>{
+ const x=await setup({codTmv:'1.2.10',createError:true,commitOnError:true});
+ const input={tipoDoPagamento:'CC',contasDeConsumo:'E',numeroDaNF:'12345678901234567890123456789012345'};
+ assert.equal((await x.run(input)).statusCode,503);await x.expire();const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
+ assert.equal((await x.run(input)).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
+});
+
+test('identidade bancária inválida conserva o código público e nunca reserva',async()=>{
+ const x=await setup(),result=await x.run({idpgto:''});assert.equal(result.statusCode,422);assert.equal(parse(result).code,'IDPGTO_NAO_CONFIRMADO');assert.equal((await x.rawAll()).length,0);assert.equal(x.count.create,0);
+});
+
+test('retomada positiva com entrada omitida usa a data nativa sem escrever data ou criar outro MOV',async()=>{
+ const x=await setup({codTmv:'1.2.01',createError:true,commitOnError:true});
+ const fields={tipoDoPagamento:'NF',tipoDeItem:'Material',dataDeEntrada:''};
+ assert.equal((await x.run(fields)).statusCode,503);await x.expire();assert.equal((await x.run(fields)).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').DATAVENCIMENTO,'2026-11-10');
+});
+
+test('rejeição RM retorna motivo allowlisted e persiste hash sem liberar CREATING por zero',async()=>{
+ const raw='Já Existe Nota do Emitente com este Número e Série. CPF_PRIVATE private@example.test\n=====\nat RM.Fixture';
+ const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
+ const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,2);assert.equal(evidence.find(r=>r.evidence.phase==='native_result').evidence.diagnostic.reasonCode,'RM_DUPLICATE_RECORD');
+ const output=JSON.stringify([result,evidence]);assert.equal(output.includes('CPF_PRIVATE'),false);assert.equal(output.includes('private@example.test'),false);
+ await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,409);assert.equal(x.count.create,1);
+});
 
 test('PIX: criação e gravação com leitura final; replay em instância nova sem nova escrita',async()=>{
   const x=await setup();const first=await x.run();assert.equal(first.statusCode,200);assert.equal(parse(first).LF,'9002');

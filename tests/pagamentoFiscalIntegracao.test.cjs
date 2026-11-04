@@ -15,7 +15,7 @@ function setup(options={}){
   ticketRaiz:'9003',codigoDaColigada2:'11',codigoDaFilial2:'1',codigoDoFornecedor:'0000000001',CODCOLCFO:'0',
   idpgto:'2',CODCOLPGTO:'11',numeroDaNF:'9003001',idDaNaturezaFiscal:'121',codigoDaNaturezaFiscal:'1.949.01',
   dataDeEmissao:'2026-10-26',dataDeEntrada:'2026-10-30',dataDeVencimento:'2026-12-31',valorTotal:'100,00',
-  codigoTipoChavePIX:'2',chavePIX:'fixture@example.test',itens:[],tributos:[],...options.fields};
+  codigoTipoChavePIX:'2',chavePIX:'fixture@example.test',chaveDeAcesso:'',itens:[],tributos:[],...options.fields};
  const calls={reserve:0,create:0,bankWrite:0,fiscal:0,document:0,lookup:0,movementRead:0,order:[]},records=new Map();
  let lan={CODCOLIGADA:'11',IDLAN:'9002',IDMOV:'9001',CODFILIAL:'1',CODCFO:'0000000001',CODCOLCFO:'0',
   DATAVENCIMENTO:'2026-12-31',VALORORIGINAL:'100.0000',STATUSLAN:'0',VALORBAIXADO:'0',BAIXAPENDENTE:'0',
@@ -89,11 +89,11 @@ test('COMPLETE e PG informado não executam guard fiscal nem criam novo moviment
   const x=setup(options);assert.equal((await x.run()).statusCode,200);assert.equal(x.calls.fiscal,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.order.includes('movimentoConhecido'),false);
  }
 });
-test('outroCODTMV não consulta documento; serviço sem natureza mantém validação documental antes de criar',async()=>{
+test('material valida documento sem aplicar natureza de serviço; natureza ausente conserva defaults nativos',async()=>{
  for(const fields of [{tipoDeItem:'Material',idDaNaturezaFiscal:'invalid'},{idDaNaturezaFiscal:'',codigoDaNaturezaFiscal:''}]){
   const x=setup({fields});assert.equal((await x.run()).statusCode,200);assert.equal(x.calls.fiscal,0);assert.equal(x.calls.create,1);
-  assert.equal(x.calls.document,fields.tipoDeItem==='Material'?0:1);
-  assert.equal(x.calls.order.includes('movimentoConhecido'),fields.tipoDeItem!=='Material');
+  assert.equal(x.calls.document,1);
+  assert.equal(x.calls.order.includes('movimentoConhecido'),true);
  }
 });
 test('RM existente sem raiz durável pula fiscal stale e associa sem criar outro movimento',async()=>{
@@ -137,7 +137,7 @@ test('colisão nativa por número/série de outro ticket retorna422 antes de res
 
 test('série não vinculada ou consulta documental indisponível não deixam reserva que impeça corrigir a entrada',async()=>{
  for(const [options,status,code] of [[{fields:{serie:'70000'},documentNative:{SERIES_MATCH_COUNT:0}},422,'SERIE_DOCUMENTO_INVALIDA'],
-  [{documentError:true},503,'IDPGTO_NAO_CONFIRMADO'],[{documentResponse:[]},503,'IDPGTO_NAO_CONFIRMADO']]){
+  [{documentError:true},503,'PRE_VALIDACAO_INDISPONIVEL'],[{documentResponse:[]},503,'PRE_VALIDACAO_INDISPONIVEL']]){
   const x=setup(options),result=await x.run();assert.equal(result.statusCode,status);assert.equal(parse(result).code,code);
   assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);assert.equal(x.records.size,0);
  }

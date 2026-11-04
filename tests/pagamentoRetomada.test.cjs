@@ -57,3 +57,19 @@ test('consulta documental para adoção só aceita o único IDMOV do próprio ti
  for(const change of [{TICKET:'old'},{IDMOV:9002},{CODTMV:'2.2.26'}])assert.throws(()=>validarDocumentoExistente([{...row,...change}],key,'9001','9003'));
  assert.throws(()=>validarDocumentoExistente([docFixture(key)],key,'9001','9003'));
 });
+
+test('entrada omitida aceita somente uma data nativa válida, preserva o default e mantém comparação estrita quando informada',()=>{
+ const c=parsearCensoRetomada(rows,'8','9003'),before=JSON.stringify(mov),expected={...e,entrada:''};
+ assert.doesNotThrow(()=>validarCriacaoEncontrada(c,movement(),financial(),expected));
+ assert.equal(JSON.stringify(mov),before);assert.equal(expected.entrada,'');
+ for(const DATASAIDA of ['', '2026-02-31', 'private'])assert.throws(()=>validarCriacaoEncontrada(c,movement({DATASAIDA}),financial(),expected));
+ assert.throws(()=>validarCriacaoEncontrada(c,movement({DATASAIDA:'2026-10-28'}),financial(),e));
+ assert.throws(()=>validarCriacaoEncontrada(c,movement({DATAEMISSAO:'2026-10-28'}),financial(),expected));
+});
+
+test('recuperação NULL de DOC2 exige ausência/vazio ReadRecord e recusa o tipo financeiro não nulo',()=>{
+ const c=parsearCensoRetomada(rows,'8','9003'),expected={...e,tipoDocumento:''};
+ assert.doesNotThrow(()=>validarCriacaoEncontrada(c,movement({CODTDO:''}),financial(),expected));
+ assert.doesNotThrow(()=>validarCriacaoEncontrada(c,movement().replace('<CODTDO>002</CODTDO>',''),financial(),expected));
+ assert.throws(()=>validarCriacaoEncontrada(c,movement(),financial(),expected));
+});

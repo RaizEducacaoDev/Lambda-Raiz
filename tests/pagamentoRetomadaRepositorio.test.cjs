@@ -33,6 +33,18 @@ async function fixture(overrides={},customClient){
 }
 const histories=items=>items.filter(item=>item.pk.includes('#HISTORY#'));
 
+test('evidência por tentativa é imutável e idempotente, não modifica raiz e não armazena campos arbitrários',async()=>{
+ const x=await fixture(),evidence={version:1,phase:'prepared',xmlSha256:'d'.repeat(64),movementType:'1.2.01',
+  company:'9',branch:'2',ticket:'226374',supplierCompany:'0',supplier:'0000000001',paymentId:'6',paymentCompany:'9',number:'000114',series:'1',documentType:'055',
+  issueDate:'2026-10-22',entryDate:'',total:'100.0',installments:[{dueDate:'2026-11-04',amount:'100.0',destinationSha256:'e'.repeat(64)}]};
+ await x.repo.registrarEvidencia(x.original,evidence);await x.repo.registrarEvidencia(x.original,evidence);
+ assert.deepEqual(await x.root(),x.original);let rows=(await x.all()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(rows.length,1);
+ await assert.rejects(()=>x.repo.registrarEvidencia(x.original,{...evidence,rawXml:'PRIVATE'}));
+ await x.replace({...rows[0],evidence:{...rows[0].evidence,total:'999.0'}});
+ await assert.rejects(()=>x.repo.registrarEvidencia(x.original,evidence),/imutável divergente/);
+ assert.deepEqual(await x.root(),x.original);
+});
+
 test('novas raízes recebem protocolo2; retomada normal não promove legado nem marca filho',async()=>{
  const x=await fixture();
  const nova=await x.repo.reservar('prod#PG#9#999999',digest,undefined,30000);

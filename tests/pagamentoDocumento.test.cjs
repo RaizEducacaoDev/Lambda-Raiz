@@ -7,9 +7,9 @@ const { prepararDocumento, validarDocumento, DocumentoPagamentoInvalido } = load
 const { PagamentoInvalido } = load('pagamentoIdentidade.ts');
 const base = { codColigada: '9', codFilial: '3', codColCfo: '0', codCfo: '0000000001', codTmv: '1.2.03' };
 const expected = { ...base, numero: '114', serie: '' };
-const native = changes => ({ DOC_VERSION: 1, REQUEST_COMPANY: 9, REQUEST_BRANCH: 3, REQUEST_SUPPLIER_COMPANY: 0,
+const native = changes => ({ DOC_VERSION: 2, REQUEST_COMPANY: 9, REQUEST_BRANCH: 3, REQUEST_SUPPLIER_COMPANY: 0,
   REQUEST_SUPPLIER: base.codCfo, REQUEST_MOVEMENT_TYPE: '1.2.03', REQUEST_NUMBER: '114', REQUEST_SERIES: '',
-  HAS_MOVEMENT_TYPE: 1, MASK: '#########', PRINCIPAL_COUNT: 1, SERIES_MATCH_COUNT: 1,
+  HAS_MOVEMENT_TYPE: 1, HAS_MOVEMENT_EXTENSION:1, DOCUMENT_TYPE_IS_NULL:0, MASK: '#########', PRINCIPAL_COUNT: 1, SERIES_MATCH_COUNT: 1,
   EFFECTIVE_SERIES: '1', EFFECTIVE_NUMBER: '000000114', EFFECTIVE_DOCUMENT_TYPE: '002', DOC_MATCH_COUNT: 0, ...changes });
 const match = changes => native({ DOC_MATCH_COUNT: 1, CODCOLIGADA: 9, IDMOV: 78497, CODFILIAL: 3,
   CODCOLCFO: 0, CODCFO: base.codCfo, CODTMV: '1.2.03', SERIE: '1', NUMEROMOV: '000000114', CODTDO: '002',
@@ -23,13 +23,18 @@ const typed = (data, code, key = expected) => assert.throws(() => validarDocumen
   assert.equal(error.code, code); return true;
 });
 
-test('preparação exclusiva1.2.03 conserva número/zeros/série e nunca infere DPS/NFN', () => {
+test('preparação dos dez tipos conserva número/zeros, usa série só onde o legado a consome e nunca infere DPS/NFN', () => {
   const input = { numeroDaNF: '000114', serie: '  00001 ', serieDaDPS: '70000', numeroDPS: '999', idpgto: '3' };
   const original = structuredClone(input);
   assert.deepEqual(prepararDocumento(input, base), { ...base, numero: '000114', serie: '00001' });
   assert.deepEqual(input, original);
   assert.deepEqual(prepararDocumento({ numeroDaNF: '114', serieDaDPS: '70000' }, base), expected);
-  for (const codTmv of ['1.2.01', '1.2.10', '1.2.25']) assert.equal(prepararDocumento({}, { ...base, codTmv }), undefined);
+  for (const codTmv of ['1.2.01', '1.2.25']) assert.equal(prepararDocumento(input, { ...base, codTmv }).serie, '00001');
+  for (const codTmv of ['1.2.09', '1.2.10', '1.2.11', '1.2.12', '1.2.08', '1.2.17', '1.2.16']) {
+    assert.equal(prepararDocumento(input, { ...base, codTmv }).serie, '');
+  }
+  assert.equal(prepararDocumento({}, { ...base, codTmv:'1.1.01' }), undefined);
+  assert.equal(prepararDocumento({numeroDaNF:'12345678901234567890123456789012345'}, {...base,codTmv:'1.2.10'}),undefined);
 });
 
 test('número não é truncado nem convertido de formato ambíguo; série inválida é422 tipado', () => {
@@ -47,6 +52,26 @@ test('whitespace no número é rejeitado antes da consulta para não divergir do
     assert.throws(() => prepararDocumento({ numeroDaNF, serie: '1' }, base),
       error => error instanceof DocumentoPagamentoInvalido && error.code === 'NUMERO_DOCUMENTO_INVALIDO', numeroDaNF);
   }
+});
+
+test('DOC2 usa TTMVEXT e aceita NULL documentado nos três tipos, sem confundir NULL com string vazia ou financeiro',()=>{
+ const {validarDocumentoExistente}=load('pagamentoDocumento.ts');
+ for(const codTmv of ['1.2.16','1.2.08','1.2.17']){
+  const key={...expected,codTmv},row=native({REQUEST_MOVEMENT_TYPE:codTmv,DOCUMENT_TYPE_IS_NULL:1,EFFECTIVE_DOCUMENT_TYPE:null});
+  assert.deepEqual(validarDocumento([row],key),{serie:'1',numero:'114',tipoDocumento:''});
+  const omitted={...row};delete omitted.EFFECTIVE_DOCUMENT_TYPE;assert.equal(validarDocumento([omitted],key).tipoDocumento,'');
+  const existing={...match(),...row,DOC_MATCH_COUNT:1,CODTMV:codTmv,TICKET:'9003',CODTDO:null};
+  assert.throws(()=>validarDocumento([existing],key),error=>error.code==='DOCUMENTO_RM_DUPLICADO');
+  assert.equal(validarDocumentoExistente([existing],key,'78497','9003').tipoDocumento,'');
+  delete existing.CODTDO;assert.equal(validarDocumentoExistente([existing],key,'78497','9003').tipoDocumento,'');
+  for(const change of [{CODTDO:''},{CODTDO:'017'},{EFFECTIVE_DOCUMENT_TYPE:''},{EFFECTIVE_DOCUMENT_TYPE:'025'},{DOCUMENT_TYPE_IS_NULL:0}]){
+   assert.throws(()=>validarDocumentoExistente([{...existing,...change}],key,'78497','9003'));
+  }
+ }
+ for(const changes of [{DOC_VERSION:1},{HAS_MOVEMENT_EXTENSION:0},{DOCUMENT_TYPE_IS_NULL:undefined},
+  {DOCUMENT_TYPE_IS_NULL:2},{DOCUMENT_TYPE_IS_NULL:0,EFFECTIVE_DOCUMENT_TYPE:null}]) invalidContract([native(changes)]);
+ // The contract cannot label a financial-TDO record as a NULL-key collision.
+ invalidContract([match({CODTDO:null})]);
 });
 
 test('sentinela zero aceita SQLNULL omitido ou explícito e máscara/série principal comprovadas', () => {
@@ -84,7 +109,7 @@ test('eco nativo é exato, globalCFO0 é aceito e número/série mantêm zeros',
   assert.doesNotThrow(() => validarDocumento([native({ REQUEST_COMPANY: '9', REQUEST_BRANCH: '3', REQUEST_SUPPLIER_COMPANY: '0' })], expected));
   assert.deepEqual(validarDocumento([native({ REQUEST_NUMBER: '000114' })], { ...expected, numero: '000114' }),
     { serie: '1', numero: '000114', tipoDocumento: '002' });
-  for (const change of [{ DOC_VERSION: 2 }, { REQUEST_COMPANY: 11 }, { REQUEST_BRANCH: 1 },
+  for (const change of [{ DOC_VERSION: 3 }, { REQUEST_COMPANY: 11 }, { REQUEST_BRANCH: 1 },
     { REQUEST_SUPPLIER_COMPANY: 9 }, { REQUEST_SUPPLIER: 'PRIVATE_OTHER' }, { REQUEST_SUPPLIER: 1 },
     { REQUEST_MOVEMENT_TYPE: '1.2.01' }, { REQUEST_NUMBER: '000114' }, { REQUEST_NUMBER: 114 },
     { REQUEST_SERIES: '1' }, { REQUEST_SERIES: null }]) invalidContract([native(change)]);

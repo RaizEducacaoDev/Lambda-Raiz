@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { validarEvidencia, type EvidenciaPagamento } from './pagamentoEvidencia';
 
 export type EstadoPagamento = 'RESERVED' | 'CREATING' | 'CREATED' | 'UPDATING' | 'COMPLETE';
 export type OperacaoPagamento = {
@@ -9,6 +10,7 @@ export type OperacaoPagamento = {
   recuperadaCriacaoIncerta?: true;
 };
 export interface RepositorioPagamento {
+  registrarEvidencia?(operacao: OperacaoPagamento, evidencia: EvidenciaPagamento): Promise<void>;
   consultar(pk: string): Promise<OperacaoPagamento | undefined>;
   corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento>;
   confirmarCriacaoIncerta(antes: OperacaoPagamento, pg: string, duracao: number): Promise<OperacaoPagamento>;
@@ -39,6 +41,27 @@ const snapshotCanonico = (valor: unknown): string => JSON.stringify(ordenarSnaps
 export class DynamoPagamento implements RepositorioPagamento {
   constructor(private readonly tabela: string,
     private readonly cliente = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 1 }))) {}
+  async registrarEvidencia(op: OperacaoPagamento, evidencia: EvidenciaPagamento): Promise<void> {
+    validarEvidencia(evidencia);
+    if (!raizPagamento(op.pk) || !digestValido(op.digest) || !/^[A-Za-z0-9._-]{1,100}$/.test(op.owner) ||
+      (evidencia.phase === 'prepared' ? op.state !== 'RESERVED' : op.state !== 'CREATING')) {
+      throw new Error('Estado inválido para registrar evidência da criação');
+    }
+    // This immutable record is evidence only: it never changes the root,
+    // acquires a lease or authorizes a retry. An orphan is harmless.
+    const conteudo = { version: 1, digest: op.digest, owner: op.owner, observedState: op.state, evidence: evidencia };
+    const evidenceSha256 = createHash('sha256').update(snapshotCanonico(conteudo)).digest('hex');
+    const registro = { pk: `${op.pk}#EVIDENCE#${op.owner}#${evidenceSha256}`, evidenceSha256, ...conteudo };
+    try {
+      await this.cliente.send(new PutCommand({ TableName: this.tabela, Item: registro,
+        ConditionExpression: 'attribute_not_exists(pk)' }), { abortSignal: AbortSignal.timeout(2000) });
+    } catch (erro) {
+      if (!(erro instanceof Error) || erro.name !== 'ConditionalCheckFailedException') throw erro;
+      const gravado = await this.cliente.send(new GetCommand({ TableName: this.tabela,
+        Key: { pk: registro.pk }, ConsistentRead: true }), { abortSignal: AbortSignal.timeout(2000) });
+      if (!gravado.Item || snapshotCanonico(gravado.Item) !== snapshotCanonico(registro)) throw new Error('Evidência imutável divergente');
+    }
+  }
   async consultar(pk: string): Promise<OperacaoPagamento | undefined> {
     const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
       { abortSignal: AbortSignal.timeout(2000) });
