@@ -1,4 +1,5 @@
 """Read-only correlation of localizer 202611040544-66; never invokes a payment."""
+import argparse
 import datetime as dt
 import importlib.util
 import json
@@ -35,19 +36,20 @@ def safe_event(event):
     return row
 
 
-def main():
+def main(minute=44):
+    assert minute in (44, 53)
     deadline = time.monotonic() + 240
     assert a.aws('sts', 'get-caller-identity', deadline=deadline)['Account'] == a.ACCOUNT
     cfg = a.aws('lambda', 'get-function-configuration', '--function-name', a.FUNCTION, deadline=deadline)
     env = cfg.get('Environment', {}).get('Variables', {})
     assert env.get('STAGE') == 'prod' and env.get('PAGAMENTO_IDPGTO_TABLE') == a.TABLE
     now = dt.datetime.now(dt.timezone.utc)
-    out = {'observedUtc': now.isoformat(), 'localizer': '202611040544-66', 'businessWrites': False,
+    out = {'observedUtc': now.isoformat(), 'localizer': {44:'202611040544-66',53:'202611040553-42'}[minute], 'businessWrites': False,
            'function': {k: cfg.get(k) for k in ['FunctionName', 'CodeSha256', 'RevisionId', 'State', 'LastUpdateStatus', 'Timeout', 'MemorySize']},
            'windows': [], 'requests': [], 'namedReservation': {}}
     requests = {}
     for hour in [20, 8]:
-        center = dt.datetime(2026, 11, 4, hour, 44, tzinfo=dt.timezone.utc)
+        center = dt.datetime(2026, 11, 4, hour, minute, tzinfo=dt.timezone.utc)
         start, end = center - dt.timedelta(minutes=3), min(center + dt.timedelta(minutes=3), now)
         if end <= start:
             continue
@@ -67,7 +69,7 @@ def main():
                  '--key', json.dumps({'pk': {'S': a.PK}}), deadline=deadline).get('Item', {})
     out['namedReservation'] = {'ticket': 225136, 'company': 1, 'record': a.safe_reservation(item),
                                'hasPgAttribute': 'pg' in item, 'protocolVersion': item.get('protocolVersion', {}).get('N')}
-    directory = Path('.preflight-1744-audit')
+    directory = Path(f'.preflight-17{minute}-audit')
     directory.mkdir(exist_ok=True)
     (directory/'readback.json').write_text(json.dumps(out, indent=2), encoding='utf-8')
     print(json.dumps(out, indent=2))
@@ -75,4 +77,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--minute',type=int,choices=[44,53],default=44)
+    main(parser.parse_args().minute)

@@ -1,4 +1,4 @@
-name: Read-only diagnosis payment preflight 1744
+name: Read-only diagnosis payment result 1753
 on:
   push:
     branches: [fix/payment-preflight-503-20261104]
@@ -22,11 +22,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: sa-east-1
           AWS_PAGER: ''
-        run: python3 scripts/audit-payment-preflight-1744.py
+        run: python3 scripts/audit-payment-preflight-1744.py --minute 53
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: payment-preflight-1744-readonly
-          path: .preflight-1744-audit/readback.json
+          name: payment-result-1753-readonly
+          path: .preflight-1753-audit/readback.json
           include-hidden-files: true
           retention-days: 7
