@@ -47,6 +47,18 @@ jobs:
           run-id: 41905310017
           name: payment-bank-repair-lease-evidence
           path: .failed-bank-lease
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41908274896
+          name: uncertain-creation-removal-release
+          path: .verified-runtime-release
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41908274896
+          name: uncertain-creation-removal-independent-readback
+          path: .verified-runtime-independent
       - name: Read unchanged financial evidence and propose receipt without writing
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

@@ -41,8 +41,20 @@ BEFORE_ROOT_SHA='d37dbe6017559dc039927a7d4f941dc4dffd81f632dc2b1b88c22839ac99885
 LEASED_ROOT_SHA='4ed5e68cb130525a4f888a9f6b4aa9b2cd3cb6f5eadeb70b2e63567181db4ceb'
 PLAN_SHA='4ae883e984db6a7df3b26e1c8d8265dd9aaa39426af1f32ec11de90c5f57a0be'
 UNCHANGED_EVIDENCE_SHA='29adc8573bb2debff45aa16f2ea7725d24a44edcb235cc2f77d62921a7e78efb'
-RUNTIME={'codeSha256':'U8MIHNjNZ2iEeyt02SWx4q5TztrmrcpehRqBlf86OY8=',
-         'revisionId':'d6c03245-d62e-4ef2-834b-22dbada25c1b'}
+SOURCE_RUNTIME={'codeSha256':'U8MIHNjNZ2iEeyt02SWx4q5TztrmrcpehRqBlf86OY8=',
+                'revisionId':'d6c03245-d62e-4ef2-834b-22dbada25c1b'}
+CURRENT_RUNTIME={'codeSha256':'ECffjgl6BpvRQrtHh3+O++D7/SAvTGAe8r9XTJqJIKE=',
+                 'revisionId':'29524d8b-327d-4389-a7ed-cab0b04aae2e'}
+CURRENT_REVIEW_SHA='e9f1ade8ad4b08162eab3a52b591791970dc48f1e7eb91bb663e334f082be91c'
+RUNTIME_PROVENANCE={'runId':'41908274896','commit':'6e86df16ed9873b18f337228ff77da680eb7d497',
+  'workflow':'.github/workflows/remove-uncertain-creation-release.yml',
+  'branch':'fix/remove-uncertain-creation-20261104',
+  'filesSha256':{'deployment.json':'687fb95a633603e3d03f9444f403070a94226cd5f497eb7fdb01a6ea25d50096',
+    'independent-readback.json':'069cd750b75b71e2b3ee475a01cd7786c55aba857b099988a39c05ef0fed72fd',
+    'monitor.json':'0bb2deeebd963ca00af820cfe96f5cb9c38f0b333595fa1332d11e16a443d8a2'},
+  'outsideModulesSha256':'SVKPgvGAAbP/SW47HPxnvi74+ZarjrSFK91M531sjKM=',
+  'modules':{'src/functions/rm/post/pagamentoV2Idempotencia.ts':'o4ItJOqL46PbgG9UtDYEztG3KA2xgY6ZNflf3Gzf2iI=',
+    'src/functions/rm/post/solicitacaoDePagamentoSeguro.ts':'8nLAesvrYu5c+VjipPVystLhQexypizf9atcJ9ukcWs='}}
 FILE_PINS={
  'summary.json':'806b3bb05b51782b3d68d02f178b223b400d4d6ffcabce13b26b02eb54e0b9b3',
  'failure-228007.json':'ee6b5897e8580d979cb3b7e776c2314f3655aee9867ec463b2b0c5114324ffec',
@@ -100,7 +112,9 @@ def receipt_proof(old_claim):
     return {'version':1,'outcome':'NO_EFFECT_OBSERVED','sourceRunId':SOURCE_RUN,'sourceCommit':SOURCE_COMMIT,
       'sourceWorkflow':SOURCE_WORKFLOW,'sourceFilesSha256':copy.deepcopy(FILE_PINS),'leaseProofSha256':LEASE_SHA,
       'sourcePlanSha256':PLAN_SHA,'oldClaimSha256':validate_old_claim(old_claim),'originalRootSha256':BEFORE_ROOT_SHA,
-      'leasedRootSha256':LEASED_ROOT_SHA,'runtime':dict(RUNTIME),'noEffectObserved':True,'allColumnsUnchanged':True,
+      'leasedRootSha256':LEASED_ROOT_SHA,'sourceRuntime':dict(SOURCE_RUNTIME),'currentRuntime':dict(CURRENT_RUNTIME),
+      'runtimePublication':copy.deepcopy(RUNTIME_PROVENANCE),'currentReviewSha256':CURRENT_REVIEW_SHA,
+      'onlyAcceptedReviewDifference':'baseline.remoteSources.runtime','noEffectObserved':True,'allColumnsUnchanged':True,
       'observationHashes':{name:UNCHANGED_EVIDENCE_SHA for name in ('before','sameSessionAfter','independentAfter','freshFirst','freshSecond')},
       'columnCounts':{'sqlMovement':276,'sqlLaunch':271,'nativeLaunch':146},
       'formBankSourceAndPaymentUnchanged':True,'oldClaimPreservedExactly':True,'originalRootRestoredExactly':True,
@@ -152,7 +166,7 @@ def load_evidence(evidence_dir,lease_path):
       {k:v for k,v in lease['leasedRoot'].items() if k not in ('owner','lockUntil')},'LEASE_BUSINESS_CHANGED')
     summary=files['summary.json'];before=files['ticket-228007/before-228007.json']
     require(summary['workflow']=={'repository':REPOSITORY,'branch':BRANCH,'workflow':SOURCE_WORKFLOW,'runId':SOURCE_RUN,'commit':SOURCE_COMMIT} and
-      summary['mode']=='apply' and summary['requestedTickets']==[TICKET] and summary['runtime']==RUNTIME and
+      summary['mode']=='apply' and summary['requestedTickets']==[TICKET] and summary['runtime']==SOURCE_RUNTIME and
       summary['allVerified'] is False and summary['zeevWrites'] is False and summary['lambdaInvoked'] is False and
       summary['financialDocumentCreations'] is False and summary['automaticRetry'] is False,'SOURCE_RUN_SUMMARY_CHANGED')
     attempt=files['ticket-228007/attempt-228007.json'];checks=files['ticket-228007/readback-checks-228007.json']
@@ -170,6 +184,34 @@ def load_evidence(evidence_dir,lease_path):
         previous=stamp(after['observedUtc'])
     archive={'pk':{'S':ARCHIVE_KEY},'original':{'M':lease['before']},'leaseOwner':lease['leasedRoot']['owner'],'leaseUntil':lease['leasedRoot']['lockUntil']}
     return {'lease':lease,'archive':archive,'review':before['review'],'columnEvidence':evidence,'sourceHashes':summary['codeSha256']}
+
+
+def expected_current_review(original):
+    """Accept exactly the independently verified runtime publication, no rebase."""
+    require(original.get('baseline',{}).get('remoteSources',{}).get('runtime')==SOURCE_RUNTIME,'ORIGINAL_REVIEW_RUNTIME_CHANGED')
+    current=copy.deepcopy(original)
+    current['baseline']['remoteSources']['runtime']=dict(CURRENT_RUNTIME)
+    return current
+
+
+def load_runtime_provenance(release_dir,independent_dir):
+    values={}
+    for name,digest in RUNTIME_PROVENANCE['filesSha256'].items():
+        path=(release_dir if name=='deployment.json' else independent_dir)/name
+        require(file_sha(path)==digest,'RUNTIME_PUBLICATION_ARTIFACT_CHANGED');values[name]=read_json(path)
+    deployment=values['deployment.json'];independent=values['independent-readback.json'];monitor=values['monitor.json']
+    require(deployment.get('previousCodeSha256')==SOURCE_RUNTIME['codeSha256'] and deployment.get('commit')==RUNTIME_PROVENANCE['commit'] and
+      deployment.get('configurationPreserved') is True and deployment.get('onlyChangedEntry')=='src/functions/rm/post/solicitacaoDePagamento.js' and
+      deployment.get('outsideModulesSha256')==RUNTIME_PROVENANCE['outsideModulesSha256'] and deployment.get('modules')==RUNTIME_PROVENANCE['modules'] and
+      all(deployment.get(k) is False for k in ('ticketRetriesPerformed','financialWrites','dynamoWrites','zeevWrites')),'RUNTIME_PUBLICATION_NOT_SCOPED')
+    for document in (deployment,independent,monitor):
+        require(document.get('function')=='lambda-raiz-prod-solicitacaoDePagamento' and
+          {'codeSha256':document.get('activeCodeSha256'),'revisionId':document.get('revisionId')}==CURRENT_RUNTIME,'RUNTIME_PUBLICATION_PIN_MISMATCH')
+    require(all(document.get('packageIndependentlyVerified') is True and document.get('allEntryHashesConfirmed') is True and
+      document.get('ticketRetriesPerformed') is False for document in (independent,monitor)),'RUNTIME_INDEPENDENT_VERIFICATION_MISSING')
+    require(stamp(deployment['deployedUtc'])<=stamp(independent['observedUtc'])<=stamp(monitor['observedUtc']) and
+      monitor.get('monitorSeconds',0)>=300 and monitor.get('lambdaExecutionErrors')==0,'RUNTIME_MONITOR_NOT_VERIFIED')
+    return copy.deepcopy(RUNTIME_PROVENANCE)
 
 
 def validate_column_evidence(evidence):
@@ -216,17 +258,18 @@ def context(env=None):
 
 def observe_unchanged(backend,evidence):
     start=time.monotonic();first=backend.observe(False);second=backend.observe(True)
+    expected=expected_current_review(evidence['review'])
     for value in (first,second):
-        require(value['runtime']==RUNTIME and value['review']==evidence['review'],'LIVE_REVIEW_FORM_BANK_SOURCE_OR_RUNTIME_CHANGED')
+        require(value['runtime']==CURRENT_RUNTIME and value['review']==expected,'LIVE_REVIEW_FORM_BANK_SOURCE_OR_RUNTIME_CHANGED')
         validate_column_evidence(value['columnEvidence'])
         require(value['columnEvidence']==evidence['columnEvidence'],'LIVE_ALL_COLUMN_EVIDENCE_CHANGED')
     require(time.monotonic()-start<=60,'FRESH_OBSERVATIONS_EXCEEDED_60_SECONDS')
     return start,{'firstUtc':first['observedUtc'],'secondUtc':second['observedUtc'],'allColumnsSha256':UNCHANGED_EVIDENCE_SHA,
-      'fullReviewSha256':PLAN_SHA,'runtime':RUNTIME}
+      'sourceReviewSha256':PLAN_SHA,'currentReviewSha256':CURRENT_REVIEW_SHA,'runtime':dict(CURRENT_RUNTIME)}
 
 
 def control_read(backend,evidence,expected_claim_sha=None):
-    require(backend.runtime()==RUNTIME,'CURRENT_RUNTIME_CHANGED')
+    require(backend.runtime()==CURRENT_RUNTIME,'CURRENT_RUNTIME_CHANGED')
     claim=backend.get(OLD_ATTEMPT_KEY);digest=validate_old_claim(claim)
     require(expected_claim_sha is None or digest==expected_claim_sha,'CLAIM_CHANGED_SINCE_REVIEW')
     require(backend.get(ARCHIVE_KEY)==evidence['archive'],'ORIGINAL_LEASE_ARCHIVE_CHANGED')
@@ -242,7 +285,8 @@ def prepare(backend,evidence,ctx):
     require(time.monotonic()-started<=60,'EVIDENCE_STALE_BEFORE_PREPARE')
     plan={'version':1,'mode':'PREPARE','ticket':TICKET,'company':COMPANY,'idmov':IDMOV,'idlan':IDLAN,
       'preparedUtc':utc(),'workflow':ctx,'codeSha256':source_hashes(),'sourceRunId':SOURCE_RUN,'sourceCommit':SOURCE_COMMIT,
-      'sourceFilesSha256':FILE_PINS,'leaseProofSha256':LEASE_SHA,'runtime':RUNTIME,
+      'sourceFilesSha256':FILE_PINS,'leaseProofSha256':LEASE_SHA,'runtime':dict(CURRENT_RUNTIME),
+      'sourceRuntime':dict(SOURCE_RUNTIME),'runtimePublication':copy.deepcopy(RUNTIME_PROVENANCE),
       'oldClaimSha256':sha(claim),'archiveSha256':sha(evidence['archive']),'leasedRootSha256':LEASED_ROOT_SHA,
       'restoreRootSha256':BEFORE_ROOT_SHA,'observation':observation,'proposedReceiptProof':receipt_proof(claim),
       'receiptKey':receipt_key(claim),'nextAttemptKey':NEXT_ATTEMPT_KEY,'automaticRetryAllowed':False,
@@ -260,7 +304,8 @@ def apply(backend,evidence,plan,expected_sha,ctx,authorized=False):
     require(-2<=(dt.datetime.now(dt.timezone.utc)-stamp(plan['preparedUtc'])).total_seconds()<=7200,'PREPARE_REVIEW_TOO_OLD')
     claim=control_read(backend,evidence,plan.get('oldClaimSha256'))
     require(plan.get('sourceRunId')==SOURCE_RUN and plan.get('sourceCommit')==SOURCE_COMMIT and plan.get('sourceFilesSha256')==FILE_PINS and
-      plan.get('leaseProofSha256')==LEASE_SHA and plan.get('runtime')==RUNTIME and plan.get('proposedReceiptProof')==receipt_proof(claim) and
+      plan.get('leaseProofSha256')==LEASE_SHA and plan.get('runtime')==CURRENT_RUNTIME and plan.get('sourceRuntime')==SOURCE_RUNTIME and
+      plan.get('runtimePublication')==RUNTIME_PROVENANCE and plan.get('proposedReceiptProof')==receipt_proof(claim) and
       plan.get('receiptKey')==receipt_key(claim) and plan.get('nextAttemptKey')==NEXT_ATTEMPT_KEY and
       plan.get('archiveSha256')==sha(evidence['archive']) and plan.get('leasedRootSha256')==LEASED_ROOT_SHA and plan.get('restoreRootSha256')==BEFORE_ROOT_SHA,'REVIEWED_PLAN_CONTENT_CHANGED')
     backend.verify_prepare_run(plan['workflow'])
@@ -302,6 +347,7 @@ class Live:
             def claim_dispatch(self,*args,**kwargs): raise GuardError('CLAIM_WRITE_FORBIDDEN')
         self.adapter=ReadOnlyAdapter(TICKET)
         self.verify_source_run()
+        self.verify_runtime_publication_run()
 
     def github_run(self,run_id):
         token=os.environ.get('GH_TOKEN');require(bool(token),'GITHUB_READ_TOKEN_MISSING')
@@ -325,6 +371,13 @@ class Live:
           result.get('head_branch')==BRANCH and result.get('event')=='push' and result.get('run_attempt')==1 and
           result.get('status')=='completed' and result.get('conclusion')=='success','PREPARE_RUN_NOT_SUCCESSFUL')
 
+    def verify_runtime_publication_run(self):
+        result=self.github_run(RUNTIME_PROVENANCE['runId'])
+        require(str(result.get('id'))==RUNTIME_PROVENANCE['runId'] and result.get('head_sha')==RUNTIME_PROVENANCE['commit'] and
+          result.get('path')==RUNTIME_PROVENANCE['workflow'] and result.get('head_branch')==RUNTIME_PROVENANCE['branch'] and
+          result.get('repository',{}).get('full_name')==REPOSITORY and result.get('event')=='push' and result.get('run_attempt')==1 and
+          result.get('status')=='completed' and result.get('conclusion')=='success','RUNTIME_PUBLICATION_RUN_NOT_VERIFIED')
+
     def aws(self,operation,payload):
         require(operation=='get-item' or self.apply_enabled and operation=='transact-write-items','AWS_OPERATION_FORBIDDEN')
         if operation=='get-item':
@@ -342,7 +395,7 @@ class Live:
 
     def runtime(self):
         require(self.adapter.aws('sts','get-caller-identity')['Account']==ACCOUNT,'AWS_ACCOUNT_MISMATCH')
-        runtime=self.adapter.config();require(runtime==RUNTIME,'RUNTIME_PIN_MISMATCH');return runtime
+        runtime=self.adapter.config();require(runtime==CURRENT_RUNTIME,'RUNTIME_PIN_MISMATCH');return runtime
 
     def observe(self,independent):
         snapshot=self.adapter.read(TICKET,independent=independent)
@@ -360,12 +413,16 @@ def main():
     parser.add_argument('--evidence-dir',type=Path,default=Path('.failed-bank-attempt'))
     parser.add_argument('--lease-proof',type=Path,default=Path('.failed-bank-lease/lease-228007.json'))
     parser.add_argument('--source-root',type=Path,default=Path('.bank-original-code'))
+    parser.add_argument('--runtime-release-dir',type=Path,default=Path('.verified-runtime-release'))
+    parser.add_argument('--runtime-independent-dir',type=Path,default=Path('.verified-runtime-independent'))
     parser.add_argument('--output-dir',type=Path,default=Path('.payment-bank-no-effect'))
     parser.add_argument('--apply',action='store_true');parser.add_argument('--authorized-no-effect-adjudication',action='store_true')
     parser.add_argument('--review',type=Path);parser.add_argument('--expect-plan-sha')
     args=parser.parse_args();ctx=context();args.output_dir.mkdir(exist_ok=False)
     require(not args.apply or args.authorized_no_effect_adjudication and args.review and args.expect_plan_sha,'EXPLICIT_REVIEWED_APPLY_REQUIRED')
     evidence=load_evidence(args.evidence_dir,args.lease_proof)
+    load_runtime_provenance(args.runtime_release_dir,args.runtime_independent_dir)
+    require(sha(expected_current_review(evidence['review']))==CURRENT_REVIEW_SHA,'RUNTIME_ONLY_REVIEW_SUBSTITUTION_CHANGED')
     backend=Live(args.source_root.resolve(),evidence,args.apply)
     if args.apply:result=apply(backend,evidence,read_json(args.review),args.expect_plan_sha,ctx,True)
     else:result=prepare(backend,evidence,ctx)

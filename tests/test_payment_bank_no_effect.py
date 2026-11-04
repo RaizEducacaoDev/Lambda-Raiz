@@ -27,18 +27,20 @@ def evidence():
     leased={**before,'owner':{'S':m.LEASE_OWNER},'lockUntil':{'N':'1793824907752'}}
     return {'lease':{'before':before,'leasedRoot':leased},
       'archive':{'pk':{'S':m.ARCHIVE_KEY},'original':{'M':before},'leaseOwner':leased['owner'],'leaseUntil':leased['lockUntil']},
-      'review':{'fixed':'review'},'columnEvidence':{'fixed':'hashes'},'sourceHashes':{}}
+      'review':{'fixed':'review','baseline':{'remoteSources':{'runtime':copy.deepcopy(m.SOURCE_RUNTIME)}}},
+      'columnEvidence':{'fixed':'hashes'},'sourceHashes':{}}
 
 
 class Fake:
     def __init__(self,e):
         self.e=e;self.items={m.ROOT_KEY:copy.deepcopy(e['lease']['leasedRoot']),m.ARCHIVE_KEY:copy.deepcopy(e['archive']),m.OLD_ATTEMPT_KEY:claim()}
         self.writes=0;self.reads=0;self.lost=False;self.abort=False;self.change=None;self.reviews=[]
-    def runtime(self):return copy.deepcopy(m.RUNTIME)
+    def runtime(self):return copy.deepcopy(m.CURRENT_RUNTIME)
     def get(self,key):return copy.deepcopy(self.items.get(key,{}))
     def observe(self,independent):
         self.reads+=1
-        out={'observedUtc':m.utc(),'runtime':copy.deepcopy(m.RUNTIME),'review':copy.deepcopy(self.e['review']),'columnEvidence':copy.deepcopy(self.e['columnEvidence'])}
+        out={'observedUtc':m.utc(),'runtime':copy.deepcopy(m.CURRENT_RUNTIME),
+          'review':m.expected_current_review(self.e['review']),'columnEvidence':copy.deepcopy(self.e['columnEvidence'])}
         if self.change:self.change(self,out)
         return out
     def verify_prepare_run(self,workflow):self.reviews.append(workflow)
@@ -171,6 +173,19 @@ class NoEffectTests(unittest.TestCase):
         proof=json.loads(receipt['proofJson']['S']);proof['historicalRollbackProven']=True
         receipt['proofJson']['S']=m.canonical(proof);receipt['proofSha256']['S']=m.sha(proof)
         with self.assertRaisesRegex(m.GuardError,'CONTENT_CHANGED'):m.validate_manual_retry_receipt(receipt,c)
+
+    def test_only_review_runtime_can_change_and_original_source_is_preserved(self):
+        e=evidence();original=copy.deepcopy(e['review']);current=m.expected_current_review(e['review'])
+        self.assertEqual(e['review'],original)
+        self.assertEqual(current['baseline']['remoteSources']['runtime'],m.CURRENT_RUNTIME)
+        restored=copy.deepcopy(current);restored['baseline']['remoteSources']['runtime']=copy.deepcopy(m.SOURCE_RUNTIME)
+        self.assertEqual(restored,original)
+        f=Fake(e);f.change=lambda _,value:value['review'].update(fixed='changed')
+        with self.assertRaises(m.GuardError):m.observe_unchanged(f,e)
+        with self.assertRaises(m.GuardError):m.expected_current_review(current)
+        proof=m.receipt_proof(claim())
+        self.assertEqual(proof['sourceRuntime'],m.SOURCE_RUNTIME);self.assertEqual(proof['currentRuntime'],m.CURRENT_RUNTIME)
+        self.assertEqual(proof['runtimePublication'],m.RUNTIME_PROVENANCE)
 
 
 if __name__=='__main__':unittest.main()

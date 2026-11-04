@@ -1,12 +1,19 @@
 {
   "version": 1,
-  "mode": "apply",
+  "mode": "prepare",
   "tickets": [
-    228007
+    228007,
+    227386,
+    226610,
+    228103,
+    228158,
+    228198,
+    228275,
+    228793
   ],
-  "authorizedBankRepair": true,
-  "approvedPrepareRunId": "41902530831",
-  "approvedManifestSha256": "9b5fa5512e8dfd4bbcbb44588130c85df1d8a399cc75b5fa3c1a66a5760b5c32",
+  "authorizedBankRepair": false,
+  "approvedPrepareRunId": "0",
+  "approvedManifestSha256": "",
   "verifiedCanaryRunId": "0",
   "verifiedCanarySummarySha256": ""
 }
