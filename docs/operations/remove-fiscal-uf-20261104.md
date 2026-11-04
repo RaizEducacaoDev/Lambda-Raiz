@@ -26,4 +26,15 @@ deve receber a mesma rejeição antes/depois da mudança. Não se executa um pag
 nem se altera Zeev, RM ou reservas DynamoDB. A remoção não libera automaticamente
 reservas antigas nem comprova que o RM aceitará um documento fiscal específico.
 
-Estado da publicação e links de evidência serão registrados após a releitura.
+## Publicação e evidências
+
+- Fonte: `c0509053f8c520eaeff44f51870dab26712cede2`.
+- Publicado em 04/11/2026 às 16:25:40 BRT, com configuração preservada.
+- SHA256/base64 ativo: `oHgRl53dlYR3Z/98HuB1GRelxAvWFUIKth0WHagkRnc=`.
+- Revisão: `00ae2c0f-6801-4c07-8ff3-6b74497b2614`.
+- [Publicação, releitura independente e monitoramento](https://github.com/RaizEducacaoDev/Lambda-Raiz/actions/runs/41896696773).
+- [PR de integração da fonte](https://github.com/RaizEducacaoDev/Lambda-Raiz/pull/28).
+
+A releitura independente baixa o ZIP ativo e confirma todos os hashes. O mapa de
+fontes antigo é preservado como os demais arquivos; o JavaScript ativo é a fonte
+de verificação do comportamento publicado.
