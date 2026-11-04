@@ -68,13 +68,15 @@ export class DynamoPagamento implements RepositorioPagamento {
     if (resposta.Item && resposta.Item.pk !== pk) throw new ConflitoPagamento('Leitura da reserva não corresponde à operação solicitada');
     return resposta.Item as OperacaoPagamento | undefined;
   }
-  // The service must first validate a complete, read-only RM proof of no payment
-  // effects and the corrected input. This method is not an API-input override.
+  // The caller validates the corrected input; RM decides duplicate-document
+  // rules. Only an expired attempt without any recorded movement may change.
   async corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento> {
-    if (!digestValido(digestNovo) || digestNovo === antes.digest || antes.protocolVersion !== 2) {
+    if (!digestValido(digestNovo) || digestNovo === antes.digest ||
+        !['RESERVED', 'CREATING'].includes(antes.state) ||
+        (Object.prototype.hasOwnProperty.call(antes, 'protocolVersion') && antes.protocolVersion !== 2)) {
       throw new ConflitoPagamento('Reserva não admite correção automática da intenção');
     }
-    return this.retomar(antes, 'RESERVED', digestNovo, undefined, duracao);
+    return this.retomar(antes, 'RESERVED', digestNovo, undefined, duracao, antes.state as 'RESERVED' | 'CREATING');
   }
   // Requires a positive, complete RM identity/amount/date/installment proof for
   // this same digest, validated by the service. Zero RM rows never call here.

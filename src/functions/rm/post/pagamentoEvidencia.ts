@@ -60,7 +60,7 @@ export function validarEvidencia(e: EvidenciaPagamento): void {
   }
 }
 
-export function mensagemDiagnostico(code: string): string {
+export function mensagemDiagnostico(code: string, mensagemNativa?: string): string {
   const motivos: Record<string, string> = {
     RM_DUPLICATE_RECORD: 'O RM indicou documento ou registro duplicado. Revise número e série do documento fiscal.',
     RM_INVALID_REFERENCE: 'O RM indicou uma referência cadastral inválida. Revise os cadastros fiscal, de itens e de destino.',
@@ -70,6 +70,6 @@ export function mensagemDiagnostico(code: string): string {
     RM_INVALID_DATE: 'O RM indicou data inválida. Revise as datas do documento.',
     RM_INVALID_FORMAT: 'O RM indicou formato inválido em um campo do documento.',
   };
-  return (motivos[code] || 'O RM não confirmou a chave do movimento.') +
-    ' A integração conferirá um movimento existente antes de continuar; este resultado não autoriza uma nova criação.';
+  if (mensagemNativa) return `O TOTVS retornou: ${mensagemNativa}`;
+  return motivos[code] || 'O TOTVS devolveu um diagnóstico sem identificador de movimento. Não foi possível concluir a gravação; consulte o motivo no RM.';
 }

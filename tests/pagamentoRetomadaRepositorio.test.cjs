@@ -79,9 +79,9 @@ test('duas correções concorrentes: um CAS vence e há um único histórico imu
  assert.ok([novoDigest,outroDigest].includes((await x.root()).digest));
 });
 
-test('correção não aceita lease ativo, estado diferente, legado, protocolo desconhecido ou filho',async()=>{
- for(const overrides of [{lockUntil:Date.now()+120000},...['CREATING','CREATED','UPDATING','COMPLETE','UNKNOWN'].map(state=>({state})),
-  {protocolVersion:undefined},{protocolVersion:1},{pk:'prod#PG#9#226374#FLAN#44'}]){
+test('correção não aceita lease ativo, movimento conhecido, protocolo desconhecido ou filho',async()=>{
+ for(const overrides of [{lockUntil:Date.now()+120000},...['CREATED','UPDATING','COMPLETE','UNKNOWN'].map(state=>({state})),
+  {protocolVersion:1},{pk:'prod#PG#9#226374#FLAN#44'}]){
   // DynamoDB cannot store undefined; absence is a real legacy record.
   const x=await fixture({...overrides,...(overrides.protocolVersion===undefined&&Object.hasOwn(overrides,'protocolVersion')?{protocolVersion:null}:{})});
   if(Object.hasOwn(overrides,'protocolVersion')&&overrides.protocolVersion===undefined){delete x.original.protocolVersion;await x.replace(x.original);}
@@ -143,7 +143,7 @@ test('dois conciliadores de CREATING só confirmam um PG',async()=>{
  const results=await Promise.allSettled([x.repo.confirmarCriacaoIncerta(x.original,'99863',30000),x.repo.confirmarCriacaoIncerta(x.original,'99864',30000)]);
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await x.root()).state,'CREATED');
  assert.equal((await x.root()).digest,digest);assert.equal(histories(await x.all()).length,1);
- await assert.rejects(()=>x.repo.corrigirReserva(x.original,novoDigest,30000),ConflitoPagamento);
+ await assert.rejects(()=>x.repo.corrigirReserva(x.original,novoDigest,30000),{name:'ConditionalCheckFailedException'});
  const y=await fixture({state:'CREATING',lockUntil:Date.now()+120000});
  await assert.rejects(()=>y.repo.confirmarCriacaoIncerta(y.original,'99863',30000),ConflitoPagamento);
 });
@@ -280,5 +280,15 @@ test('timeout no encerramento é propagado, com ou sem persistência, sem reabri
   if(commit){assert.notEqual(observed.owner,x.original.owner);assert.ok(observed.lockUntil<Date.now());
    await assert.rejects(()=>x.repo.avancar(x.original,'CREATING'),{name:'ConditionalCheckFailedException'});
   }else{assert.deepEqual(observed,x.original);assert.equal((await x.repo.avancar(x.original,'CREATING')).state,'CREATING');}
+ }
+});
+
+ test('correção de CREATING ou RESERVED legado sem PG preserva histórico e só muda intenção expirada',async()=>{
+ for(const state of ['RESERVED','CREATING'])for(const legacy of [false,true]){
+  const x=await fixture({state});if(legacy){delete x.original.protocolVersion;await x.replace(x.original);}
+  const result=await x.repo.corrigirReserva(x.original,novoDigest,30000);
+  assert.equal(result.state,'RESERVED');assert.equal(result.digest,novoDigest);assert.equal(result.protocolVersion,x.original.protocolVersion);
+  assert.deepEqual(histories(await x.all())[0].snapshot,x.original);
+  await assert.rejects(()=>x.repo.avancar(x.original,'CREATED','99863'),{name:'ConditionalCheckFailedException'});
  }
 });
