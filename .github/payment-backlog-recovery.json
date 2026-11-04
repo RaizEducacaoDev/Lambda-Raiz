@@ -1,11 +1,10 @@
 {
   "version": 1,
-  "mode": "prepare",
+  "mode": "apply",
   "tickets": [
-    227386,
     226610
   ],
-  "authorizedBacklogRecovery": false,
-  "approvedPlanRunId": "0",
-  "approvedManifestSha256": ""
+  "authorizedBacklogRecovery": true,
+  "approvedPlanRunId": "41917322325",
+  "approvedManifestSha256": "3718b9f9c3f342762455de572f4c80b6084abbe4b483a4762e5a44fca66b35fa"
 }
