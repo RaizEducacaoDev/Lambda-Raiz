@@ -26,7 +26,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
-      - run: python3 -m unittest discover -s tests -p 'test_payment_backlog_*.py'
+      - name: Validate all reviewed recovery targets and fencing
+        run: python3 -m unittest discover -s tests -p 'test_payment_backlog_*.py'
       - id: config
         run: python3 scripts/run-payment-backlog-recovery.py --emit-workflow-config
       - uses: actions/download-artifact@v4

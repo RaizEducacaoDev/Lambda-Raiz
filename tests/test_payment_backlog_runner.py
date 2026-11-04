@@ -19,16 +19,16 @@ def config(mode='prepare'):
 CTX={'repository':'example/payments','runId':'2345','commit':'a'*40,'branch':r.BRANCH,'workflow':r.WORKFLOW}
 
 class RunnerTests(unittest.TestCase):
-    def test_default_config_is_prepare_and_only_exact_three_targets_exist(self):
+    def test_default_config_is_prepare_and_only_reviewed_targets_exist(self):
         current=r.validate_config(config())
         self.assertEqual(current['mode'],'prepare');self.assertFalse(current['authorizedBacklogRecovery'])
-        self.assertEqual(set(r.TARGETS),{225136,225573,226925,223885,226025,226348,226530,227585,226455,226698});self.assertEqual(r.TARGETS[226925]['idMov'],407691)
+        self.assertEqual(set(r.TARGETS),{225136,225573,226925,223885,226025,226348,226530,227585,226455,226698,228007,227386,226610,228103,228158,228198,228275,228793});self.assertEqual(r.TARGETS[226925]['idMov'],407691)
         self.assertEqual(r.TARGETS[225136]['historicalIdentity']['total'],'20000.00')
         self.assertEqual(r.TARGETS[225573]['historicalIdentity']['number'],'000006925')
 
     def test_apply_requires_reviewed_run_hash_authorization_and_fixed_scope(self):
         mutations=[{'authorizedBacklogRecovery':False},{'approvedPlanRunId':'0'},
-          {'approvedManifestSha256':''},{'tickets':[228007]},{'tickets':[225136,225136]}]
+          {'approvedManifestSha256':''},{'tickets':[999999]},{'tickets':[225136,225136]}]
         for update in mutations:
             with self.subTest(update=update),self.assertRaises(r.operator.GateError):r.validate_config({**config('apply'),**update})
         self.assertEqual(r.validate_config(config('apply'))['mode'],'apply')
