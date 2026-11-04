@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import socket
 import ssl
+import sys
 import subprocess
 import time
 import urllib.error
@@ -422,6 +423,7 @@ def reconcile(backend, *, apply, authorized, new_digest, closure):
 
 
 def main():
+    require(sys.version_info >= (3, 11), 'Python 3.11+ required for native RM fractional ISO timestamps')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--controlled-test-nf1141', action='store_true', help='Only after explicit user confirmation')

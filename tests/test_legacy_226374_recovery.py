@@ -112,6 +112,14 @@ def run(fake, apply=False, authorized=False, **kwargs):
 
 
 class LegacyRecovery(unittest.TestCase):
+    def test_native_rm_two_digit_fraction_is_validated_without_losing_date_gate(self):
+        current = observation()
+        current['original'][0]['RECMODIFIEDON'] = '2026-02-12T15:15:27.53-03:00'
+        m.validate_observation(current)
+        current['original'][0]['RECMODIFIEDON'] = '2026-11-02T15:15:27.53-03:00'
+        with self.assertRaises(m.GateError):
+            m.validate_observation(current)
+
     def test_zeev_override_is_memory_only_and_preserves_runtime_gates(self):
         live = m.Live(False, CODE)
         env = {'STAGE': 'prod', 'PAGAMENTO_IDPGTO_TABLE': m.TABLE,
