@@ -110,8 +110,8 @@ subprocess.run(['python3','scripts/build-pagamento-package.py','--baseline',str(
 subprocess.run(['node','scripts/smoke-pagamento-package.cjs'],check=True)
 candidate=pathlib.Path('.build/pagamento-retomada.zip');candidate_sha=sha(candidate.read_bytes())
 verify_contracts(env) # Fresh official readback immediately before publication.
-aws('lambda','update-function-code','--function-name',FUNCTION,'--revision-id',REVISION,'--zip-file','fileb://'+str(candidate))
 try:
+ aws('lambda','update-function-code','--function-name',FUNCTION,'--revision-id',REVISION,'--zip-file','fileb://'+str(candidate))
  subprocess.run(['aws','lambda','wait','function-updated-v2','--function-name',FUNCTION],check=True,capture_output=True)
  after=aws('lambda','get-function-configuration','--function-name',FUNCTION)
  assert after['CodeSha256']==candidate_sha and after['LastUpdateStatus']=='Successful' and after['State']=='Active'
@@ -139,15 +139,21 @@ try:
  assert checkpoints(env['STAGE'])==before,'Existing operational checkpoints changed'
 except Exception as error:
  failure={'observedUtc':now(),'errorType':type(error).__name__,'candidateCodeSha256':candidate_sha,'rollbackAttempted':False}
- current=aws('lambda','get-function-configuration','--function-name',FUNCTION)
- # Restore only our own package, guarded by the latest revision. Never replace
- # an intervening operator's publication or touch operational reservations.
- if current['CodeSha256']==candidate_sha and current['LastUpdateStatus']!='InProgress':
-  failure['rollbackAttempted']=True
-  aws('lambda','update-function-code','--function-name',FUNCTION,'--revision-id',current['RevisionId'],'--zip-file','fileb://'+str(backup))
-  subprocess.run(['aws','lambda','wait','function-updated-v2','--function-name',FUNCTION],check=True,capture_output=True)
-  restored=aws('lambda','get-function-configuration','--function-name',FUNCTION)
-  failure['rollbackConfirmed']=restored['CodeSha256']==BASELINE and restored['LastUpdateStatus']=='Successful'
+ try:
+  current=aws('lambda','get-function-configuration','--function-name',FUNCTION)
+  if current['LastUpdateStatus']=='InProgress':
+   subprocess.run(['aws','lambda','wait','function-updated-v2','--function-name',FUNCTION],check=True,capture_output=True)
+   current=aws('lambda','get-function-configuration','--function-name',FUNCTION)
+  # Restore only our own package, guarded by the latest revision. Never replace
+  # an intervening operator's publication or touch operational reservations.
+  if current['CodeSha256']==candidate_sha and current['LastUpdateStatus']!='InProgress':
+   failure['rollbackAttempted']=True
+   aws('lambda','update-function-code','--function-name',FUNCTION,'--revision-id',current['RevisionId'],'--zip-file','fileb://'+str(backup))
+   subprocess.run(['aws','lambda','wait','function-updated-v2','--function-name',FUNCTION],check=True,capture_output=True)
+   restored=aws('lambda','get-function-configuration','--function-name',FUNCTION)
+   failure['rollbackConfirmed']=restored['CodeSha256']==BASELINE and restored['LastUpdateStatus']=='Successful'
+ except Exception as rollback_error:
+  failure['rollbackErrorType']=type(rollback_error).__name__
  write('failed-release.json',failure)
  raise RuntimeError('Scoped payment release verification failed; inspect fixed-code evidence') from None
 deployment={'function':FUNCTION,'previousCodeSha256':BASELINE,'activeCodeSha256':candidate_sha,'revisionId':after['RevisionId'],'lastUpdateStatus':after['LastUpdateStatus'],'configurationPreserved':True,'existingCheckpointsPreserved':True,'financialWrites':False,'deployedUtc':now(),'commit':os.environ.get('GITHUB_SHA'),'canaries':canaries}
