@@ -1,0 +1,73 @@
+name: Certify already active systemic payment candidate
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-systemic-verify-active.yml
+      - scripts/verify-payment-systemic-active.py
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  certify:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41901379371
+          name: payment-systemic-release-evidence
+          path: .failed-systemic-attempt
+      - name: Verify exact active candidate and execute only invalid negative canaries
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/verify-payment-systemic-active.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-systemic-verified-deployment
+          path: .verified-systemic-release/
+          include-hidden-files: true
+          retention-days: 7
+  independent:
+    needs: certify
+    if: ${{ github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payment-systemic-verified-deployment
+          path: .active-systemic-proof
+      - name: Independently verify package, contracts, sentinels and HTTP route negatives
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/readback-payment-systemic.py --evidence-directory .active-systemic-proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-systemic-certified-independent-readback
+          path: .payment-systemic-readback/
+          include-hidden-files: true
+          retention-days: 7
