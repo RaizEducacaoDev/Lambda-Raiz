@@ -103,7 +103,7 @@ def context(env=None):
 
 def code_hashes():
     paths=[Path('scripts/run-payment-backlog-recovery.py'),Path('scripts/observe-payment-backlog.py'),
-      Path('scripts/reconcile-payment-backlog.py'),Path('scripts/payment_backlog_window.py'),Path('scripts/audit-payment-conflict-20261103-0609.py'),
+      Path('scripts/reconcile-payment-backlog.py'),Path('scripts/payment_backlog_window.py'),Path('scripts/payment_backlog_predispatch.py'),Path('scripts/audit-payment-conflict-20261103-0609.py'),
       Path('scripts/payment-backlog-template.txt'),Path('tests/load-ts.cjs'),Path('package-lock.json'),Path(WORKFLOW)]
     paths.extend(Path('sql')/filename for filename in observer.CONTRACTS.values())
     paths.extend(path.relative_to(ROOT) for path in (ROOT/'src/functions/rm/post').glob('*.ts'))

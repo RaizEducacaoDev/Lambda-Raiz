@@ -7,9 +7,14 @@ pre-dispatch RESERVED), original source contract, full window census and CAS.
 import copy
 import datetime as dt
 import hashlib
+import importlib.util
 from pathlib import Path
 import re
+from types import SimpleNamespace
 import unicodedata
+
+_predispatch_spec=importlib.util.spec_from_file_location('payment_backlog_predispatch',Path(__file__).with_name('payment_backlog_predispatch.py'))
+PREDISPATCH=importlib.util.module_from_spec(_predispatch_spec);_predispatch_spec.loader.exec_module(PREDISPATCH)
 
 CODE_PROOF={'version':1,'commit':'40f5cf1','filesSha256':{
  'pagamentoIdentidade.ts':'39c4e7b977eec63a1da2b7d21b21e4ca6bec2018f46b8bd7ee6e529485e776bf',
@@ -146,13 +151,29 @@ def canonical_movement(row,m,native=False):
 
 def canonical_launch(row,m,native=False):
     optional=lambda v:None if v in (None,'','0',0) else m.identifier(v)
+    # FinLanDataBR omits both audit elements on the reviewed native records;
+    # SQL WINDOW/CENSO still supplies and retains their actual timestamps.
+    # Evidence SHA256: 57aca28663b6b220959453d095b12b60afa091c238f88176a00d8edbe98a0998.
+    # Only absence of the native XML element is allowed. Present blank/invalid
+    # values must fail; do not populate these native fields from SQL evidence.
+    audit=lambda field:None if native and field not in row else stamp(row.get(field),m)
     return {'company':m.identifier(row['CODCOLIGADA']),'branch':m.identifier(row['CODFILIAL']),
       'supplierCompany':m.identifier(row['CODCOLCFO'],True),'supplier':row['CODCFO'],'idMov':m.identifier(row['IDMOV']),
       'idLan':m.identifier(row['IDLAN']),'ticket':str(row['TICKET']),'number':row['NUMERODOCUMENTO'] if native else row['DOCUMENTO'],
       'issueDate':date(row['DATAEMISSAO'],m),'dueDate':date(row['DATAVENCIMENTO'],m),
       'amount':amount(row['VALORORIGINAL'] if native else row['VALOR'],m),'status':str(row['STATUSLAN'] if native else row['STATUS']),
       'paid':amount(row['VALORBAIXADO'],m),'bankId':optional(row.get('IDPGTO')),'bankCompany':optional(row.get('CODCOLPGTO')),
-      'createdOn':stamp(row['RECCREATEDON'],m),'modifiedOn':stamp(row['RECMODIFIEDON'],m)}
+      'createdOn':audit('RECCREATEDON'),'modifiedOn':audit('RECMODIFIEDON')}
+
+def validate_native_launches(sql_rows,native_rows,m):
+    """Compare every business field; SQL audit remains mandatory and separate."""
+    m.require(isinstance(native_rows,list) and len(native_rows)==len(sql_rows),'OTHER_CHILDREN_NOT_COMPLETE')
+    for expected,actual in zip(sql_rows,native_rows):
+        for key in ('createdOn','modifiedOn'):
+            m.require(stamp(expected.get(key),m)==expected.get(key),'OTHER_SQL_AUDIT_NOT_CANONICAL')
+        m.require(isinstance(actual,dict) and set(actual)==set(expected),'OTHER_CHILDREN_NOT_COMPLETE')
+        m.require(all(actual[key]==value or key in ('createdOn','modifiedOn') and actual[key] is None
+          for key,value in expected.items()),'OTHER_CHILDREN_NOT_COMPLETE')
 
 def other_zeev(data,observed,m):
     values={}
@@ -181,7 +202,8 @@ def validate_exclusion(proof,declared,mov,children,m):
       'createdOn':stamp(mov.get('COMPLEMENT_CREATED'),m),'modifiedOn':stamp(mov.get('COMPLEMENT_MODIFIED'),m)} and
       complement['createdOn']==complement['modifiedOn']==expected['createdOn'],'OTHER_TICKET_LINK_WAS_MODIFIED')
     normalized=sorted([canonical_launch(row,m) for row in children],key=lambda row:int(row['idLan']))
-    m.require(normalized==proof.get('launches') and [int(row['idLan']) for row in normalized]==sorted(declared['idLans']),'OTHER_CHILDREN_NOT_COMPLETE')
+    validate_native_launches(normalized,proof.get('launches'),m)
+    m.require([int(row['idLan']) for row in normalized]==sorted(declared['idLans']),'OTHER_CHILDREN_NOT_COMPLETE')
     payments=proof.get('payments');m.require(isinstance(payments,list) and len(payments)==len(normalized),'OTHER_PAYMENTS_INCOMPLETE')
     expected_payments=[{'company':row['company'],'idMov':row['idMov'],'idLan':row['idLan'],'dueDate':row['dueDate'],'amount':row['amount']} for row in normalized]
     m.require(payments==expected_payments and all(row['ticket']==expected['ticket'] and row['company']==expected['company'] and row['idMov']==expected['idMov'] for row in normalized),'OTHER_FINANCIAL_CHAIN_MISMATCH')
@@ -197,6 +219,8 @@ def validate_exclusion(proof,declared,mov,children,m):
       date(form.get('dataDeVencimento'),m)==normalized[0]['dueDate'] and normalized[0]['amount']==expected['total'],'OTHER_ZEEV_OBLIGATION_MISMATCH')
 
 def validate(plan,proof,closure,m):
+    if PREDISPATCH.applies(plan):
+        return PREDISPATCH.validate(plan,proof,closure,m,SimpleNamespace(**globals()))
     validate_policy(plan,m);m.fresh(proof.get('observedUtc'))
     validate_original(plan,closure,closure.get('originalOutcome',{}),m)
     m.require(proof.get('querySha256')==query_sha() and proof.get('complete') is True and proof.get('committedRead') is True,'WINDOW_SOURCE_NOT_PROVEN')
@@ -224,6 +248,8 @@ def validate(plan,proof,closure,m):
 
 def collect(obs,plan,closure,current_mov,current_lan,m,unique,records):
     """Live native query + ReadRecord + other ticket GET, only fixed declarations."""
+    if PREDISPATCH.applies(plan):
+        return PREDISPATCH.collect(obs,plan,closure,current_mov,current_lan,m,unique,records,SimpleNamespace(**globals()))
     validate_policy(plan,m)
     params={'CODCOLIGADA':str(plan['company']),'TICKET':str(plan['ticket']),
       'INICIOUTC':epoch_stamp(closure['originalStartMs']),'FIMUTC':epoch_stamp(closure['originalReportMs'])}

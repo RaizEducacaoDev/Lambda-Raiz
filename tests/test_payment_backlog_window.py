@@ -72,8 +72,9 @@ def fixtures(ticket=226025):
 class WindowTests(unittest.TestCase):
     def check(self,plan,proof):f.refresh_hash(plan,proof);return m.validate_observation(plan,proof)
 
-    def test_seven_fixed_roots_accept_strong_alternative_without_invented_historical_identity(self):
+    def test_six_fixed_roots_accept_strong_alternative_without_invented_historical_identity(self):
         for _,ticket in w.CASES:
+            if ticket==226698:continue # Requires the five positive chains in the dedicated suite.
             with self.subTest(ticket=ticket):
                 plan,proof=fixtures(ticket);self.assertNotIn('historicalIdentity',plan);m.validate_observation(plan,proof)
                 self.assertNotEqual(plan['currentDigest'],plan['expectedRoot']['digest']['S'])
@@ -160,6 +161,41 @@ class WindowTests(unittest.TestCase):
             plan,proof=fixtures(226348);mutate(proof['alternativeOriginalClosure'])
             with self.subTest(index=index),self.assertRaises(m.GateError):self.check(plan,proof)
 
+    def test_native_flan_audit_omission_is_explicit_and_sql_audit_is_preserved(self):
+        for ticket in (226348,226455):
+            plan,proof=fixtures(ticket);alternative=proof['alternativeOriginalClosure']
+            native=alternative['exclusions'][0]['launches'][0]
+            sql=alternative['rows'][1];timestamps={k:sql[k] for k in ('RECCREATEDON','RECMODIFIEDON')}
+            native.update(createdOn=None,modifiedOn=None)
+            with self.subTest(ticket=ticket):self.check(plan,proof)
+            self.assertEqual({k:sql[k] for k in timestamps},timestamps)
+            self.assertIsNone(native['createdOn']);self.assertIsNone(native['modifiedOn'])
+
+    def test_native_audit_if_present_must_match_and_business_fields_cannot_be_omitted(self):
+        mutations=[lambda row:row.update(createdOn='2000-01-01T00:00:00.000'),
+          lambda row:row.update(modifiedOn='2000-01-01T00:00:00.000'),
+          lambda row:row.update(amount=None),lambda row:row.update(bankId=None),
+          lambda row:row.update(status=None),lambda row:row.pop('supplier')]
+        for index,mutate in enumerate(mutations):
+            plan,proof=fixtures(226455);row=proof['alternativeOriginalClosure']['exclusions'][0]['launches'][0]
+            row.update(createdOn=None,modifiedOn=None);mutate(row)
+            with self.subTest(index=index),self.assertRaisesRegex(m.GateError,'OTHER_CHILDREN'):self.check(plan,proof)
+        for key in ('RECCREATEDON','RECMODIFIEDON'):
+            plan,proof=fixtures(226455);proof['alternativeOriginalClosure']['rows'][1].pop(key)
+            with self.subTest(sqlMissing=key),self.assertRaises(m.GateError):self.check(plan,proof)
+
+    def test_canonical_native_audit_accepts_only_actual_absence_not_blank_values(self):
+        plan,proof=fixtures(226455);sql=proof['alternativeOriginalClosure']['rows'][1]
+        raw={**sql,'NUMERODOCUMENTO':sql['DOCUMENTO'],'VALORORIGINAL':sql['VALOR'],'STATUSLAN':sql['STATUS']}
+        for key in ('RECCREATEDON','RECMODIFIEDON'):raw.pop(key)
+        native=w.canonical_launch(raw,m,True)
+        self.assertIsNone(native['createdOn']);self.assertIsNone(native['modifiedOn'])
+        for key in ('RECCREATEDON','RECMODIFIEDON'):
+            for value in ('',None,'invalid'):
+                with self.subTest(field=key,value=value),self.assertRaises(m.GateError):
+                    w.canonical_launch({**raw,key:value},m,True)
+        with self.assertRaises(m.GateError):w.canonical_launch({k:v for k,v in sql.items() if k!='RECCREATEDON'},m)
+
     def test_excluded_current_census_rows_must_match_proven_window_exactly(self):
         plan,proof=fixtures(226455);proof['alternativeOriginalClosure']['currentCensusBefore']['movements'][0]['DOCUMENTO']='000000999'
         with self.assertRaisesRegex(m.GateError,'UNEXPLAINED_CURRENT'):self.check(plan,proof)
@@ -211,7 +247,9 @@ class WindowTests(unittest.TestCase):
                     return dataset([('TMOV',{**mov,'NUMEROMOV':mov['DOCUMENTO']}),
                       ('TMOVCOMPL',{k:mov[k]for k in ['CODCOLIGADA','IDMOV','TICKET','RECCREATEDON','RECMODIFIEDON']}),
                       ('TMOVPAGTO',{k:lan[k]for k in ['CODCOLIGADA','IDMOV','IDLAN','DATAVENCIMENTO','VALOR']})])
-                return dataset([('FLAN',{**lan,'NUMERODOCUMENTO':lan['DOCUMENTO'],'VALORORIGINAL':lan['VALOR'],'STATUSLAN':lan['STATUS']})])
+                # The real FinLanDataBR omits audit columns, unlike WINDOW SQL.
+                native_lan={k:v for k,v in lan.items() if k not in ('RECCREATEDON','RECMODIFIEDON')}
+                return dataset([('FLAN',{**native_lan,'NUMERODOCUMENTO':lan['DOCUMENTO'],'VALORORIGINAL':lan['VALOR'],'STATUSLAN':lan['STATUS']})])
             def zeev_snapshot(self,names):
                 calls.append(('ZEEV_GET',self.plan['ticket']));z=alternative['exclusions'][0]['zeev']
                 return {'id':z['ticket'],'active':True,'flow':{'id':299},'instanceTasks':[],
@@ -219,6 +257,8 @@ class WindowTests(unittest.TestCase):
         result,remaining_m,remaining_f=w.collect(FakeObserver(),plan,proof['closure'],[mov],[lan],m,unique,records)
         self.assertEqual((remaining_m,remaining_f),([],[]));self.assertEqual(len(result['exclusions']),1)
         self.assertIn(('ZEEV_GET',228527),calls);self.assertIn(('FinLanDataBR','8;870693'),calls)
+        self.assertIsNone(result['exclusions'][0]['launches'][0]['createdOn'])
+        self.assertIsNone(result['exclusions'][0]['launches'][0]['modifiedOn'])
         w.validate(plan,result,proof['closure'],m)
 
     def test_original_response_is_reobserved_not_inferred_from_saved_flags(self):
