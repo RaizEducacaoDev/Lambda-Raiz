@@ -33,7 +33,7 @@ out['afterOriginal']={'startUtc':after_start.isoformat(),'endUtc':now.isoformat(
  'events':after_safe}
 try:
  provenance=audit.aws('cloudtrail','lookup-events','--lookup-attributes',json.dumps([{'AttributeKey':'ResourceName','AttributeValue':audit.FUNCTION}]),
-  '--start-time','2026-11-04T14:40:00Z','--end-time','2026-11-04T14:55:00Z','--max-results','50',deadline=deadline)
+  '--start-time','2026-11-04T14:40:00Z','--end-time',now.isoformat(),'--max-results','50',deadline=deadline)
  safe=[]
  for event in provenance.get('Events',[]):
   detail=json.loads(event.get('CloudTrailEvent','{}'));name=detail.get('eventName','')
@@ -57,7 +57,8 @@ with zipfile.ZipFile(io.BytesIO(blob)) as package:
  for info in package.infolist():
   data=package.read(info.filename)
   assert not any(s in data for s in secrets),'Current package contains an environment secret; do not export it'
- entries={info.filename:hashlib.sha256(package.read(info.filename)).hexdigest() for info in package.infolist()}
+ entries={info.filename.replace('\\','/'):hashlib.sha256(package.read(info.filename)).hexdigest() for info in package.infolist()}
+ assert len(entries)==len(package.infolist()),'Ambiguous normalized ZIP paths'
  core=entries.get('src/functions/rm/post/solicitacaoDePagamento.core.cjs')
  out['package']={'codeSha256':cfg['CodeSha256'],'coreSha256':core,'entrySha256':entries.get('src/functions/rm/post/solicitacaoDePagamento.js'),'entries':entries}
 directory=pathlib.Path('.payment-current-1325');directory.mkdir(exist_ok=True)

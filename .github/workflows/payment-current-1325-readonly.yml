@@ -1,5 +1,6 @@
 name: Payment current version and 1325 read-only diagnosis
 on:
+  workflow_dispatch:
   push:
     branches: [fix/idpgto-vinculo-obrigatorio]
     paths:
