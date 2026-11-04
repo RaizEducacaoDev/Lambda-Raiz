@@ -274,21 +274,37 @@ def wait_config():
 def publish(cfg, candidate, backup, verify):
     candidate_sha = sha(candidate.read_bytes())
     published_revision = None
+    acknowledgement_revision = None
+    phase = 'update_request'
     try:
         response = aws('lambda', 'update-function-code', '--function-name', FUNCTION, '--revision-id', REVISION,
                        '--zip-file', 'fileb://' + str(candidate))
-        published_revision = response.get('RevisionId')
+        acknowledgement_revision = response.get('RevisionId')
+        phase = 'stable_readback'
         after = wait_config()
+        write('publication-observation.json', {'observedUtc': now(), 'candidateCodeSha256': candidate_sha,
+              'acknowledgementRevisionId': acknowledgement_revision, 'acknowledgementCodeSha256': response.get('CodeSha256'),
+              'stableRevisionId': after.get('RevisionId'), 'stableCodeSha256': after.get('CodeSha256'),
+              'stableState': after.get('State'), 'stableLastUpdateStatus': after.get('LastUpdateStatus'),
+              'stableConfigurationSha256': config_hash(after), 'baselineConfigurationSha256': config_hash(cfg)})
         assert after['CodeSha256'] == candidate_sha and after['State'] == 'Active' and after['LastUpdateStatus'] == 'Successful'
-        assert published_revision and after['RevisionId'] == published_revision, 'Publication revision drift'
+        phase = 'configuration_readback'
         assert config_hash(after) == config_hash(cfg), 'Configuration drift after publication'
+        # An acknowledgement is not the final deployment snapshot. Content and
+        # configuration must match; fence any later rollback to the revision
+        # observed after stabilization, not a transient acknowledgement token.
+        assert isinstance(after.get('RevisionId'), str) and after['RevisionId'] and after['RevisionId'] != REVISION
+        published_revision = after['RevisionId']
+        phase = 'negative_canaries'
         verify()
+        phase = 'post_canary_readback'
         final = wait_config()
         assert final['CodeSha256'] == candidate_sha and final['RevisionId'] == after['RevisionId'] and config_hash(final) == config_hash(cfg), 'Publication drift during canaries'
         return final
     except Exception as error:
         failure = {'observedUtc': now(), 'errorType': type(error).__name__, 'candidateCodeSha256': candidate_sha,
-                   'rollbackAttempted': False, 'publicationOutcomeConfirmed': False}
+                   'rollbackAttempted': False, 'publicationOutcomeConfirmed': False, 'phase': phase,
+                   'acknowledgementRevisionId': acknowledgement_revision, 'stableRevisionId': published_revision}
         try:
             current = wait_config()
             ours = current['CodeSha256'] == candidate_sha and config_hash(current) == config_hash(cfg)

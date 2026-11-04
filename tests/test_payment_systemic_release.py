@@ -46,13 +46,13 @@ class PublicationRecovery(unittest.TestCase):
                         state.update(CodeSha256='foreign-package', RevisionId='foreign')
                     elif mode == 'foreign-config':
                         state['MemorySize'] = 1024
-                    elif mode == 'foreign-same-code-revision':
-                        state['RevisionId'] = 'foreign'
+                    elif mode in ('async-stable-revision', 'async-stable-verification-failure'):
+                        state['RevisionId'] = 'stable'
                         return {'RevisionId': 'accepted'}
-                    if mode != 'verified-failure' and mode != 'success':
+                    if mode not in ('verified-failure', 'success', 'foreign-same-code-revision'):
                         raise TimeoutError('PRIVATE_NETWORK_DETAIL')
                     return {'RevisionId': 'accepted'}
-                self.assertEqual(args[args.index('--revision-id') + 1], 'accepted')
+                self.assertEqual(args[args.index('--revision-id') + 1], 'stable' if mode == 'async-stable-verification-failure' else 'accepted')
                 if mode == 'rollback-cas-race':
                     state.update(CodeSha256='foreign-package', RevisionId='foreign', LastUpdateStatus='Successful')
                     raise RuntimeError('Conditional revision changed')
@@ -66,15 +66,21 @@ class PublicationRecovery(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0)
 
             def verify():
-                if mode != 'success':
+                if mode == 'foreign-same-code-revision':
+                    state['RevisionId'] = 'foreign'
+                    return
+                if mode not in ('success', 'async-stable-revision'):
                     raise AssertionError('PRIVATE_CANARY_DETAIL')
 
             with patch.object(m, 'aws', aws), patch.object(m.subprocess, 'run', waiter), \
                  patch.object(m, 'write', lambda name, data: written.update({name: copy.deepcopy(data)})):
-                if mode == 'success':
+                if mode in ('success', 'async-stable-revision'):
                     result = m.publish(cfg, candidate, backup, verify)
                     self.assertEqual(result['CodeSha256'], m.sha(candidate.read_bytes()))
                     self.assertEqual(len([c for c in calls if c[:2] == ('lambda', 'update-function-code')]), 1)
+                    observation = written['publication-observation.json']
+                    self.assertEqual(observation['acknowledgementRevisionId'], 'accepted')
+                    self.assertEqual(observation['stableRevisionId'], 'stable' if mode == 'async-stable-revision' else 'accepted')
                     return
                 with self.assertRaisesRegex(RuntimeError, 'Systemic release failed'):
                     m.publish(cfg, candidate, backup, verify)
@@ -84,6 +90,17 @@ class PublicationRecovery(unittest.TestCase):
 
     def test_success_updates_exactly_one_function_once(self):
         self.run_case('success')
+
+    def test_final_verified_content_uses_stable_revision_instead_of_ack_revision(self):
+        self.run_case('async-stable-revision')
+
+    def test_later_verification_failure_rolls_back_only_the_stable_revision(self):
+        state, failure, updates = self.run_case('async-stable-verification-failure')
+        self.assertEqual(state['CodeSha256'], m.BASELINE)
+        self.assertTrue(failure['rollbackConfirmed'])
+        self.assertEqual(failure['acknowledgementRevisionId'], 'accepted')
+        self.assertEqual(failure['stableRevisionId'], 'stable')
+        self.assertEqual(failure['phase'], 'negative_canaries')
 
     def test_accepted_publication_lost_ack_is_rolled_back_with_current_cas(self):
         state, failure, updates = self.run_case('lost-ack')
