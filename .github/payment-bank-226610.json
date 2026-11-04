@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "mode": "prepare",
+  "authorizedBankWrite": false,
+  "approvedPrepareRunId": "0",
+  "approvedManifestSha256": ""
+}
