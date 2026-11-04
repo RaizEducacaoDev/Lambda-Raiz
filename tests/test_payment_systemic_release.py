@@ -189,5 +189,49 @@ const rm={readReacord:async()=>'<Root><FDadosPgto><CODCOLIGADA>9</CODCOLIGADA><C
         self.assertIn('readback-payment-systemic.py', text)
 
 
+class RuntimeCalibration(unittest.TestCase):
+    def fixture(self):
+        cfg = {'CodeSha256': m.BASELINE, 'RevisionId': m.REVISION, 'Timeout': 30, 'MemorySize': 1024}
+        fenced = {'reachedDocument': True, 'bankReads': 1, 'reconReads': 1,
+                  'dynamoMutationCalls': 0, 'saveRecordCalls': 0, 'creatorCalls': 0, 'legacyCoreLoads': 0, 'networkCalls': 0}
+        proof = {'completed': True, 'function': m.FUNCTION, 'syntheticTicket': '999999990048',
+                 'configurationWrites': False, 'fullEightReadPreflightMeasured': False,
+                 'activeFunction': {'codeSha256': m.BASELINE, 'revisionId': m.REVISION, 'timeoutSeconds': 30, 'memorySizeMb': 1024},
+                 'observedUtc': m.now(), 'sourceNegativeProof': copy.deepcopy(fenced), 'activeBundleNegativeProof': copy.deepcopy(fenced),
+                 'iterations': [{'rootAbsentBefore': True, 'rootAbsentAfter': True, 'activeVersionUnchanged': True,
+                     'statusCode': 503, 'code': 'IDPGTO_NAO_CONFIRMADO', 'financialIdentifierReturned': False,
+                     'report': {'durationMs': duration}} for duration in [686.64, 314.31, 428.13]]}
+        return cfg, proof
+
+    def call(self, cfg, proof, tampered=False):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'timing.json'
+            path.write_text(json.dumps(proof))
+            digest = m.hashlib.sha256(path.read_bytes()).hexdigest()
+            with patch.object(m, 'RUNTIME_TIMING_SHA', '0' * 64 if tampered else digest):
+                return m.calibrated_runtime_budget(cfg, path)
+
+    def test_reviewed_runtime_estimate_does_not_claim_full_flow_proof(self):
+        cfg, proof = self.fixture()
+        result = self.call(cfg, proof)
+        self.assertEqual(result['estimatedPreflightMs'], 4081.04)
+        self.assertEqual(result['availablePreflightWindowMs'], 4500)
+        self.assertFalse(result['fullRuntimeLatencyProven'])
+        self.assertTrue(result['deadlineGuardUnchanged'])
+
+    def test_tamper_or_runtime_change_is_rejected(self):
+        cfg, proof = self.fixture()
+        with self.assertRaises(AssertionError): self.call(cfg, proof, tampered=True)
+        with self.assertRaises(AssertionError): self.call({**cfg, 'RevisionId': 'other'}, proof)
+
+    def test_expired_mutated_or_slow_probe_cannot_authorize_publication(self):
+        for kind in ['old', 'mutation', 'slow']:
+            cfg, proof = self.fixture()
+            if kind == 'old': proof['observedUtc'] = '2000-01-01T00:00:00+00:00'
+            if kind == 'mutation': proof['activeBundleNegativeProof']['saveRecordCalls'] = 1
+            if kind == 'slow': proof['iterations'][0]['report']['durationMs'] = 1000
+            with self.subTest(kind=kind), self.assertRaises(AssertionError): self.call(cfg, proof)
+
+
 if __name__ == '__main__':
     unittest.main()

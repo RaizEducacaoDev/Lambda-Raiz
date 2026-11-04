@@ -7,6 +7,7 @@ on:
       - scripts/deploy-payment-systemic.py
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: payment-function-production-publication
   cancel-in-progress: false
@@ -28,6 +29,12 @@ jobs:
       - run: npm ci --legacy-peer-deps --no-audit --no-fund
       - run: npm run verify:pagamento
       - run: python3 tests/test_payment_systemic_release.py
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41900497979
+          name: payment-runtime-timing-sanitized
+          path: .reviewed-runtime-timing
       - name: Publish one function after native DOC2 and package checks
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

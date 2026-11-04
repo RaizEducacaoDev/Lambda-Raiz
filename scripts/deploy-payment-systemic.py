@@ -27,6 +27,7 @@ REGION = 'sa-east-1'
 BASELINE = 'oHgRl53dlYR3Z/98HuB1GRelxAvWFUIKth0WHagkRnc='
 REVISION = '00ae2c0f-6801-4c07-8ff3-6b74497b2614'
 CORE = 'cf802a6ef20cd6047e94e0ebdfe45da7ea923a36aafd103dada801cde6bb352e'
+RUNTIME_TIMING_SHA = '46492df83f15bd686faf48f9d20de82589c468fc5ddac59be5e852d9c13a844d'
 HOST = 'https://raizeducacao160286.rm.cloudtotvs.com.br:8051'
 ENTRY = 'src/functions/rm/post/solicitacaoDePagamento.js'
 CORE_ENTRY = 'src/functions/rm/post/solicitacaoDePagamento.core.cjs'
@@ -218,6 +219,45 @@ def package_entries(blob):
         return result
 
 
+def calibrated_runtime_budget(cfg, proof_path):
+    """Use the reviewed AWS probe as an estimate, never as full-flow proof.
+
+    CI is on another network: its eight sequential HTTP reads are still recorded,
+    but are not the Lambda's elapsed time. The live pre-dispatch deadline guard
+    remains authoritative and is not changed by this release calibration.
+    """
+    raw = proof_path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == RUNTIME_TIMING_SHA, 'Reviewed runtime timing changed'
+    proof = json.loads(raw)
+    assert proof['completed'] is True and proof['function'] == FUNCTION and proof['syntheticTicket'] == '999999990048'
+    assert proof['configurationWrites'] is False and proof['fullEightReadPreflightMeasured'] is False
+    assert proof['activeFunction'] == {'codeSha256': cfg['CodeSha256'], 'revisionId': cfg['RevisionId'],
+                                     'timeoutSeconds': cfg['Timeout'], 'memorySizeMb': cfg['MemorySize']}
+    age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(proof['observedUtc'])).total_seconds()
+    assert 0 <= age < 7200, 'Runtime timing expired'
+    for name in ['sourceNegativeProof', 'activeBundleNegativeProof']:
+        p = proof[name]
+        assert p['reachedDocument'] is True and p['bankReads'] == p['reconReads'] == 1
+        assert all(p[k] == 0 for k in ['dynamoMutationCalls', 'saveRecordCalls', 'creatorCalls', 'legacyCoreLoads', 'networkCalls'])
+    rows = proof['iterations']
+    assert len(rows) == 3 and all(r['rootAbsentBefore'] and r['rootAbsentAfter'] and r['activeVersionUnchanged'] and
+        r['statusCode'] == 503 and r['code'] == 'IDPGTO_NAO_CONFIRMADO' and r['financialIdentifierReturned'] is False for r in rows)
+    durations = [r['report']['durationMs'] for r in rows]
+    assert all(isinstance(v, (int, float)) and 0 < v < 5000 for v in durations)
+    # The offline-proven path has three RM reads plus three SDK reads. Runtime
+    # phases are not instrumented; the eight-read projection remains an estimate.
+    estimate = round(max(durations) * 8 / 3 + 2000 + 250, 2)
+    window = cfg['Timeout'] * 1000 - 25500
+    assert estimate <= window, 'AWS-calibrated estimate exceeds unchanged deadline budget'
+    return {'sourceRunId': 41900497979, 'sourceSha256': hashlib.sha256(raw).hexdigest(),
+            'measurement': 'REJECTED_REQUEST_RUNTIME_DURATION', 'modeledRmReads': 3, 'projectedRmReads': 8,
+            'runtimeStagesInstrumented': False,
+            'measuredMaximumMs': max(durations), 'estimatedPreflightMs': estimate,
+            'availablePreflightWindowMs': window, 'estimatedMarginMs': round(window - estimate, 2),
+            'fullRuntimeLatencyProven': False, 'deadlineGuardUnchanged': True,
+            'ciTimingIsCrossNetworkInformational': True}
+
+
 def wait_config():
     current = aws('lambda', 'get-function-configuration', '--function-name', FUNCTION)
     if current.get('LastUpdateStatus') == 'InProgress':
@@ -283,7 +323,8 @@ def main():
     contracts = native_contracts(cfg['Environment']['Variables'])
     timings = native_timings(cfg['Environment']['Variables'], cfg['Timeout'])
     write('native-timings.json', timings)
-    assert timings['proxyFitsWithAllowance'], 'Native read proxy exceeds the pre-dispatch budget; review planning before publication'
+    calibration = calibrated_runtime_budget(cfg, Path('.reviewed-runtime-timing/timing.json'))
+    write('runtime-calibration.json', calibration)
     with urllib.request.urlopen(active['Code']['Location'], timeout=30) as response:
         blob = response.read()
     assert sha(blob) == BASELINE
@@ -323,6 +364,7 @@ def main():
                 'sentinelsPreserved': True, 'financialWrites': False, 'dynamoWrites': False, 'deployedUtc': now(),
                 'commit': os.environ.get('GITHUB_SHA'), 'canaries': canaries, 'nativeContracts': contracts,
                 'nativeReadTimingProxy': timings,
+                'runtimeCalibration': calibration,
                 'otherEntrySha256': {k: hashlib.sha256(v).hexdigest() for k, v in entries.items() if k != ENTRY}}
     write('deployment.json', evidence)
     (OUT / 'active-package.zip').write_bytes(candidate.read_bytes())
