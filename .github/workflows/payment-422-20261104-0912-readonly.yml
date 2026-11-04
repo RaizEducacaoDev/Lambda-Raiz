@@ -1,0 +1,30 @@
+name: Payment 422 November 4 0912 read-only diagnosis
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-422-20261104-0912-readonly.yml
+      - scripts/audit-payment-422-20261104-0912.py
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/audit-payment-conflict-20261103-0609.py --self-test
+      - name: Read current version, localizer windows and original reservation
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-422-20261104-0912.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-422-20261104-0912-readback
+          path: .payment-422-20261104-0912/
+          include-hidden-files: true
+          retention-days: 7
