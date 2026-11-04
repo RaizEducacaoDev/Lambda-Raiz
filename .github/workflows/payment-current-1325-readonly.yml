@@ -1,0 +1,30 @@
+name: Payment current version and 1325 read-only diagnosis
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-current-1325-readonly.yml
+      - scripts/audit-payment-20261104-1325.py
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/audit-payment-conflict-20261103-0609.py --self-test
+      - name: Read live package, logs and reservations without invocation
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-20261104-1325.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-current-1325-readback
+          path: .payment-current-1325/
+          include-hidden-files: true
+          retention-days: 7
