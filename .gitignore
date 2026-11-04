@@ -20,6 +20,8 @@ dist/
 .idpgto-incident/
 .idpgto-recovery/
 .fiscal-uf-release/
+.uncertain-creation-release/
+.verification.log
 __pycache__/
 *.pyc
 .serverless/

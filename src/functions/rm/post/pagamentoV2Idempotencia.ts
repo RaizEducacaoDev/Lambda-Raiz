@@ -102,8 +102,9 @@ export class DynamoPagamento implements RepositorioPagamento {
     { abortSignal: AbortSignal.timeout(2000) });
   }
   private async retomar(antes: OperacaoPagamento, estado: 'RESERVED' | 'CREATED', digest: string,
-    pg: string | undefined, duracao: number): Promise<OperacaoPagamento> {
-    const agora = Date.now(), estadoAnterior = estado === 'RESERVED' ? 'RESERVED' : 'CREATING';
+    pg: string | undefined, duracao: number,
+    estadoAnterior: 'RESERVED' | 'CREATING' = estado === 'RESERVED' ? 'RESERVED' : 'CREATING'): Promise<OperacaoPagamento> {
+    const agora = Date.now();
     if (!raizPagamento(antes.pk) || !digestValido(antes.digest) || typeof antes.owner !== 'string' || !antes.owner ||
       antes.state !== estadoAnterior || Object.prototype.hasOwnProperty.call(antes, 'pg') ||
       !Number.isSafeInteger(antes.lockUntil) || antes.lockUntil <= 0 || antes.lockUntil > agora ||
@@ -197,9 +198,14 @@ export class DynamoPagamento implements RepositorioPagamento {
       if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
       return existente;
     }
-    if (existente.state === 'CREATING') throw new ConflitoPagamento('Criação RM incerta; requer reconciliação, nunca nova criação automática');
-    if (!['RESERVED', 'CREATED', 'UPDATING'].includes(existente.state) || existente.lockUntil > agora) {
+    if (!['RESERVED', 'CREATING', 'CREATED', 'UPDATING'].includes(existente.state) || existente.lockUntil > agora) {
       throw new ConflitoPagamento('Ticket em processamento ou estado desconhecido');
+    }
+    if (existente.state === 'CREATING') {
+      // An expired unconfirmed attempt no longer permanently blocks a new
+      // request. Preserve its snapshot and fence the previous owner before
+      // returning to the normal RM lookup/creation path.
+      return this.retomar(existente, 'RESERVED', digest, undefined, duracao, 'CREATING');
     }
     await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk },
       UpdateExpression: 'SET #owner = :owner, lockUntil = :until',
