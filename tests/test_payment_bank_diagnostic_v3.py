@@ -58,7 +58,7 @@ class Provenance(unittest.TestCase):
   for changed in ({'authorizedDiagnosticWrite':True},{'mode':'apply'},{'version':True}):
    with self.assertRaises(m.op.GuardError):m.config({**value,**changed})
  def test_runtime_constant_pins_only_v3(self):
-  self.assertEqual(c.RUNTIME,{'codeSha256':'f4driLg+9qhXQN4A7hvgLvKrmpotW1EtSsk35lIVVVM=','revisionId':'08becd62-7243-43b3-b7c2-e2adb52215d7'})
+  self.assertEqual(c.RUNTIME,{'codeSha256':'nP8Tf7PTJVjQcqhA+QwqCkA69wFPlJ+kYe/8QHKR5/A=','revisionId':'6aec6184-80d8-47eb-b386-32cab252c086'})
  def test_new_workflow_private_one_day_shared_lease_group(self):
   text=(ROOT/m.WORKFLOW).read_text(encoding='utf-8');self.assertIn('retention-days: 1',text);self.assertIn('group: payment-backlog-bank-lease',text);self.assertNotIn('lambda invoke',text)
  def test_common_manifest_pins_new_dependency_without_changing_v2(self):

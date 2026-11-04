@@ -1,7 +1,7 @@
 {
-  "version": 1,
-  "mode": "prepare",
-  "authorizedDiagnosticWrite": false,
-  "approvedPrepareRunId": "0",
-  "approvedManifestSha256": ""
+    "version": 1,
+    "mode": "prepare",
+    "authorizedDiagnosticWrite": false,
+    "approvedPrepareRunId": "0",
+    "approvedManifestSha256": ""
 }
