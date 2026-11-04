@@ -40,13 +40,14 @@ def main():
       os.environ.get('GITHUB_REPOSITORY')=='RaizEducacaoDev/Lambda-Raiz' and
       os.environ.get('GITHUB_REF')=='refs/heads/fix/idpgto-vinculo-obrigatorio','WORKFLOW_CONTEXT_INVALID')
     OUT.mkdir(exist_ok=False);deadline=time.monotonic()+600
-    reader=r.Reader();runtime=reader.pin()
+    reader=r.Reader();print(json.dumps({'stage':'runtime_read'}),flush=True);runtime=reader.pin()
     end=dt.datetime.now(dt.timezone.utc);start_ms=int(START.timestamp()*1000);end_ms=int(end.timestamp()*1000)
     require(0<end_ms-start_ms<4*3600000,'LOG_WINDOW_OUTSIDE_REVIEWED_DAY')
     result={'version':1,'observedUtc':end.isoformat(),'runtimeStart':runtime,
       'startUtc':START.isoformat(),'financialWrites':False,'configurationWrites':False,
       'dynamoWrites':False,'lambdaInvoked':False,'rawLogsRetained':False,'cases':[]}
     for company,ticket in CASES:
+        print(json.dumps({'stage':'ticket_root_and_log_read','ticket':ticket}),flush=True)
         before=reader.get(company,ticket)
         events,coverage=a.read_log_window('"'+str(ticket)+'"',start_ms,end_ms,deadline)
         safe=safe_events(events,ticket=ticket)
@@ -89,4 +90,4 @@ if __name__=='__main__':
         if '--self-test' in sys.argv:self_test()
         else:main()
     except Exception as error:
-        print(json.dumps({'state':'READ_ONLY_STOPPED','code':str(error) if isinstance(error,a.AuditError) else 'READ_OR_VALIDATION_FAILED','writes':False}));sys.exit(2)
+        print(json.dumps({'state':'READ_ONLY_STOPPED','code':str(error) if isinstance(error,(a.AuditError,r.AuditError)) else 'READ_OR_VALIDATION_FAILED','exceptionClass':type(error).__name__,'writes':False}));sys.exit(2)
