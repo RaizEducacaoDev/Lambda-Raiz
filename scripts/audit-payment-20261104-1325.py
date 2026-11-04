@@ -25,6 +25,12 @@ original_end=original_start+datetime.timedelta(minutes=2)
 original_events,coverage=audit.read_log_window('"4efffdfd-b6d7-4a87-857f-fe99421654d3"',int(original_start.timestamp()*1000),int(original_end.timestamp()*1000),deadline)
 out['originalInvocation']={'requestId':'4efffdfd-b6d7-4a87-857f-fe99421654d3','coverage':coverage,
  'events':[v for event in original_events if (v:=audit.sanitize(event)) is not None]}
+after_start=datetime.datetime(2026,11,2,14,43,51,382000,tzinfo=datetime.timezone.utc)
+after_events,after_coverage=audit.read_log_window('"[RM-IDPGTO]" "226374"',int(after_start.timestamp()*1000),int(now.timestamp()*1000),deadline)
+after_safe=[v for event in after_events if (v:=audit.sanitize(event)) is not None]
+out['afterOriginal']={'startUtc':after_start.isoformat(),'endUtc':now.isoformat(),'coverage':after_coverage,
+ 'creationCallsAfterOriginal':sum(1 for e in after_safe if e.get('kind')=='creation_checkpoint' and e.get('event')=='transport_call_started' and str(e.get('ticket'))=='226374'),
+ 'events':after_safe}
 try:
  provenance=audit.aws('cloudtrail','lookup-events','--lookup-attributes',json.dumps([{'AttributeKey':'ResourceName','AttributeValue':audit.FUNCTION}]),
   '--start-time','2026-11-04T14:40:00Z','--end-time','2026-11-04T14:55:00Z','--max-results','50',deadline=deadline)
@@ -59,3 +65,4 @@ directory=pathlib.Path('.payment-current-1325');directory.mkdir(exist_ok=True)
 (directory/'readback.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
 print(json.dumps(out,indent=2))
 assert all(w['coverage']['complete'] for w in out['windows']),'Incomplete log coverage'
+assert out['originalInvocation']['coverage']['complete'] and out['afterOriginal']['coverage']['complete'],'Incomplete original-operation coverage'
