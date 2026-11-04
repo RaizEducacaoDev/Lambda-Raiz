@@ -1,7 +1,9 @@
 {
   "version": 1,
   "mode": "prepare",
-  "tickets": [226530],
+  "tickets": [
+    226530
+  ],
   "authorizedBacklogRecovery": false,
   "approvedPlanRunId": "0",
   "approvedManifestSha256": ""

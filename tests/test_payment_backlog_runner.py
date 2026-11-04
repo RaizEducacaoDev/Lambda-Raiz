@@ -1,9 +1,12 @@
 """Runner gates only; every service and financial effect is mocked."""
 import copy
+import contextlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
+import ssl
 import unittest
 from unittest.mock import Mock,patch
 
@@ -19,6 +22,139 @@ def config(mode='prepare'):
 CTX={'repository':'example/payments','runId':'2345','commit':'a'*40,'branch':r.BRANCH,'workflow':r.WORKFLOW}
 
 class RunnerTests(unittest.TestCase):
+    def sql_observer(self,remaining=60):
+        instance=r.RecoveryObserver.__new__(r.RecoveryObserver)
+        instance.deadline=180;instance._sql_fresh_deadline=remaining
+        instance._sql_retry_used=False;instance._sql_code=None
+        instance.rm_auth='Basic SECRET_CANARY';instance.opener=Mock()
+        return instance
+
+    def sql_success(self,body=b'[{"proof":true}]'):
+        response=Mock();response.__enter__=Mock(return_value=response)
+        response.__exit__=Mock(return_value=False);response.read.return_value=body
+        return response
+
+    def test_only_transient_sql_get_repeats_once_with_sanitized_diagnostics(self):
+        faults=[TimeoutError('SECRET_TIMEOUT'),
+          r.urllib.error.URLError(ConnectionResetError('SECRET_RESET')),
+          r.urllib.error.URLError(r.socket.gaierror(r.socket.EAI_AGAIN,'SECRET_DNS'))]
+        for fault in faults:
+            with self.subTest(error=type(fault).__name__):
+                instance=self.sql_observer();instance.opener.open.side_effect=[fault,self.sql_success()]
+                output=io.StringIO()
+                with patch.object(r.time,'monotonic',return_value=0),contextlib.redirect_stdout(output):
+                    self.assertEqual(instance.query('RAIZ.PG.CENSO',{'CODCFO':'PRIVATE_SUPPLIER'}),[{'proof':True}])
+                calls=instance.opener.open.call_args_list;self.assertEqual(len(calls),2)
+                for call in calls:
+                    self.assertEqual(call.args[0].get_method(),'GET');self.assertIsNone(call.args[0].data)
+                    self.assertEqual(call.kwargs['timeout'],15)
+                self.assertEqual(calls[0].args[0].full_url,calls[1].args[0].full_url)
+                rows=[json.loads(line) for line in output.getvalue().splitlines()]
+                self.assertEqual([row['attempt'] for row in rows],[1,2]);self.assertTrue(rows[0]['retryScheduled'])
+                self.assertEqual(rows[0]['sqlCode'],'RAIZ.PG.CENSO');self.assertIsNotNone(rows[0]['exceptionClass'])
+                for private in ('SECRET','PRIVATE_SUPPLIER','http','Authorization','parameters='):
+                    self.assertNotIn(private,output.getvalue())
+                self.assertIsNone(instance._sql_code)
+
+    def test_http403_and_tls_permanent_dns_or_unknown_network_reason_never_repeat(self):
+        faults=[(r.urllib.error.HTTPError('https://SECRET',403,'SECRET_DENIED',{},None),'HTTP_RM_QUERY_403'),
+          (r.urllib.error.URLError(ssl.SSLCertVerificationError('SECRET_CERT')),'NETWORK_FAILURE'),
+          (r.urllib.error.URLError(r.socket.gaierror(r.socket.EAI_NONAME,'SECRET_DNS')),'NETWORK_FAILURE'),
+          (r.urllib.error.URLError('SECRET_UNKNOWN'),'NETWORK_FAILURE')]
+        for fault,gate in faults:
+            with self.subTest(error=type(fault).__name__):
+                instance=self.sql_observer();instance.opener.open.side_effect=fault;output=io.StringIO()
+                with patch.object(r.time,'monotonic',return_value=0),contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(r.operator.GateError,gate) as raised:
+                        instance.query('RAIZ.PG.RETRY',{'TICKET':'226530'})
+                instance.opener.open.assert_called_once();self.assertFalse(instance._sql_retry_used)
+                self.assertIn('sqlCode=RAIZ.PG.RETRY',str(raised.exception));self.assertIn('elapsedMs=0',str(raised.exception))
+                self.assertNotIn('SECRET',output.getvalue()+str(raised.exception))
+
+    def test_second_network_failure_stops_and_retry_budget_is_shared_across_queries(self):
+        for successful_retry in (False,True):
+            with self.subTest(successful_retry=successful_retry):
+                instance=self.sql_observer();output=io.StringIO()
+                instance.opener.open.side_effect=[TimeoutError('SECRET'),self.sql_success() if successful_retry else TimeoutError('SECRET'),TimeoutError('SECRET')]
+                with patch.object(r.time,'monotonic',return_value=0),contextlib.redirect_stdout(output):
+                    if successful_retry:instance.query('RAIZ.PG.DOC2',{'CODCOLIGADA':'11'})
+                    else:
+                        with self.assertRaisesRegex(r.operator.GateError,'NETWORK_FAILURE'):
+                            instance.query('RAIZ.PG.DOC2',{'CODCOLIGADA':'11'})
+                    self.assertEqual(instance.opener.open.call_count,2)
+                    with self.assertRaisesRegex(r.operator.GateError,'NETWORK_FAILURE'):
+                        instance.query('RAIZ.PG.WINDOW',{'CODCOLIGADA':'11'})
+                self.assertEqual(instance.opener.open.call_count,3)
+                self.assertFalse(json.loads(output.getvalue().splitlines()[-1])['retryScheduled'])
+
+    def test_expired_freshness_or_observer_deadline_stops_without_request(self):
+        for fresh,deadline in ((0,180),(60,0)):
+            instance=self.sql_observer(fresh);instance.deadline=deadline
+            with patch.object(r.time,'monotonic',return_value=0),contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(r.operator.GateError,'BUDGET_EXHAUSTED'):
+                    instance.query('RAIZ.PG.CENSO',{'CODCOLIGADA':'11'})
+            instance.opener.open.assert_not_called()
+
+    def test_network_error_after_deadline_never_repeats_and_timeout_is_capped(self):
+        for fresh,deadline in ((0.5,180),(60,0.5)):
+            instance=self.sql_observer(fresh);instance.deadline=deadline;clock=[0]
+            def fail(*args,**kwargs):clock[0]=0.5;raise TimeoutError('SECRET')
+            instance.opener.open.side_effect=fail
+            with patch.object(r.time,'monotonic',side_effect=lambda:clock[0]),contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(r.operator.GateError,'NETWORK_FAILURE'):
+                    instance.query('RAIZ.PG.FISC',{'CODCOLIGADA':'11'})
+            self.assertEqual(instance.opener.open.call_count,1)
+            self.assertEqual(instance.opener.open.call_args.kwargs['timeout'],0.5)
+
+    def test_response_arriving_after_deadline_is_discarded_without_retry(self):
+        instance=self.sql_observer(1);clock=[0];response=self.sql_success()
+        def read(*args):clock[0]=2;return b'[]'
+        response.read.side_effect=read;instance.opener.open.return_value=response
+        with patch.object(r.time,'monotonic',side_effect=lambda:clock[0]),contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(r.operator.GateError,'BUDGET_EXHAUSTED'):
+                instance.query('RAIZ.PG.CENSO',{'CODCOLIGADA':'11'})
+        instance.opener.open.assert_called_once()
+
+    def test_parse_contract_and_non_sql_reads_are_never_retried(self):
+        instance=self.sql_observer();instance.opener.open.return_value=self.sql_success(b'not-json')
+        with patch.object(r.time,'monotonic',return_value=0),contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(json.JSONDecodeError):instance.query('RAIZ.PG.CENSO',{'CODCOLIGADA':'11'})
+            with self.assertRaisesRegex(r.operator.GateError,'QUERY_PARAMETERS_NOT_ALLOWED'):
+                instance.query('ARBITRARY_SQL',{'CODCOLIGADA':'11'})
+            with self.assertRaisesRegex(r.operator.GateError,'QUERY_PARAMETERS_NOT_ALLOWED'):
+                instance.query('RAIZ.PG.CENSO',{'CODCOLIGADA':'not;allowed'})
+            with self.assertRaisesRegex(r.operator.GateError,'RM_QUERY_NOT_ALLOWED'):
+                instance.http('https://example.invalid','RM_QUERY',b'SaveRecord')
+        instance.opener.open.assert_called_once()
+        with patch.object(r.RecoveryObserver.__bases__[0],'http',side_effect=r.operator.GateError('NETWORK_FAILURE')) as parent:
+            for stage in ('RM_READRECORD','ZEEV'):
+                with self.assertRaises(r.operator.GateError):instance.http('route',stage)
+            self.assertEqual(parent.call_count,2)
+        self.assertFalse(instance._sql_retry_used)
+
+    def test_private_observation_resets_only_read_budget_and_never_refreshes_proofs(self):
+        instance=self.sql_observer();instance._sql_retry_used=True
+        with patch.object(r.RecoveryObserver.__bases__[0],'observe',return_value={'proof':'original'}) as parent,patch.object(r.time,'monotonic',return_value=0):
+            self.assertEqual(instance.observe({'ticket':226530}),{'proof':'original'})
+            parent.assert_called_once_with({'ticket':226530})
+        self.assertFalse(instance._sql_retry_used);self.assertIsNone(instance._sql_fresh_deadline)
+        now=r.observer.dt.datetime.now(r.observer.dt.timezone.utc)
+        closed={'observedUtc':(now-r.observer.dt.timedelta(seconds=30)).isoformat()}
+        with patch.object(r.RecoveryObserver.__bases__[0],'closure',return_value=closed),patch.object(r.time,'monotonic',return_value=100):
+            self.assertIs(instance.closure(),closed)
+        self.assertGreater(instance._sql_fresh_deadline,129);self.assertLessEqual(instance._sql_fresh_deadline,130)
+
+    def test_utf8_json_proof_hash_is_independent_of_windows_default_encoding(self):
+        value={'description':'Serviço de manutenção','proof':'ação / São Paulo'}
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'proof.json'
+            for bom in (b'',b'\xef\xbb\xbf'):
+                path.write_bytes(bom+json.dumps(value,ensure_ascii=False).encode('utf-8'))
+                with patch.object(Path,'read_text',autospec=True,side_effect=lambda p,**kw:p.read_bytes().decode(kw['encoding'])) as read:
+                    decoded=r.read_json(path)
+                read.assert_called_once_with(path,encoding='utf-8-sig')
+                self.assertEqual(r.operator.sha(decoded),r.operator.sha(value))
+
     def test_elapsed_age_is_ignored_but_business_task_state_is_preserved(self):
         data={'id':225136,'leadTimeInDays':None,'instanceTasks':[{'id':5,'active':True,
           'leadTimeInDays':7.26,'expectedEndDateTime':'2026-10-29T18:34:00','task':{'id':7,'timeout':16}}],

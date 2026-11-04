@@ -5,13 +5,17 @@ fencing remain in the reviewed observer/operator; this runner only orchestrates.
 """
 import argparse
 import copy
+import errno
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
+import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -60,7 +64,94 @@ class RecoveryObserver(observer.Observer):
     The parent still checks both complete snapshots and all task/header data.
     Only the two documented elapsed-age paths are excluded from the long-lived
     approval fingerprint; deadlines, task identities and business dates remain.
+    SQL GET diagnostics and a single transient-read retry are private to this
+    runner. No shared observer, native SOAP read/write or AWS call is retried.
     """
+    def observe(self,plan):
+        self._sql_retry_used=False
+        self._sql_fresh_deadline=None
+        self._sql_code=None
+        result=super().observe(plan)
+        require(self._sql_remaining()>0,'HTTP_RM_QUERY_READ_BUDGET_EXHAUSTED')
+        return result
+
+    def closure(self):
+        result=super().closure()
+        operator.fresh(result.get('observedUtc'))
+        age=(observer.dt.datetime.now(observer.dt.timezone.utc)-
+             observer.dt.datetime.fromisoformat(result['observedUtc'])).total_seconds()
+        # Never refresh an old proof's clock to make room for another read.
+        self._sql_fresh_deadline=time.monotonic()+max(0,60-max(0,age))
+        return result
+
+    def _sql_remaining(self):
+        deadlines=[self.deadline]
+        if getattr(self,'_sql_fresh_deadline',None) is not None:
+            deadlines.append(self._sql_fresh_deadline)
+        return min(deadlines)-time.monotonic()
+
+    def query(self,code,params):
+        require(code in observer.CONTRACTS,'QUERY_PARAMETERS_NOT_ALLOWED')
+        require(getattr(self,'_sql_code',None) is None,'SQL_READ_REENTRANCY_REJECTED')
+        self._sql_code=code
+        try:return super().query(code,params)
+        finally:self._sql_code=None
+
+    @staticmethod
+    def _sql_transient(error):
+        reason=error.reason if isinstance(error,urllib.error.URLError) else error
+        if isinstance(reason,(TimeoutError,ConnectionResetError,ConnectionAbortedError,
+                              http.client.RemoteDisconnected,http.client.IncompleteRead)):
+            return True
+        if isinstance(reason,socket.gaierror):return reason.errno==socket.EAI_AGAIN
+        return isinstance(reason,OSError) and reason.errno in {
+            errno.ETIMEDOUT,errno.ECONNRESET,errno.ECONNABORTED,errno.ENETRESET,errno.EPIPE}
+
+    def _sql_report(self,attempt,started,outcome,error=None,retry=False):
+        # Do not serialize URLs, parameters, response bodies or exception text.
+        reason=error.reason if isinstance(error,urllib.error.URLError) and not isinstance(error,urllib.error.HTTPError) else error
+        name=type(reason).__name__ if isinstance(reason,BaseException) else 'URLError' if error else None
+        name=name if name is None or re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,63}',name) else 'NetworkError'
+        row={'event':'recovery_sql_read','sqlCode':self._sql_code,'attempt':attempt,
+             'elapsedMs':max(0,round((time.monotonic()-started)*1000)),
+             'outcome':outcome,'exceptionClass':name,'retryScheduled':retry}
+        print(json.dumps(row),flush=True)
+        return f"sqlCode={row['sqlCode']} elapsedMs={row['elapsedMs']} exceptionClass={name or 'None'}"
+
+    def http(self,url,stage,data=None,headers=None):
+        if stage!='RM_QUERY':return super().http(url,stage,data,headers)
+        code=getattr(self,'_sql_code',None)
+        require(code in observer.CONTRACTS and data is None and
+          url.startswith(observer.HOST+f'/api/framework/v1/consultaSQLServer/RealizaConsulta/{code}/0/T?parameters='),
+          'RM_QUERY_NOT_ALLOWED')
+        # Parent query validates the SQL allowlist and parameters. Only that
+        # exact GET reaches this loop; HTTP errors and parse/contract errors do not.
+        for attempt in (1,2):
+            started=time.monotonic();remaining=self._sql_remaining()
+            if remaining<=0:
+                detail=self._sql_report(attempt,started,'BUDGET_EXHAUSTED')
+                raise operator.GateError('HTTP_RM_QUERY_READ_BUDGET_EXHAUSTED '+detail)
+            try:
+                request=urllib.request.Request(url,headers=headers or {},method='GET')
+                with self.opener.open(request,timeout=min(15,remaining)) as response:raw=response.read(8000001)
+            except urllib.error.HTTPError as error:
+                detail=self._sql_report(attempt,started,'HTTP_'+str(error.code),error)
+                raise operator.GateError(f'HTTP_RM_QUERY_{error.code} '+detail) from None
+            except (urllib.error.URLError,TimeoutError,ConnectionError,
+                    http.client.RemoteDisconnected,http.client.IncompleteRead) as error:
+                can_retry=(attempt==1 and not getattr(self,'_sql_retry_used',False) and
+                           self._sql_transient(error) and self._sql_remaining()>0)
+                detail=self._sql_report(attempt,started,'NETWORK_FAILURE',error,can_retry)
+                if not can_retry:raise operator.GateError('HTTP_RM_QUERY_NETWORK_FAILURE '+detail) from None
+                self._sql_retry_used=True
+                continue
+            if self._sql_remaining()<=0:
+                detail=self._sql_report(attempt,started,'BUDGET_EXHAUSTED')
+                raise operator.GateError('HTTP_RM_QUERY_READ_BUDGET_EXHAUSTED '+detail)
+            require(len(raw)<=8000000,'HTTP_RESPONSE_TOO_LARGE')
+            self._sql_report(attempt,started,'SUCCESS')
+            return raw
+
     def zeev_snapshot(self,names):
         data,observed=super().zeev_snapshot(names)
         data=copy.deepcopy(data)
