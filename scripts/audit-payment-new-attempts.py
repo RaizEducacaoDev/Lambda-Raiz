@@ -22,6 +22,23 @@ CASES=((1,225136),(1,227599),(2,226026),(2,227993),(2,228237),(8,229064),(8,2290
 START=dt.datetime(2026,11,4,20,37,55,tzinfo=dt.timezone.utc)
 OUT=Path('.payment-new-attempts-readonly')
 
+class CurrentReader(r.Reader):
+    """Observe a newer publication without changing the pinned write operators."""
+    def pin(self):
+        require(self.aws('sts','get-caller-identity',{}).get('Account')==r.ACCOUNT,'AWS_ACCOUNT_MISMATCH')
+        cfg=self.aws('lambda','get-function-configuration',{'FunctionName':r.FUNCTION})
+        env=cfg.get('Environment',{}).get('Variables',{})
+        require(cfg.get('FunctionName')==r.FUNCTION and cfg.get('State')=='Active' and
+          cfg.get('LastUpdateStatus')=='Successful' and env.get('STAGE')=='prod' and
+          env.get('PAGAMENTO_IDPGTO_TABLE')==r.TABLE and
+          env.get('RM_PROD','').rstrip('/')==r.HOST.replace(':8051',''),'ACTIVE_TARGET_CONFIGURATION_MISMATCH')
+        current={'codeSha256':cfg.get('CodeSha256'),'revisionId':cfg.get('RevisionId')}
+        require(re.fullmatch(r'[A-Za-z0-9+/]{43}=',str(current['codeSha256'])) is not None and
+          re.fullmatch(a.UUID,str(current['revisionId'])) is not None,'RUNTIME_IDENTIFIERS_INVALID')
+        current['lastModified']=cfg.get('LastModified')
+        current['matchesEarlierAudit']=all(current[k]==v for k,v in r.PIN.items())
+        return current
+
 def require(ok,code):
     if not ok:raise a.AuditError(code)
 
@@ -40,7 +57,8 @@ def main():
       os.environ.get('GITHUB_REPOSITORY')=='RaizEducacaoDev/Lambda-Raiz' and
       os.environ.get('GITHUB_REF')=='refs/heads/fix/idpgto-vinculo-obrigatorio','WORKFLOW_CONTEXT_INVALID')
     OUT.mkdir(exist_ok=False);deadline=time.monotonic()+600
-    reader=r.Reader();print(json.dumps({'stage':'runtime_read'}),flush=True);runtime=reader.pin()
+    reader=CurrentReader();print(json.dumps({'stage':'runtime_read'}),flush=True);runtime=reader.pin()
+    (OUT/'runtime.json').write_text(json.dumps(runtime,indent=2)+'\n',encoding='utf-8')
     end=dt.datetime.now(dt.timezone.utc);start_ms=int(START.timestamp()*1000);end_ms=int(end.timestamp()*1000)
     require(0<end_ms-start_ms<4*3600000,'LOG_WINDOW_OUTSIDE_REVIEWED_DAY')
     result={'version':1,'observedUtc':end.isoformat(),'runtimeStart':runtime,
@@ -65,7 +83,8 @@ def main():
           'coverage':coverage,'ticketEvents':safe,'requests':requests})
         (OUT/'readback.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
         print(json.dumps({'ticket':ticket,'requestCount':len(requests),'coverageComplete':coverage['complete']}),flush=True)
-    result['runtimeEnd']=reader.pin();result['completedUtc']=dt.datetime.now(dt.timezone.utc).isoformat()
+    result['runtimeEnd']=reader.pin();result['runtimeStable']=result['runtimeEnd']==result['runtimeStart']
+    result['completedUtc']=dt.datetime.now(dt.timezone.utc).isoformat()
     result['coverageComplete']=all(x['coverage']['complete'] and all(v['coverage']['complete'] for v in x['requests']) for x in result['cases'])
     (OUT/'readback.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     require(result['coverageComplete'],'LOG_COVERAGE_INCOMPLETE')
@@ -83,6 +102,14 @@ def self_test():
     assert safe_events(events,request='00000000-0000-0000-0000-000000000000')==[]
     assert len(CASES)==len(set(CASES))==7
     assert all(operation in {'get-caller-identity','get-function-configuration','get-item','filter-log-events'} for _,operation in a.AWS_READS)
+    class Fake(CurrentReader):
+        def aws(self,service,operation,payload):
+            if service=='sts':return {'Account':r.ACCOUNT}
+            return {'FunctionName':r.FUNCTION,'State':'Active','LastUpdateStatus':'Successful',
+              'CodeSha256':'A'*43+'=','RevisionId':'00000000-0000-0000-0000-000000000001',
+              'LastModified':'2026-11-04T21:18:00Z','Environment':{'Variables':{'STAGE':'prod',
+              'PAGAMENTO_IDPGTO_TABLE':r.TABLE,'RM_PROD':r.HOST.replace(':8051',''),'PASSWORD_TOTVS':secret}}}
+    metadata=Fake().pin();assert metadata['matchesEarlierAudit'] is False and secret not in json.dumps(metadata)
     print(json.dumps({'newAttemptAuditSelfTest':'passed','awsRequests':0}))
 
 if __name__=='__main__':
