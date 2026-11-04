@@ -101,7 +101,7 @@ def code_hashes():
              Path('package-lock.json'), Path(WORKFLOW), Path('tests/test_payment_bank_repair_runner.py'),
              Path('tests/test_payment_bank_repair.py'), Path('tests/test_payment_bank_lease.py')]
     paths += [Path('scripts/payment_bank_claim_gate.py'), Path('scripts/adjudicate-payment-bank-no-effect.py'),
-              Path('tests/test_payment_bank_claim_gate.py')]
+              Path('scripts/payment_bank_diagnostic_contract.py'), Path('tests/test_payment_bank_claim_gate.py')]
     paths += [p.relative_to(ROOT) for pattern in ['src/**/*.ts', 'sql/*.sql', 'tsconfig*.json'] for p in ROOT.glob(pattern)]
     return {p.as_posix(): file_sha(ROOT / p) for p in sorted(set(paths))}
 

@@ -405,8 +405,11 @@ class RemoteLiveAdapter(observer.Observer):
   pk=self.assert_live_lease(ticket,archive=True);company,_,lan,_,_,target,targetcol=TARGETS[ticket]
   require(set(fields)<=WRITABLE and fields.get('IDPGTO')==str(target)and fields.get('CODCOLPGTO')==str(targetcol),'CLAIM_FIELDS_NOT_ALLOWLISTED')
   if ticket==228007:require(set(fields)=={'IDPGTO','CODCOLPGTO'},'CANARY_FIELDS_NOT_MINIMAL')
-  try:key=claim_gate.assert_ready(lease_module.get,company,ticket)
-  except(RuntimeError,claim_gate.receipt_contract.GuardError)as exc:raise GuardError(str(exc))from None
+  try:
+   diagnostic=getattr(self,'diagnostic_proof',None)
+   key=claim_gate.assert_diagnostic_ready(lease_module.get,company,ticket,diagnostic)if diagnostic is not None else claim_gate.assert_ready(lease_module.get,company,ticket)
+  except Exception as exc:
+   safe=str(exc);raise GuardError(safe if re.fullmatch('[A-Z][A-Z0-9_]{0,100}',safe)else'BANK_CLAIM_GATE_FAILED')from None
   claim={'pk':{'S':key},'nonce':{'S':str(uuid.uuid4())},'ticket':{'N':str(ticket)},'company':{'N':str(company)},'idlan':{'N':str(lan)},'leaseOwner':{'S':proof['owner']},'planSha256':{'S':plan_sha},'targetFieldsSha256':{'S':digest(fields)},'state':{'S':'CLAIMED_NO_AUTOMATIC_RETRY'},'observedUtc':{'S':utc()}}
   try:lease_module.aws('dynamodb','put-item',{'TableName':lease_module.TABLE,'Item':claim,'ConditionExpression':'attribute_not_exists(pk)'})
   except Exception:pass

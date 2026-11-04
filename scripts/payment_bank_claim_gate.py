@@ -38,3 +38,10 @@ def assert_ready(get, company, ticket):
         require(receipt.get('nextAttemptKey') == {'S': key}, 'MANUAL_BANK_ATTEMPT_KEY_MISMATCH')
     require(get(key) == {}, 'DURABLE_BANK_ATTEMPT_ALREADY_EXISTS_NO_RETRY')
     return key
+
+
+def assert_diagnostic_ready(get, company, ticket, proof, before_lease=False):
+    require(type(company)is int and type(ticket)is int and(company,ticket)==(5,228007), 'DIAGNOSTIC_EXACT_TARGET_REQUIRED')
+    spec=importlib.util.spec_from_file_location('bank_diagnostic_contract',ROOT/'scripts/payment_bank_diagnostic_contract.py')
+    contract=importlib.util.module_from_spec(spec);spec.loader.exec_module(contract)
+    return contract.assert_controls(get,proof,before_lease)
