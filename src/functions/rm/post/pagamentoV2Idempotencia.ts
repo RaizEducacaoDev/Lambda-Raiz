@@ -19,6 +19,7 @@ export interface RepositorioPagamento {
   corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento>;
   confirmarCriacaoIncerta(antes: OperacaoPagamento, pg: string, duracao: number): Promise<OperacaoPagamento>;
   encerrarAntesDoEnvio(operacao: OperacaoPagamento): Promise<void>;
+  encerrarRejeicao(operacao: OperacaoPagamento): Promise<OperacaoPagamento>;
   concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined>;
   movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
@@ -29,6 +30,16 @@ export interface RepositorioPagamento {
   conferirEnvioProprio(operacao: OperacaoPagamento, idLan: string): Promise<void>;
 }
 export class ConflitoPagamento extends Error {}
+
+const conferirReserva = (op: OperacaoPagamento, digest: string, pg: string | undefined): void => {
+  if ((op.digest !== digest || (pg && pg !== op.pg)) && !Object.prototype.hasOwnProperty.call(op, 'pg') &&
+      ['RESERVED', 'CREATING'].includes(op.state) && op.lockUntil > Date.now()) {
+    throw new ConflitoPagamento('O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente; os dados corrigidos do formulário serão considerados.');
+  }
+  if (op.digest !== digest || (pg && pg !== op.pg)) {
+    throw new ConflitoPagamento('O ticket já possui uma tentativa com movimento identificado no TOTVS. Os dados atuais precisam corresponder ao movimento existente para concluir o pagamento.');
+  }
+};
 
 const raizPagamento = (pk: unknown): pk is string => typeof pk === 'string' && /^[^#]+#PG#[1-9]\d*#[1-9]\d*$/.test(pk);
 const digestValido = (digest: unknown): digest is string => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest);
@@ -177,6 +188,28 @@ export class DynamoPagamento implements RepositorioPagamento {
         ':reserved': 'RESERVED', ':digest': op.digest, ':oldUntil': op.lockUntil, ':protocol': 2 } }),
     { abortSignal: AbortSignal.timeout(2000) });
   }
+  // Only the invocation that received a native business rejection and reread an
+  // empty ticket census calls this. Fence it before allowing a corrected form;
+  // a timeout, a returned key or an unconfirmed checkpoint cannot release it.
+  async encerrarRejeicao(op: OperacaoPagamento): Promise<OperacaoPagamento> {
+    if (!raizPagamento(op.pk) || op.state !== 'CREATING' || Object.prototype.hasOwnProperty.call(op, 'pg') ||
+        op.continuation || !digestValido(op.digest) || !op.owner || !Number.isSafeInteger(op.lockUntil) ||
+        op.lockUntil <= 0 || (op.protocolVersion !== undefined && op.protocolVersion !== 2)) {
+      throw new ConflitoPagamento('A tentativa anterior ainda não confirmou o encerramento. Aguarde alguns instantes e envie novamente.');
+    }
+    const values: Record<string, unknown> = { ':owner': op.owner, ':digest': op.digest, ':until': op.lockUntil,
+      ':creating': 'CREATING', ':reserved': 'RESERVED', ':nextOwner': randomUUID(), ':expired': Date.now() - 1 };
+    let protocol = ' AND attribute_not_exists(protocolVersion)';
+    if (op.protocolVersion !== undefined) { values[':protocol'] = op.protocolVersion; protocol = ' AND protocolVersion = :protocol'; }
+    const result = await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk: op.pk },
+      UpdateExpression: 'SET #state = :reserved, #owner = :nextOwner, lockUntil = :expired',
+      ConditionExpression: '#state = :creating AND #owner = :owner AND digest = :digest AND lockUntil = :until' +
+        ' AND attribute_not_exists(pg) AND attribute_not_exists(continuation)' + protocol,
+      ExpressionAttributeNames: { '#state': 'state', '#owner': 'owner' }, ExpressionAttributeValues: values,
+      ReturnValues: 'ALL_NEW' }), { abortSignal: AbortSignal.timeout(2000) });
+    if (!result.Attributes) throw new Error('Encerramento da tentativa não confirmado');
+    return result.Attributes as OperacaoPagamento;
+  }
   private async retomar(antes: OperacaoPagamento, estado: 'RESERVED' | 'CREATED', digest: string,
     pg: string | undefined, duracao: number,
     estadoAnterior: 'RESERVED' | 'CREATING' = estado === 'RESERVED' ? 'RESERVED' : 'CREATING'): Promise<OperacaoPagamento> {
@@ -232,9 +265,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
-      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
-    }
+    conferirReserva(existente, digest, pg);
     if (!['CREATED', 'UPDATING', 'COMPLETE'].includes(existente.state)) return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg) || !Number.isSafeInteger(Number(existente.pg))) {
       throw new ConflitoPagamento('Reserva sem movimento durável válido; reconciliar');
@@ -246,9 +277,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
-      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
-    }
+    conferirReserva(existente, digest, pg);
     if (existente.state !== 'COMPLETE') return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) {
       throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
@@ -269,7 +298,8 @@ export class DynamoPagamento implements RepositorioPagamento {
     const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
-    if (!existente || existente.digest !== digest || (pg && pg !== existente.pg)) throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
+    if (!existente) throw new ConflitoPagamento('Não foi possível confirmar o envio anterior. Aguarde alguns instantes e envie novamente.');
+    conferirReserva(existente, digest, pg);
     if (existente.state === 'COMPLETE') {
       if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
       return existente;

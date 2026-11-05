@@ -1,0 +1,80 @@
+name: Allow corrected payment form resubmission
+on:
+  push:
+    branches: [fix/payment-form-resubmission-20261105]
+    paths:
+      - .github/workflows/payment-form-retry-release.yml
+      - scripts/release-payment-form-retry.py
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    if: false # One-time publication and independent readback: run42081692649.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 scripts/release-payment-form-retry.py prepare
+      - name: Publish only the pinned payment entrypoint
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-form-retry.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-form-retry-release
+          path: .payment-form-retry-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payment-form-retry-release
+          path: .release-evidence
+      - name: Independently reread the published package
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-form-retry.py readback --evidence .release-evidence
+      - name: Verify package and execution metrics after five minutes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-form-retry.py monitor --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-form-retry-independent-readback
+          path: .payment-form-retry-release/
+          include-hidden-files: true
+          retention-days: 14
