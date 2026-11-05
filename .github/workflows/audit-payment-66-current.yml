@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   audit:
-    if: github.run_attempt == 1
+    if: false # One-off read completed in run 41950100569; archived.
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
