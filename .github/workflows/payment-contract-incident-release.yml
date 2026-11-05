@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
+    if: false # Publication and independent verification completed in run 42082729887.
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -36,7 +37,7 @@ jobs:
           retention-days: 3
   release:
     needs: verify
-    if: ${{ contains(github.event.head_commit.message, '[publish-payment-contract-once]') && github.run_attempt == 1 }}
+    if: false # One-off production publication archived after successful verification.
     runs-on: ubuntu-22.04
     timeout-minutes: 6
     steps:
@@ -66,6 +67,7 @@ jobs:
           include-hidden-files: true
           retention-days: 14
   readback:
+    if: false # Completed with five-minute readback in run 42082729887.
     needs: release
     runs-on: ubuntu-22.04
     timeout-minutes: 8
