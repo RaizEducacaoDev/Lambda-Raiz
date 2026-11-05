@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const dynalite = require('dynalite');
-const { DynamoDBClient, CreateTableCommand } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBClient, CreateTableCommand, waitUntilTableExists } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const cache=new Map();
 const load=(file)=>require('./load-ts.cjs')(file,{},cache);
@@ -28,6 +28,7 @@ after(async()=>{client.destroy();await new Promise(resolve=>server.close(resolve
 async function setup(options={}) {
  const tabela='PagamentoTest'+(++seq);
  await client.send(new CreateTableCommand({TableName:tabela,KeySchema:[{AttributeName:'pk',KeyType:'HASH'}],AttributeDefinitions:[{AttributeName:'pk',AttributeType:'S'}],ProvisionedThroughput:{ReadCapacityUnits:10,WriteCapacityUnits:10}}));
+ await waitUntilTableExists({client,maxWaitTime:10,minDelay:1,maxDelay:1},{TableName:tabela});
  let repo=new DynamoPagamento(tabela,doc);
  const stats={create:0,update:0,lookup:0,read:0};
  let restante=30000;
