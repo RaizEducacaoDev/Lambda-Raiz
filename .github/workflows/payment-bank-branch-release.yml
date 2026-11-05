@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: ${{ github.event_name == 'push' && github.run_attempt == 1 }}
+    if: false # One-off publication verified by run41938662542; preserve evidence, do not republish.
     runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
