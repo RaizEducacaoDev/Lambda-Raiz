@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   read:
-    if: ${{ github.run_attempt == 1 }}
+    if: ${{ false }} # Archived after successful read-only correlation 42102644353.
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     steps:
