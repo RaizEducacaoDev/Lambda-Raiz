@@ -10,6 +10,7 @@ permissions:
   contents: read
 jobs:
   export:
+    if: false # One-off export verified by run 41951424486 and delivered locally; do not repeat.
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
