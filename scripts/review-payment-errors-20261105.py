@@ -1,5 +1,5 @@
 """Review fixed error metadata for the production payment Lambda. AWS reads only."""
-import collections,datetime as dt,importlib.util,json,re,time
+import collections,datetime as dt,decimal,importlib.util,json,re,time
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('a',Path(__file__).with_name('audit-payment-conflict-20261103-0609.py'))
 a=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)
@@ -38,7 +38,7 @@ while time.monotonic()<deadline-30:
 rows=[]
 for result_row in result.get('results',[]):
     fields={f['field']:f['value'] for f in result_row}
-    ts=int(fields['timestampMillis']);assert int(start.timestamp()*1000)<=ts<=int(end.timestamp()*1000)
+    ts=int(decimal.Decimal(fields['timestampMillis']));assert int(start.timestamp()*1000)<=ts<=int(end.timestamp()*1000)
     event={'timestamp':ts,'message':fields.get('@message','')}
     safe=a.sanitize(event)
     if safe is not None:rows.append(safe)
