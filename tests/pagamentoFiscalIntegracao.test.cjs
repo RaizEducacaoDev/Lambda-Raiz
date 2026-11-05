@@ -42,7 +42,7 @@ function setup(options={}){
   async conferirEnvioProprio(op){assert.equal(records.get(op.pk).continuation,op.continuation);},
  };
  const rm={
-  async consultarRetomada(){calls.census++;throw Error('RETRY must not run in payment submission');},
+  async consultarRetomada(){calls.census++;return {movimentos:[],lancamentos:[]};},
   async consultarDocumento(){calls.document++;throw Error('DOC2 must not run in payment submission');},
   async consultarContextoFiscal(key){calls.fiscal++;calls.order.push('fiscal');if(options.fiscalError)throw Error('fixture unavailable');
    const row={FISCAL_VERSION:1,REQUEST_COMPANY:11,REQUEST_BRANCH:1,REQUEST_SUPPLIER_COMPANY:0,REQUEST_SUPPLIER:'0000000001',
@@ -95,9 +95,9 @@ test('consulta indisponível, contrato errado ou incompleto retorna503 sem reser
   const x=setup(options);assert.equal((await x.run()).statusCode,503);assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);
  }
 });
-const noDuplicateReads=x=>{assert.equal(x.calls.document,0);assert.equal(x.calls.lookup,0);assert.equal(x.calls.census,0);};
+const noDuplicateReads=x=>{assert.equal(x.calls.document,0);assert.equal(x.calls.lookup,0);assert.equal(x.calls.census,x.calls.create?2:1);};
 
-test('os dez tipos PG não consultam DOC2, RECON ou RETRY antes de submeter ao RM',async()=>{
+test('os dez tipos PG conferem o ticket sem consultar DOC2 ou RECON antes de submeter ao RM',async()=>{
  const tipos=[{tipoDoPagamento:'NF',tipoDeItem:'Material'},{tipoDoPagamento:'NF',tipoDeItem:'Serviço'},
   {tipoDoPagamento:'TM'},...['A','E','T','G'].map(contasDeConsumo=>({tipoDoPagamento:'CC',contasDeConsumo})),
   {tipoDoPagamento:'OG',outrosGastos:'FR'},...['PF','PJ'].map(tipoDoLocador=>({tipoDoPagamento:'OG',outrosGastos:'AL',tipoDoLocador}))];

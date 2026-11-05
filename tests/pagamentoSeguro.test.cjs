@@ -50,9 +50,10 @@ async function setup(opts={}) {
       DOC_MATCH_COUNT:1,CODCOLIGADA:8,CODFILIAL:4,IDMOV:9001,CODCOLCFO:0,CODCFO:'0000000001',CODTMV:opts.codTmv||'1.2.03',
       SERIE:key.serie||opts.documentNative?.EFFECTIVE_SERIES||'1',NUMEROMOV:key.numero.padStart(9,'0'),CODTDO:opts.documentNative?.DOCUMENT_TYPE_IS_NULL===1?null:opts.documentNative?.EFFECTIVE_DOCUMENT_TYPE||'002',CODCOLCFOAUX:0,CODCFOAUX:'0000000001',TICKET:'9003',...opts.documentNative
     } : opts.documentNative||{})];},
-    async consultarRetomada(){count.censo++;if(opts.censoError)throw Error('census unavailable');
-      return opts.censo || {movimentos:opts.nativeAfterLost?[{coligada:'8',idMov:'9001'}]:[],
-        lancamentos:opts.nativeAfterLost?rows.map(p=>({coligada:'8',idMov:'9001',idLan:p.IDLAN,boletos:0})):[]};},
+    async consultarRetomada(){count.censo++;if(opts.censoError || opts.censoErrorAt===count.censo)throw Error('census unavailable');
+      const exists=opts.nativeAfterLost || (opts.nativeFromCensus && count.censo>=opts.nativeFromCensus);
+      return opts.censo || {movimentos:exists?[{coligada:'8',idMov:'9001'}]:[],
+        lancamentos:exists?rows.map(p=>({coligada:'8',idMov:'9001',idLan:p.IDLAN,boletos:0})):[]};},
     async consultarContextoFiscal(key){count.fiscal++;if(opts.fiscalError)throw Error('fiscal unavailable');return opts.fiscalResponse||[{
       FISCAL_VERSION:1,REQUEST_COMPANY:8,REQUEST_BRANCH:4,REQUEST_SUPPLIER_COMPANY:Number(bank.CODCOLCFO),REQUEST_SUPPLIER:'0000000001',REQUEST_NATURE:Number(key.idNat),
       HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,NATURE_COMPANY:8,NATURE_ID:Number(key.idNat),NATURE_CODE:key.codigoNatureza||'1.949.01',NATURE_ACTIVE:1,NATURE_ROUTE:'D',
@@ -110,7 +111,7 @@ test('filial bancária incompatível é informada antes de reservar ou criar par
   const x=await setup({codTmv,bank:{CODFILIAL:'5'}}),result=await x.run(fields);
   assert.equal(result.statusCode,422,codTmv);assert.match(parse(result).message,/cadastro bancário.*filial 5.*solicitação.*filial 4/);
   assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal((await x.rawAll()).length,0);
-  assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+  assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,1);
  }
 });
 
@@ -150,7 +151,7 @@ test('dez tipos PG usam XML real, contrato nativo por tipo, IDPGTO e replay sem 
   const raw={...payload,...input},before=JSON.stringify(raw),key=identidadePagamento(raw);
   const first=await x.run(input);assert.equal(first.statusCode,200,`${codTmv}: ${first.body}`);
   const header=registroUnico(x.count.createdXml.slice(9,-3),'TMOV');
-  assert.equal(header.CODTMV,codTmv);assert.equal(header.SERIE||'',input.serie||'');assert.equal(header.NUMEROMOV,raw.numeroDaNF);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+  assert.equal(header.CODTMV,codTmv);assert.equal(header.SERIE||'',input.serie||'');assert.equal(header.NUMEROMOV,raw.numeroDaNF);assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,2);
   assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').digest,hashIntencao(intencaoPagamento(raw,key,planosPagamento(raw,key),codTmv)));
   assert.equal(JSON.stringify(raw),before);assert.equal(x.lans.get('9002').IDPGTO,'6');assert.equal(x.lans.get('9002').CODCOLPGTO,'8');
   x.newRepo();assert.equal((await x.run(input)).statusCode,200,codTmv);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
@@ -166,15 +167,15 @@ test('dez tipos permitem corrigir reserva2 pré-envio e mantêm histórico, sem 
  }
 });
 
-test('dez tipos reenviam ao RM após timeout sem tentar decidir duplicidade por consultas locais',async()=>{
+test('dez tipos com efeito após timeout reconhecem cadeia parcial sem uma segunda criação',async()=>{
  for(const [codTmv,fields] of tiposPG){
   const x=await setup({codTmv,createError:true,commitOnError:true});
   assert.equal((await x.run(fields)).statusCode,503,codTmv);assert.equal(x.count.create,1);
   await x.expire();x.setFiscal({createError:false,createResult:'Já Existe Nota do Emitente com este Número e Série.\n=====\nat RM.Fixture'});
   const results=await Promise.all([x.run(fields),x.run(fields)]);
-  assert.equal(results.filter(r=>parse(r).code==='RM_DUPLICATE_RECORD').length,1,codTmv);
-  assert.equal(x.count.create,2);assert.equal(x.count.update,0);
-  assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+  assert.ok(results.every(r=>r.statusCode===409),codTmv);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,4);
  }
 });
 
@@ -218,20 +219,20 @@ test('série vazia permanece vazia para o RM aplicar seu default sem seleção p
  assert.equal(x.count.document,0);
 });
 
-test('dez tipos deixam a decisão de duplicidade ao RM sem chamadas RECON RETRY ou DOC',async()=>{
+test('dez tipos mantêm duplicidade documental no RM após confirmar ausência pelo ticket',async()=>{
  for(const [codTmv,fields] of tiposPG){
-  const x=await setup({codTmv,lookupError:true,censoError:true,documentError:true});
+  const x=await setup({codTmv,lookupError:true,documentError:true});
   assert.equal((await x.run(fields)).statusCode,200,codTmv);
-  assert.equal(x.count.create,1);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+  assert.equal(x.count.create,1);assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,2);
  }
 });
 
-test('CC35 pode ser reenviada sem truncar número e RM decide a duplicidade',async()=>{
+test('CC35 preserva número completo e não repete criação já observada após timeout',async()=>{
  const x=await setup({codTmv:'1.2.10',createError:true,commitOnError:true});
  const input={tipoDoPagamento:'CC',contasDeConsumo:'E',numeroDaNF:'12345678901234567890123456789012345'};
  assert.equal((await x.run(input)).statusCode,503);await x.expire();
- x.setFiscal({createError:false,createResult:'Já Existe Nota do Emitente com este Número e Série.'});
- assert.equal(parse(await x.run(input)).code,'RM_DUPLICATE_RECORD');assert.equal(x.count.create,2);assert.equal(x.count.update,0);
+ x.setFiscal({createError:false,mov:{NUMEROMOV:input.numeroDaNF}});
+ assert.equal((await x.run(input)).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
  assert.equal(registroUnico(x.count.createdXml.slice(9,-3),'TMOV').NUMEROMOV,input.numeroDaNF);
 });
 
@@ -239,11 +240,11 @@ test('identidade bancária inválida conserva o código público e nunca reserva
  const x=await setup(),result=await x.run({idpgto:''});assert.equal(result.statusCode,422);assert.equal(parse(result).code,'IDPGTO_NAO_CONFIRMADO');assert.equal((await x.rawAll()).length,0);assert.equal(x.count.create,0);
 });
 
-test('data de entrada omitida preserva default nativo sem consulta de reconciliação',async()=>{
+test('data de entrada omitida preserva default nativo após consulta do ticket',async()=>{
  const x=await setup({codTmv:'1.2.01'});
  const fields={tipoDoPagamento:'NF',tipoDeItem:'Material',dataDeEntrada:''};
  assert.equal((await x.run(fields)).statusCode,200);
- assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.count.censo,0);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.count.censo,2);
 });
 
 test('rejeição RM retorna motivo allowlisted e nova solicitação pode tentar após expirar',async()=>{
@@ -326,12 +327,12 @@ test('corrigir uma NF recusada antes do envio retoma imediatamente, arquiva a in
   assert.equal(history[0].snapshot.digest,before.digest);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
 });
 
-test('corrigir intenção sem PG dispensa censo de ausência e mantém histórico antes de reenviar',async()=>{
+test('corrigir intenção sem PG confirma ausência e mantém histórico antes de reenviar',async()=>{
  const x=await setup({stockError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
  await x.run(fiscalFields);const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
- x.setFiscal({stockError:false,censoError:true,lookupError:true,documentError:true});
+ x.setFiscal({stockError:false,lookupError:true,documentError:true});
  assert.equal((await x.run({...fiscalFields,numeroDaNF:'9003002'})).statusCode,200);
- assert.equal(x.count.create,1);assert.equal(x.count.censo+x.count.lookup+x.count.document,0);
+ assert.equal(x.count.create,1);assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,3);
  assert.deepEqual((await x.all()).find(r=>r.pk.includes('#HISTORY#')).snapshot,before);
 });
 
@@ -373,10 +374,33 @@ test('resposta RM sem identificador nunca vira sucesso nem associação de FLAN'
  }
 });
 
-test('nova criação não depende da resposta de censo ou de documento duplicado da Lambda',async()=>{
+test('consulta do ticket indisponível não autoriza nova criação ou reserva',async()=>{
  const x=await setup({censoError:true,lookupError:true,documentError:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
- assert.equal((await x.run(fiscalFields)).statusCode,200);assert.equal(x.count.create,1);
- assert.equal(x.count.censo+x.count.lookup+x.count.document,0);
+ assert.equal((await x.run(fiscalFields)).statusCode,503);assert.equal(x.count.create,0);
+ assert.equal(x.count.censo,1);assert.equal(x.count.lookup+x.count.document,0);assert.equal((await x.rawAll()).length,0);
+});
+
+test('movimento aparece entre preflight e envio: não despacha e próximo pedido reconhece a operação',async()=>{
+ const x=await setup({nativeFromCensus:2,lan:{IDPGTO:'6',CODCOLPGTO:'8'}});
+ const first=await x.run();assert.notEqual(first.statusCode,200);
+ assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+ const before=await x.rawAll();assert.equal(before.length,1);assert.equal(before[0].state,'RESERVED');
+ assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+ assert.deepEqual(await x.rawAll(),before);
+});
+
+test('segunda consulta falha: ausência inicial não autoriza despacho após erro',async()=>{
+ const x=await setup({censoErrorAt:2});assert.equal((await x.run()).statusCode,503);
+ assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal(x.count.censo,2);
+ assert.equal((await x.all())[0].state,'RESERVED');
+});
+
+test('censo de cadeia parcial preserva continuação própria com recibo sem repetir criação',async()=>{
+ const x=await setup({timeAfterCreate:true,nativeFromCensus:3});assert.equal((await x.run()).statusCode,503);
+ await x.expire();assert.equal((await x.run()).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+ const before=await x.rawAll();assert.equal((await x.run()).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.deepEqual(await x.rawAll(),before);
 });
 
 test('serviço preserva série omitida para default nativo sem alterar a intenção da entrada',async()=>{
@@ -463,7 +487,7 @@ test('CREATING expirado reenvia ao RM; estado desconhecido mantém409',async()=>
     await x.expire();const before=(await x.all())[0];
     assert.equal((await x.run(fiscalFields)).statusCode,state==='CREATING'?200:409);
     if(state==='RNE')assert.deepEqual((await x.all())[0],before);
-    assert.equal(x.count.create,state==='CREATING'?1:0);assert.equal(x.count.update,state==='CREATING'?1:0);assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+    assert.equal(x.count.create,state==='CREATING'?1:0);assert.equal(x.count.update,state==='CREATING'?1:0);assert.equal(x.count.lookup+x.count.document,0);assert.equal(x.count.censo,state==='CREATING'?2:1);
   }
 });
 test('orçamento curto bloqueia antes de CREATING e pode retomar uma reserva ainda sem efeito',async()=>{
