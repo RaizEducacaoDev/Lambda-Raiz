@@ -3,6 +3,7 @@ import { ConflitoPagamento } from './pagamentoV2Idempotencia';
 import { FalhaContratoRm, PrazoPagamentoInsuficiente } from './pagamentoV2Rm';
 import { diagnosticarRetornoRm } from './pagamentoDiagnosticoSeguro';
 import { mensagemDiagnostico } from './pagamentoEvidencia';
+import { ErroNativoRm } from './pagamentoErroNativo';
 
 export type EtapaPagamento = 'inicio' | 'identidade_bancaria' | 'validacao_solicitacao' | 'consulta_existente' |
   'validacao_bancaria' | 'validacao_documento' | 'validacao_fiscal' | 'controle_tentativa' | 'criacao_movimento' |
@@ -29,7 +30,10 @@ export function respostaErroPagamento(c: ContextoResposta) {
   const reasonConflito = erro instanceof ConflitoPagamento ? erro.reason : undefined;
   let status = 503, origem: 'TOTVS' | 'FORMULARIO' | 'INTEGRACAO' = 'INTEGRACAO';
   let code = 'FALHA_INTEGRACAO_PAGAMENTO', motivo = 'FALHA_TECNICA', detalhe: string;
-  if (rejeicaoNativa) {
+  if (erro instanceof ErroNativoRm) {
+    status = erro.status; origem = 'TOTVS'; code = erro.codigo; motivo = code;
+    detalhe = `Retorno do TOTVS: ${erro.mensagemNativa || erro.message}`;
+  } else if (rejeicaoNativa) {
     // The pre-bank-change backup returned 400 for a native business rejection.
     // Keep that distinction, with one sanitized message for both Zeev fields.
     status = 400; origem = 'TOTVS'; code = codeNativo!; motivo = code;
@@ -48,7 +52,7 @@ export function respostaErroPagamento(c: ContextoResposta) {
     // Preserve actionable business conflicts. Keep internal lease/hash/baseline
     // vocabulary in the logs rather than asking a requester to reconcile it.
     detalhe = reasonConflito === 'OPERACAO_EM_PROCESSAMENTO' || /^Ticket em processamento/.test(erro.message)
-      ? 'O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente.'
+      ? 'Há um bloqueio temporário de uma tentativa anterior. Aguarde alguns instantes e envie novamente.'
       : /reserva|baseline|recibo|lease|snapshot|digest|reconcil|conciliar|owner|estado|\bFLAN\b/i.test(erro.message)
         ? 'Não foi possível confirmar o estado desta tentativa. Aguarde alguns instantes e envie novamente; se persistir, informe o ticket ao suporte.'
         : erro.message;

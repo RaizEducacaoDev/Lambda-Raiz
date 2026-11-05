@@ -86,7 +86,7 @@ test('natureza inválida retornada pelo RM é classificada sem refletir número,
  const raw='Movimento 000000018 - Série 1: Natureza inválida.&#xD;Possíveis causas: natureza interestadual em movimentação interna e vice-versa.\n=====\nat RM.Mov.Movimento.MovMovConsistencia.ConsisteIntegracaoFiscal';
  const result=diagnosticarRetornoRm(raw);
  assert.equal(result.reasonCode,'RM_INVALID_FISCAL_NATURE');assert.deepEqual(result.mentionedFields,['SERIE']);
- assert.equal(resumirMensagemNegocioRm(raw),undefined);
+ assert.match(resumirMensagemNegocioRm(raw),/Natureza inválida/);
  for(const value of ['000000018','Natureza inválida','ConsisteIntegracaoFiscal','2.949.01'])assert.equal(JSON.stringify(result).includes(value),false);
  for(const phrase of ['Natureza inválida.','NATUREZA INVALIDA','Natureza fiscal inválida.','Natureza de operação inválida.']){
   assert.equal(diagnosticarRetornoRm(phrase).reasonCode,'RM_INVALID_FISCAL_NATURE');
@@ -109,59 +109,29 @@ test('nome de exceção arbitrário nunca é refletido no diagnóstico seguro',(
  assert.equal(tipoErroSeguro(Object.assign(Error('PRIVATE_MESSAGE'),{name:'TimeoutError'})),'TimeoutError');
 });
 
-test('mensagem de negócio mantém primeira linha de série ou duplicidade sem stack ou outras linhas',()=>{
- for(const frase of ['Série não cadastrada.', 'A série informada não está vinculada ao tipo de movimento.',
-  'Já Existe Nota do Emitente com este Número e Série.', 'O campo SERIE é obrigatório.',
-  'Série 1 inválida para o documento.', 'Invalid series for this document.']){
-  for(const fim of ['\r\n=====\r\nat RM.Fixture.SaveRecord', ' ===== at RM.Fixture.SaveRecord',
-   '\nprivate@example.test CPF 123.456.789-09', ' at RM.Fixture.SaveRecord']){
-   assert.equal(resumirMensagemNegocioRm(frase+fim),frase);
-  }
- }
+test('texto nativo preserva linhas de negócio e remove a pilha técnica',()=>{
+ const text='Item 0 - Produto 9.99.999999-ITEM FICTICIO: Produto n�o permitido para o tipo de movimento.\nConfira o cadastro.\n=====\nat RM.Fixture';
+ const resumo=resumirMensagemNegocioRm(text);
+ assert.ok(resumo.includes('9.99.999999'));assert.ok(resumo.includes('Produto n�o permitido'));assert.ok(resumo.includes('Confira o cadastro.'));
+ assert.ok(!resumo.includes('at RM.'));
  assert.equal(resumirMensagemNegocioRm(' \n\tSérie\tinválida.&#xD;at RM.Fixture'),'Série inválida.');
- assert.equal(resumirMensagemNegocioRm('Série inválida.&#13;at RM.Fixture'),'Série inválida.');
 });
-
-test('mensagem com email, CPF, CNPJ, conta, agência ou PIX é descartada antes de ser exibida',()=>{
- for(const linha of ['Série inválida para private@example.test.', 'Documento 123.456.789-09 inválido.',
-  'Documento 12.345.678/0001-90 inválido.', 'Documento 12345678909 inválido.',
-  'Série inválida para conta 1234-5.', 'Série inválida agência 1234.',
-  'Série inválida chave PIX privada.', 'Conta bancária indisponível.',
-  'Série inválida CNPJ oculto.', 'Documento 123 456 789 inválido.']){
-  assert.equal(resumirMensagemNegocioRm(linha),undefined,linha);
- }
+test('mensagem nativa redige dados sensíveis sem descartar o motivo',()=>{
+ const text='Produto 12345678901 não permitido. Email private@example.test; CPF: 12345678909; conta: 1234-5; senha: privatePassword';
+ const resumo=resumirMensagemNegocioRm(text);
+ assert.ok(resumo.includes('Produto 12345678901 não permitido.'));
+ for(const privateValue of ['private@example.test','12345678909','1234-5','privatePassword'])assert.ok(!resumo.includes(privateValue));
 });
-
-test('mensagem técnica, estrutura, headers, credenciais, SQL, URL e tokens não são refletidos',()=>{
- for(const linha of ['<erro>Série inválida.</erro>', '{"message":"Série inválida."}', '[Série inválida.]', '"Série inválida."',
-  'Série inválida <script>alert(1)</script>', 'Série inválida &lt;secret&gt;',
-  'Authorization: Bearer privateToken Serie inválida.', 'Série inválida. Senha: privada.',
-  'Série inválida cookie privado.', 'Série inválida client secret privado.',
-  'Campo Content-Type: text/plain inválido.', 'Campo X-Trace: private inválido.',
-  'Série inválida. SELECT CODNAT FROM DNATUREZA.', 'System.Data.SqlClient.SqlException: Série inválida.',
-  'Série inválida FOREIGN KEY FK_PRIVATE.', 'Série inválida http://private.invalid/credentials',
-  'Série inválida www.private.test', 'Série inválida private.internal', 'Série inválida private.example', 'Série inválida 10.0.0.1',
-  'Série inválida C:/private/credentials', 'Série inválida C:\\private\\credentials',
-  'Série inválida U0VDUkVUX0tFWV9QUklWQVRF', 'Série inválida U0VDUkVU', 'Série inválida c2VjcmV0',
-  'Série inválida eyJhbGciOiJIUzI1NiJ9.private.signature',
-  'Série inválida abcdef0123456789abcdef0123456789', 'Série inválida abcdefabcdefabcdef', 'Série inválida Bearer_PRIVATE_TOKEN',
-  'Série inválida.\u202Eprivate', 'Série inválida.\u0000private', 'Série inválida.\u200Btoken']){
-  assert.equal(resumirMensagemNegocioRm(linha),undefined,linha);
- }
- for(const valor of ['', '   ', 'PRIVATE_NATIVE_RESPONSE', '1;9001', 'at RM.Fixture.SaveRecord', null, undefined, {}]){
-  assert.equal(resumirMensagemNegocioRm(valor),undefined);
- }
+test('diagnóstico técnico SQL e texto desconhecido permanecem legíveis sem refletir datasets ou objetos locais',()=>{
+ for(const text of ['Série inválida. SELECT CODNAT FROM DNATUREZA.','System.Data.SqlClient.SqlException: Campo inválido.',
+  'Campo FOREIGN KEY FK_FIXTURE incompatível.','Mensagem desconhecida do servidor.','1;9001'])assert.equal(resumirMensagemNegocioRm(text),text);
+ for(const value of ['', '   ', '<DataSet><TMOV><NOME>PRIVATE</NOME></TMOV></DataSet>', null, undefined, {}])assert.equal(resumirMensagemNegocioRm(value),undefined);
 });
-
-test('truncamento respeita300 caracteres e não oculta dados sensíveis depois do limite',()=>{
- const longa='Série inválida para o documento. '+ 'Revise os parâmetros fiscais da operação. '.repeat(12);
- const resumo=resumirMensagemNegocioRm(longa);
- assert.ok(resumo.length<=300);assert.ok(resumo.endsWith('…'));assert.ok(longa.startsWith(resumo.slice(0,-1)));
- assert.equal(resumirMensagemNegocioRm(longa+' Email private@example.test'),undefined);
- assert.equal(resumirMensagemNegocioRm(longa+' Senha privada'),undefined);
- assert.equal(resumirMensagemNegocioRm('Série inválida. '.repeat(10000)),undefined);
+test('mensagens longas conservam o motivo com limite explícito e redação antes do truncamento',()=>{
+ const longa='Série inválida para o documento. '+ 'Revise os parâmetros fiscais da operação. '.repeat(120);
+ const resumo=resumirMensagemNegocioRm(longa+' Senha: privatePassword');
+ assert.ok(resumo.length<=4021);assert.ok(resumo.includes('Série inválida'));assert.ok(!resumo.includes('privatePassword'));
 });
-
 test('mensagem de apresentação não altera o contrato nem persiste texto no diagnóstico',()=>{
  const raw='Série não cadastrada.\n=====\nat RM.Fixture.SaveRecord';
  const antes=diagnosticarRetornoRm(raw);

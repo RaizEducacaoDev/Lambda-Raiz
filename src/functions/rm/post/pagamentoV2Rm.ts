@@ -5,6 +5,7 @@ import type { ChaveContextoFiscal } from './pagamentoFiscal';
 import { tiposDocumentoPagamento, type ChaveDocumento } from './pagamentoDocumento';
 import { parsearReconciliacaoPagamento } from './pagamentoReconciliacao';
 import { parsearCensoRetomada, type CensoRetomada } from './pagamentoRetomada';
+import { ErroNativoRm, erroHttpRm, extrairTextoErroRm } from './pagamentoErroNativo';
 
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: true });
 type Registro = Record<string, string>;
@@ -21,18 +22,28 @@ export class PrazoPagamentoInsuficiente extends Error {
 
 const analisar = (xml: string): Record<string, unknown> => {
   if (typeof xml !== 'string' || /<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) {
+    if (typeof xml === 'string' && extrairTextoErroRm(xml)) throw new ErroNativoRm(xml, 'RESPOSTA_TOTVS_INVALIDA');
     throw new FalhaContratoRm('XML RM inválido');
   }
-  return parser.parse(xml);
+  const documento = parser.parse(xml) as Record<string, unknown>;
+  for (const chave of ['Fault', 'Error', 'error', 'Erro', 'erro']) {
+    if (documento[chave] && extrairTextoErroRm(documento[chave])) throw new ErroNativoRm(documento[chave], 'RESPOSTA_TOTVS_INVALIDA');
+  }
+  return documento;
 };
 
 export const lerResultadoSoap = (xml: string, operacao: 'ReadRecord' | 'SaveRecord'): string => {
   const envelope = analisar(xml).Envelope as Record<string, unknown> | undefined;
   const body = envelope?.Body as Record<string, unknown> | undefined;
-  if (!body || body.Fault) throw new FalhaContratoRm('SOAP RM inválido ou Fault');
+  if (body?.Fault) throw new ErroNativoRm(body.Fault, 'RM_SOAP_FAULT');
+  if (!body) throw new FalhaContratoRm('SOAP RM inválido ou Fault');
   const resposta = body[`${operacao}Response`] as Record<string, unknown> | undefined;
   const resultado = resposta?.[`${operacao}Result`];
-  if (typeof resultado !== 'string' || !resultado.trim()) throw new FalhaContratoRm('Resultado SOAP RM ausente ou ambíguo');
+  if (typeof resultado !== 'string' || !resultado.trim()) {
+    const texto = extrairTextoErroRm(resposta) || extrairTextoErroRm(body);
+    if (texto) throw new ErroNativoRm(texto, 'RESPOSTA_TOTVS_INVALIDA');
+    throw new FalhaContratoRm('Resultado SOAP RM ausente ou ambíguo');
+  }
   return resultado.trim();
 };
 
@@ -95,15 +106,18 @@ export class PrazoPagamento {
 export class TransportePagamentoV2 implements TransporteRm {
   private readonly config = new wsDataserver();
   constructor(private readonly prazo: PrazoPagamento) {}
+  private async receber<T>(enviar: () => Promise<T>): Promise<T> {
+    try { return await enviar(); } catch (erro) { throw erroHttpRm(erro) || erro; }
+  }
   private async executar(operacao: 'ReadRecord' | 'SaveRecord', valor: string, servidor: string, contexto: string): Promise<string> {
     const timeout = operacao === 'SaveRecord' && servidor === 'MovMovimentoTBCData'
       ? this.prazo.timeoutCriacao() : this.prazo.timeout();
     const campo = operacao === 'ReadRecord' ? 'PrimaryKey' : 'XML';
     const xml = `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><${operacao} xmlns="http://www.totvs.com/"><DataServerName>${servidor}</DataServerName><${campo}>${valor}</${campo}><Contexto>${contexto}</Contexto></${operacao}></s:Body></s:Envelope>`;
-    const resposta = await axios.post(`${this.config.getUrl()}:8051/wsDataServer/IwsDataServer`, xml, {
+    const resposta = await this.receber(() => axios.post(`${this.config.getUrl()}:8051/wsDataServer/IwsDataServer`, xml, {
       timeout, signal: AbortSignal.timeout(timeout),
       headers: { Authorization: `Basic ${this.config.getCredentials()}`, 'Content-Type': 'text/xml;charset=UTF-8', SOAPAction: `http://www.totvs.com/IwsDataServer/${operacao}` },
-    });
+    }));
     return lerResultadoSoap(resposta.data, operacao);
   }
   readReacord(chave: string, servidor: string, contexto: string) { return this.executar('ReadRecord', chave, servidor, contexto); }
@@ -114,17 +128,17 @@ export class TransportePagamentoV2 implements TransporteRm {
     }
     const timeout = this.prazo.timeout();
     const parametros = new URLSearchParams({ parameters: `CODCOLIGADA=${coligada};TICKET=${ticket}` });
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RECON/0/T?${parametros}`, {
+    const resposta = await this.receber(() => axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RECON/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
-    });
+    }));
     return parsearReconciliacaoPagamento(resposta.data, coligada, ticket, codTmv).filter(m => m.CODTMV === codTmv).map(m => m.IDMOV);
   }
   async buscarEstoque(coligada: string, filial: string): Promise<string> {
     const timeout = this.prazo.timeout();
     const parametros = `CODCOLIGADA=${encodeURIComponent(coligada)};CODFILIAL=${encodeURIComponent(filial)}`;
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0041/0/T?parameters=${parametros}`, {
+    const resposta = await this.receber(() => axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/TICKET.RAIZ.0041/0/T?parameters=${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
-    });
+    }));
     if (!Array.isArray(resposta.data) || resposta.data.length !== 1 || !resposta.data[0]?.CODLOC) {
       throw new Error('Consulta de estoque inválida ou ambígua');
     }
@@ -136,9 +150,9 @@ export class TransportePagamentoV2 implements TransporteRm {
     }
     const timeout = this.prazo.timeout();
     const parametros = new URLSearchParams({ parameters: `CODCOLIGADA=${coligada};TICKET=${ticket}` });
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RETRY/0/T?${parametros}`, {
+    const resposta = await this.receber(() => axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.RETRY/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
-    });
+    }));
     return parsearCensoRetomada(resposta.data, coligada, ticket);
   }
   async consultarContextoFiscal(chave: ChaveContextoFiscal): Promise<unknown> {
@@ -150,9 +164,9 @@ export class TransportePagamentoV2 implements TransporteRm {
       ['CODCOLIGADA', chave.codColigada], ['CODFILIAL', chave.codFilial], ['CODCOLCFO', chave.codColCfo],
       ['CODCFO', chave.codCfo], ['IDNAT', chave.idNat],
     ].map(([nome, valor]) => `${nome}=${valor}`).join(';') });
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.FISC/0/T?${parametros}`, {
+    const resposta = await this.receber(() => axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.FISC/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
-    });
+    }));
     return resposta.data;
   }
   async consultarDocumento(chave: ChaveDocumento): Promise<unknown> {
@@ -167,9 +181,9 @@ export class TransportePagamentoV2 implements TransporteRm {
       ['CODCOLIGADA', chave.codColigada], ['CODFILIAL', chave.codFilial], ['CODCOLCFO', chave.codColCfo],
       ['CODCFO', chave.codCfo], ['CODTMV', chave.codTmv], ['NUMERO', chave.numero], ['SERIE', chave.serie || '~'],
     ].map(([nome, valor]) => `${nome}=${valor}`).join(';') });
-    const resposta = await axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.DOC2/0/T?${parametros}`, {
+    const resposta = await this.receber(() => axios.get(`${this.config.getUrl()}:8051/api/framework/v1/consultaSQLServer/RealizaConsulta/RAIZ.PG.DOC2/0/T?${parametros}`, {
       timeout, signal: AbortSignal.timeout(timeout), headers: { Authorization: `Basic ${this.config.getCredentials()}`, Accept: 'application/json' },
-    });
+    }));
     return resposta.data;
   }
 }

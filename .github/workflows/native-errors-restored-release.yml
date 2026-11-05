@@ -1,0 +1,69 @@
+name: Restore native TOTVS error messages and readable diagnostics
+on:
+  push:
+    branches: [fix/payment-native-errors-restored-20261105]
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    if: ${{ false }} # One-off publication completed and independently verified.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 -m unittest discover -s tests -p test_native_errors_restored_release.py
+      - run: python3 -m unittest discover -s tests -p test_payment_contract_release.py
+      - run: python3 scripts/release-native-errors-restored.py prepare
+      - name: Publish reviewed native diagnostic restoration
+        if: ${{ contains(github.event.head_commit.message, '[publish-native-errors-restored]') && github.run_attempt == 1 }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-errors-restored.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-errors-restored-publication
+          path: .native-errors-restored-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    needs: release
+    if: ${{ false }} # Archived after independent readback; never republish automatically.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-errors-restored-publication
+          path: .release-evidence
+      - name: Independently verify active package and preserved configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-errors-restored.py readback --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-errors-restored-independent-readback
+          path: .native-errors-restored-release/
+          include-hidden-files: true
+          retention-days: 14

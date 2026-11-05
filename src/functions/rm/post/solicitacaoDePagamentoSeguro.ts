@@ -11,6 +11,7 @@ import { prepararEvidencia } from './pagamentoEvidencia';
 import { baselineParcela, hashSnapshot, lerContinuacao, type BaselineParcela } from './pagamentoContinuacao';
 import { consultarPagamentoExistente } from './pagamentoExistente';
 import { respostaErroPagamento, type EtapaPagamento } from './pagamentoResposta';
+import { ErroNativoRm } from './pagamentoErroNativo';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, validarFilialBancaria, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -221,7 +222,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
                 console.warn('[RM-IDPGTO] Encerramento da rejeição não confirmado', { ticket, coligada });
               }
             }
-            throw new Error('RM retornou diagnóstico sem chave de movimento');
+            throw new ErroNativoRm(retorno, diagnosticoCriacao.reasonCode,
+              diagnosticoCriacao.category === 'rm_rejection_or_diagnostic' ? 400 : 503);
           }
           chaveRmRecebida = match[2];
           movimentoConfirmado = chaveRmRecebida;
@@ -361,7 +363,11 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         opLan = await repo.avancar(opLan, 'UPDATING');
         if (propria) await repo.conferirEnvioProprio(op, idLan);
         const result = await rm.saveRecord(xmlLancamento(coligada, idLan, esperado), 'FinLanDataBR', contextoF);
-        if (result.trim() !== `${coligada};${idLan}`) throw new Error('Resultado da associação bancária incerto');
+        if (result.trim() !== `${coligada};${idLan}`) {
+          const diagnostico = diagnosticarRetornoRm(result);
+          throw new ErroNativoRm(result, diagnostico.reasonCode,
+            diagnostico.category === 'rm_rejection_or_diagnostic' ? 400 : 503);
+        }
         const depois = await ler(true);
         if (!completo(depois)) throw new ConflitoPagamento('IDPGTO/dados bancários não persistidos no lançamento');
         gravou = true;
@@ -390,8 +396,12 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     const resposta = respostaErroPagamento({ erro, etapa, pgConfirmado: movimentoConfirmado,
       criacaoIncerta: op?.state === 'CREATING' || etapaCriacao === 'checkpoint_creating',
       diagnostico: diagnosticoCriacao, mensagemNativa });
-    // Only fixed diagnostic codes and confirmed effects reach the log. Never
-    // serialize Axios/SOAP exceptions, credentials, payloads or native raw text.
+    if (erro instanceof ErroNativoRm && erro.diagnosticoNativo) {
+      console.warn('[RM-WARN] Retorno do TOTVS', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
+        etapa, codigo: erro.codigo, retorno: erro.diagnosticoNativo });
+    }
+    // Keep correlation/effects as well as the redacted native diagnostic above.
+    // Never serialize Axios exceptions, config, headers or financial payloads.
     console.warn('[RM-IDPGTO] Integração pendente', { ticket: idPositivo(texto(entrada?.ticketRaiz)) ? texto(entrada.ticketRaiz) : undefined,
       status: resposta.status, state: op?.state, pg: movimentoConfirmado, errorType: tipoErroSeguro(erro),
       creationStage: etapaCriacao, receivedPg: chaveRmRecebida, ...resposta.log });

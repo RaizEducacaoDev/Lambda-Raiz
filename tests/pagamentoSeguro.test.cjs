@@ -70,7 +70,7 @@ async function setup(opts={}) {
       if(!opts.noEffect)lans.set(row.IDLAN,{...lans.get(row.IDLAN),...row,...opts.nativeBankSideEffect});
       if(opts.afterFirstUpdate && count.update===1)remaining=7000;
       if(opts.updateError)throw Error('timeout after commit');
-      return `8;${row.IDLAN}`;
+      return opts.updateResult || `8;${row.IDLAN}`;
     }
   };
   const create=async(c,transport)=>{
@@ -248,10 +248,10 @@ test('data de entrada omitida preserva default nativo após consulta do ticket',
 });
 
 test('rejeição RM encerra a tentativa e permite corrigir e enviar novamente imediatamente',async()=>{
- const raw='Já Existe Nota do Emitente com este Número e Série. CPF_PRIVATE private@example.test\n=====\nat RM.Fixture';
- const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,400);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
+ const raw='Já Existe Nota do Emitente com este Número e Série. CPF: 12345678909 private@example.test\n=====\nat RM.Fixture';
+ const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,400);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/Já Existe Nota do Emitente/);
  const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,2);assert.equal(evidence.find(r=>r.evidence.phase==='native_result').evidence.diagnostic.reasonCode,'RM_DUPLICATE_RECORD');
- const output=JSON.stringify([result,evidence]);assert.equal(output.includes('CPF_PRIVATE'),false);assert.equal(output.includes('private@example.test'),false);
+ const output=JSON.stringify([result,evidence]);assert.equal(output.includes('12345678909'),false);assert.equal(output.includes('private@example.test'),false);
  const root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(root.state,'RESERVED');assert.ok(root.lockUntil<Date.now());
  x.setFiscal({createResult:'8;9001'});
  assert.equal((await x.run({numeroDaNF:'9003002',dataDeEntrada:'2026-10-28'})).statusCode,200);
@@ -621,28 +621,38 @@ test('erros do legado injetado registram etapa e classe sem expor Axios config, 
   assert.ok(output.includes('ERR_CANCELED'));assert.equal(output.includes(secret),false);
   assert.equal(output.includes('Authorization'),false);assert.equal((await x.all())[0].state,'CREATING');
 });
-test('retorno RM sem chave registra somente categoria e tamanho e permite nova tentativa',async()=>{
-  const secret='SYNTHETIC_RM_DIAGNOSTIC_MUST_NOT_APPEAR';
-  const x=await setup({realLegacy:true,createResult:`Business rejection ${secret} ===== at RM.Fixture`});
+test('retorno RM sem chave mantém diagnóstico nativo sanitizado sem liberar rejeição desconhecida',async()=>{
+  const secret='privatePasswordFixture';
+  const x=await setup({realLegacy:true,createResult:`Item fictício não permitido. Senha: ${secret}\n=====\nat RM.Fixture`});
   const logs=[],original={info:console.info,warn:console.warn,error:console.error};
   try {
     for(const level of Object.keys(original))console[level]=(...args)=>logs.push(args);
-    assert.equal((await x.run()).statusCode,503);
+    const r=await x.run();assert.equal(r.statusCode,400);assert.match(parse(r).message,/Item fictício não permitido/);
   } finally {Object.assign(console,original);}
-  const output=JSON.stringify(logs);assert.ok(output.includes('rm_rejection_or_diagnostic'));assert.ok(output.includes('length'));
+  const output=JSON.stringify(logs);assert.ok(output.includes('rm_rejection_or_diagnostic'));assert.ok(output.includes('length'));assert.ok(output.includes('Retorno do TOTVS'));assert.ok(output.includes('Item fictício não permitido'));
   assert.equal(output.includes(secret),false);assert.equal((await x.all())[0].state,'CREATING');
-  await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);assert.equal(x.count.update,0);
+  await x.expire();assert.equal((await x.run()).statusCode,400);assert.equal(x.count.create,2);assert.equal(x.count.update,0);
 });
 test('rejeição1586multilinha registra motivo sem dados sensíveis e permite nova tentativa',async()=>{
-  const raw='Campo CODTRB não foi informado.\r\nprivate@example.test CPF12345678909 contaACCOUNT_PRIVATE\r\n=====\r\nat RM.Fixture'.padEnd(1586,'x');
+  const raw='Campo CODTRB não foi informado.\r\nprivate@example.test CPF:12345678909 conta:1234-5\r\n=====\r\nat RM.Fixture'.padEnd(1586,'x');
   const x=await setup({realLegacy:true,createResult:raw});
   const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,400);
   const diagnostic=logs.find(l=>l[0]==='[RM-IDPGTO] Retorno de criação sem chave confirmada')[1];
   assert.equal(diagnostic.reasonCode,'RM_REQUIRED_FIELD');assert.equal(diagnostic.length,1586);
   assert.equal(diagnostic.responseSha256,require('node:crypto').createHash('sha256').update(raw).digest('hex'));
-  const serialized=JSON.stringify(logs);for(const value of ['private@example.test','CPF12345678909','ACCOUNT_PRIVATE',raw])assert.equal(serialized.includes(value),false);
+  const serialized=JSON.stringify(logs);for(const value of ['private@example.test','12345678909','1234-5',raw])assert.equal(serialized.includes(value),false);
   assert.equal((await x.all())[0].state,'RESERVED');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
   assert.equal((await x.run()).statusCode,400);assert.equal(x.count.create,2);
+});
+test('rejeição bancária preserva texto do TOTVS no retorno e log e não confirma ou repete a escrita',async()=>{
+ const text='A filial do lançamento difere da filial do cadastro bancário.\n=====\nat RM.Fixture';
+ const x=await setup({noEffect:true,updateResult:text});
+ const {result,logs}=await capturarLogs(()=>x.run());
+ assert.equal(result.statusCode,400);assert.equal(parse(result).PG,'9001');assert.match(parse(result).message,/filial do lançamento difere/);
+ assert.ok(logs.some(r=>r[0]==='[RM-WARN] Retorno do TOTVS' && r[1].retorno.includes('filial do lançamento difere')));
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+ const before=await x.rawAll();assert.ok(before.some(r=>r.state==='UPDATING'));assert.ok(!before.some(r=>r.state==='COMPLETE'));
+ assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
 });
 test('chave recebida fica distinguível de checkpoint perdido; nova tentativa consulta o RM',async()=>{
   const x=await setup({realLegacy:true});
