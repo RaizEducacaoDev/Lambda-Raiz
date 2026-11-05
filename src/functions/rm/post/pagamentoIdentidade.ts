@@ -5,34 +5,48 @@ import { ChaveDadoPagamento, idPositivo, obterDadosBoleto, texto } from './solic
 export type CamposPagamento = Record<string, any>;
 export class PagamentoInvalido extends Error {}
 export const normalizar = (v: unknown) => texto(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-const inteiro = (v: unknown, zero = false): string => {
+const inteiro = (v: unknown, campo: string, zero = false): string => {
   if (!/^\d+$/.test(texto(v)) || !Number.isSafeInteger(Number(v)) || Number(v) < (zero ? 0 : 1)) {
-    throw new PagamentoInvalido('Identificador bancário ou de destino ausente/inválido');
+    throw new PagamentoInvalido(`O campo ${campo} deve conter um identificador inteiro ${zero ? 'maior ou igual a zero' : 'maior que zero'}.`);
   }
   return String(Number(v));
 };
 
 export function identidadePagamento(c: CamposPagamento): ChaveDadoPagamento {
   const fornecedor = texto(c.codigoDoFornecedor);
-  if (!/^[A-Za-z0-9._-]+$/.test(fornecedor)) throw new PagamentoInvalido('Fornecedor ausente/inválido');
-  const destino = inteiro(c.codigoDaColigada2 || c.codigoDaColigada);
-  const ids: string[] = [], coligadas: string[] = [], fornecedores: string[] = [], colCfos: string[] = [];
+  if (!/^[A-Za-z0-9._-]+$/.test(fornecedor)) throw new PagamentoInvalido('O campo codigoDoFornecedor está ausente ou contém um código de fornecedor inválido.');
+  const campoDestino = c.codigoDaColigada2 ? 'codigoDaColigada2' : 'codigoDaColigada';
+  const destino = inteiro(c.codigoDaColigada2 || c.codigoDaColigada, campoDestino);
+  type Alias = { campo: string; valor: string };
+  const ids: Alias[] = [], coligadas: Alias[] = [], fornecedores: Alias[] = [], colCfos: Alias[] = [];
   for (const nome of ['idpgto', 'idPgto', 'IDPGTO', 'idPagamento', 'idpagamento']) {
     const valor = texto(c[nome]);
     if (!valor) continue;
     if (valor.includes('$_$')) {
       const partes = valor.split('$_$');
-      if (partes.length !== 4) throw new PagamentoInvalido('Chave composta bancária inválida');
-      coligadas.push(inteiro(partes[0])); colCfos.push(inteiro(partes[1], true));
-      fornecedores.push(partes[2]); ids.push(inteiro(partes[3]));
-    } else ids.push(inteiro(valor));
+      if (partes.length !== 4) throw new PagamentoInvalido(`O campo ${nome} não contém uma chave bancária completa. Consulte ou selecione novamente o dado bancário.`);
+      coligadas.push({ campo: `${nome}.CODCOLPGTO`, valor: inteiro(partes[0], `${nome}.CODCOLPGTO`) });
+      colCfos.push({ campo: `${nome}.CODCOLCFO`, valor: inteiro(partes[1], `${nome}.CODCOLCFO`, true) });
+      fornecedores.push({ campo: `${nome}.CODCFO`, valor: partes[2] });
+      ids.push({ campo: `${nome}.IDPGTO`, valor: inteiro(partes[3], `${nome}.IDPGTO`) });
+    } else ids.push({ campo: nome, valor: inteiro(valor, nome) });
   }
-  for (const n of ['CODCOLPGTO', 'codcolpgto', 'codColPgto']) if (texto(c[n])) coligadas.push(inteiro(c[n]));
-  for (const n of ['CODCOLCFO', 'codcolcfo', 'codColCfo']) if (texto(c[n])) colCfos.push(inteiro(c[n], true));
-  if (!ids.length || !coligadas.length) throw new PagamentoInvalido('IDPGTO e CODCOLPGTO são obrigatórios antes de criar o movimento');
-  if (new Set(ids).size !== 1 || coligadas.some(v => v !== destino) || new Set(colCfos).size > 1 ||
-      fornecedores.some(v => v !== fornecedor)) throw new PagamentoInvalido('Aliases/chave bancária divergem do fornecedor ou destino');
-  return { idPgto: Number(ids[0]), codColPgto: destino, codColCfo: colCfos[0] || '0', codCfo: fornecedor };
+  for (const n of ['CODCOLPGTO', 'codcolpgto', 'codColPgto']) if (texto(c[n])) coligadas.push({ campo: n, valor: inteiro(c[n], n) });
+  for (const n of ['CODCOLCFO', 'codcolcfo', 'codColCfo']) if (texto(c[n])) colCfos.push({ campo: n, valor: inteiro(c[n], n, true) });
+  if (!ids.length) throw new PagamentoInvalido('Nenhum IDPGTO foi informado. Consulte ou selecione o dado bancário antes de criar o movimento.');
+  const idDivergente = ids.find(alias => alias.valor !== ids[0].valor);
+  if (idDivergente) throw new PagamentoInvalido(`Os campos ${ids[0].campo} e ${idDivergente.campo} indicam dados bancários diferentes. Consulte ou selecione novamente o dado bancário.`);
+  const coligadaDivergente = coligadas.find(alias => alias.valor !== destino);
+  if (coligadaDivergente) throw new PagamentoInvalido(`A coligada bancária informada em ${coligadaDivergente.campo} difere da coligada da solicitação (${campoDestino}). Selecione um dado bancário da coligada correta.`);
+  const colCfoDivergente = colCfos.find(alias => alias.valor !== colCfos[0].valor);
+  if (colCfoDivergente) throw new PagamentoInvalido(`Os campos ${colCfos[0].campo} e ${colCfoDivergente.campo} indicam coligadas de fornecedor diferentes. Consulte ou selecione novamente o dado bancário.`);
+  const fornecedorDivergente = fornecedores.find(alias => alias.valor !== fornecedor);
+  if (fornecedorDivergente) throw new PagamentoInvalido(`O fornecedor informado em ${fornecedorDivergente.campo} difere de codigoDoFornecedor. Consulte ou selecione novamente o dado bancário para o fornecedor correto.`);
+  // Legacy payloads can carry a numeric ID without CODCOLPGTO. The integration
+  // already requires the bank record to belong to the destination company, so
+  // use that context only when no alias or composite key supplied another one.
+  // The caller still reads and validates this exact ID/company/supplier in RM.
+  return { idPgto: Number(ids[0].valor), codColPgto: coligadas[0]?.valor || destino, codColCfo: colCfos[0]?.valor || '0', codCfo: fornecedor };
 }
 
 export function codigoMovimento(c: CamposPagamento): string {

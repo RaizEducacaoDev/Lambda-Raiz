@@ -1,0 +1,103 @@
+name: Verify and publish scoped payment contract correction
+on:
+  push:
+    branches: [fix/payment-contract-incident-20261105]
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: false # Publication and independent verification completed in run 42082729887.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 -m unittest discover -s tests -p test_payment_contract_release.py
+      - run: python3 scripts/release-payment-contract-incident.py prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payment-contract-reviewed-bundles
+          path: |
+            .build/contract-before.cjs
+            .build/contract-after.cjs
+          include-hidden-files: true
+          retention-days: 3
+  release:
+    needs: verify
+    if: false # One-off production publication archived after successful verification.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payment-contract-reviewed-bundles
+          path: .build
+      - name: Publish only the verified production entrypoint
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-contract-incident.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-contract-release
+          path: .payment-contract-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    if: false # Completed with five-minute readback in run 42082729887.
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payment-contract-release
+          path: .release-evidence
+      - name: Independently read back the active package and configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-contract-incident.py readback --evidence .release-evidence
+      - name: Observe errors after five minutes and read back again
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-contract-incident.py monitor --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-contract-independent-readback
+          path: .payment-contract-release/
+          include-hidden-files: true
+          retention-days: 14

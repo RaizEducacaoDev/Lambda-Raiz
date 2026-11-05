@@ -29,17 +29,27 @@ export interface RepositorioPagamento {
   avancarParcelaPropria(operacao: OperacaoPagamento, idLan: string, estado: 'UPDATING' | 'COMPLETE'): Promise<OperacaoPagamento>;
   conferirEnvioProprio(operacao: OperacaoPagamento, idLan: string): Promise<void>;
 }
-export class ConflitoPagamento extends Error {}
+export class ConflitoPagamento extends Error {
+  constructor(mensagem: string, readonly reason?: 'DADOS_SOLICITACAO_ALTERADOS' | 'MOVIMENTO_RESERVA_DIVERGENTE') {
+    super(mensagem);
+  }
+}
 
-const conferirReserva = (op: OperacaoPagamento, digest: string, pg: string | undefined): void => {
-  if ((op.digest !== digest || (pg && pg !== op.pg)) && !Object.prototype.hasOwnProperty.call(op, 'pg') &&
-      ['RESERVED', 'CREATING'].includes(op.state) && op.lockUntil > Date.now()) {
+function conferirIdentidadeReserva(existente: OperacaoPagamento, digest: string, pg: string | undefined): void {
+  if ((existente.digest !== digest || (pg && pg !== existente.pg)) && !Object.prototype.hasOwnProperty.call(existente, 'pg') &&
+      ['RESERVED', 'CREATING'].includes(existente.state) && existente.lockUntil > Date.now()) {
     throw new ConflitoPagamento('O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente; os dados corrigidos do formulário serão considerados.');
   }
-  if (op.digest !== digest || (pg && pg !== op.pg)) {
-    throw new ConflitoPagamento('O ticket já possui uma tentativa com movimento identificado no TOTVS. Os dados atuais precisam corresponder ao movimento existente para concluir o pagamento.');
+  if (existente.digest !== digest) {
+    throw new ConflitoPagamento('Os dados enviados pelo Zeev mudaram em relação à tentativa anterior deste ticket. Confira os dados corrigidos e a tentativa anterior antes de prosseguir.', 'DADOS_SOLICITACAO_ALTERADOS');
   }
-};
+  if (pg && pg !== existente.pg) {
+    throw new ConflitoPagamento(existente.pg
+      ? 'O movimento recebido do Zeev difere do movimento registrado na tentativa anterior. Confira o campo Movimento do formulário.'
+      : 'O Zeev enviou um movimento, mas a tentativa anterior deste ticket não confirmou nenhum movimento. Confira o campo Movimento do formulário.',
+    'MOVIMENTO_RESERVA_DIVERGENTE');
+  }
+}
 
 const raizPagamento = (pk: unknown): pk is string => typeof pk === 'string' && /^[^#]+#PG#[1-9]\d*#[1-9]\d*$/.test(pk);
 const digestValido = (digest: unknown): digest is string => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest);
@@ -265,7 +275,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    conferirReserva(existente, digest, pg);
+    conferirIdentidadeReserva(existente, digest, pg);
     if (!['CREATED', 'UPDATING', 'COMPLETE'].includes(existente.state)) return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg) || !Number.isSafeInteger(Number(existente.pg))) {
       throw new ConflitoPagamento('Reserva sem movimento durável válido; reconciliar');
@@ -277,7 +287,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    conferirReserva(existente, digest, pg);
+    conferirIdentidadeReserva(existente, digest, pg);
     if (existente.state !== 'COMPLETE') return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) {
       throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
@@ -298,8 +308,8 @@ export class DynamoPagamento implements RepositorioPagamento {
     const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
-    if (!existente) throw new ConflitoPagamento('Não foi possível confirmar o envio anterior. Aguarde alguns instantes e envie novamente.');
-    conferirReserva(existente, digest, pg);
+    if (!existente) throw new ConflitoPagamento('A tentativa anterior não foi encontrada na releitura do controle de pagamento. A criação não será repetida sem confirmar esse controle.');
+    conferirIdentidadeReserva(existente, digest, pg);
     if (existente.state === 'COMPLETE') {
       if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
       return existente;

@@ -47,4 +47,5 @@ backup/
 
 undefined
 .native-fiscal-diagnostic-release/
+.payment-contract-release/
 .ticket225136-execution/

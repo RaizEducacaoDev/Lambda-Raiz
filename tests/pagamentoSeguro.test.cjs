@@ -483,11 +483,33 @@ test('leitura do movimento durável não renova lease nem libera retomada com ow
 test('digest ou PG divergente na leitura consistente não permite bypass fiscal ou nova criação',async()=>{
   const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);await x.expire();
   const before=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));
-  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,'other-digest',undefined),/dados atuais precisam corresponder/i);
-  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,before.digest,'9009'),/dados atuais precisam corresponder/i);
+  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,'other-digest',undefined),e=>e.reason==='DADOS_SOLICITACAO_ALTERADOS');
+  await assert.rejects(()=>x.repo.movimentoConhecido(before.pk,before.digest,'9009'),e=>e.reason==='MOVIMENTO_RESERVA_DIVERGENTE');
   x.setFiscal({fiscalError:true});assert.equal((await x.run({...fiscalFields,valorTotal:'101,00'})).statusCode,409);
   assert.equal(x.count.fiscal,1);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
   assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
+});
+
+test('movimento explícito de outro ticket é identificado antes de criar reserva ou financeiro',async()=>{
+  const x=await setup({compl:{TICKET:'96611'}});
+  const result=await x.run({idDoMovimento:'9001'});
+  assert.equal(result.statusCode,409);
+  assert.match(parse(result).message,/Movimento não pertence ao ticket\/fornecedor\/destino/);
+  assert.equal(parse(result).code,'OPERACAO_EM_CONFLITO');
+  assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+  assert.deepEqual(await x.all(),[]);
+});
+
+test('referência errada do formulário não altera uma tentativa anterior já existente',async()=>{
+  const x=await setup({timeAfterCreate:true});
+  await x.run();await x.expire();
+  const before=await x.rawAll();
+  x.setFiscal({compl:{TICKET:'96611'}});
+  const result=await x.run({idDoMovimento:'9001'});
+  assert.equal(result.statusCode,409);
+  assert.match(parse(result).message,/Movimento não pertence ao ticket\/fornecedor\/destino/);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.deepEqual(await x.rawAll(),before);
 });
 test('PG durável inválido bloqueia sem consultar fiscal e sem alterar a reserva',async()=>{
   const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});await x.run(fiscalFields);await x.expire();
