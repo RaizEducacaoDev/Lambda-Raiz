@@ -8,10 +8,10 @@ from pathlib import Path
 spec=importlib.util.spec_from_file_location('scoped',Path(__file__).with_name('release-payment-contract-incident.py'))
 r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
 r.m.OUT=Path('.diagnostic-226530-release')
-r.BASE_REF='a461014189395304d6e5dbb17a67323764e77699'
-r.BASE_SHA='6WqYDSPH1gAoYgzxtFOtWJtieNGivE660r4TegykP/w='
-r.BASE_BUNDLE_SHA='ZlDMRiERZPJRmb1g1hF9idJ39XFRuv52LM/g/Cp0AwU='
-r.BASE_REVISION='1b73895d-1b5c-4b1f-8d19-6f4d351bcac0'
+r.BASE_REF='5536bbd0f153da9e046a59e22929687984faa410'
+r.BASE_SHA='+FlZqBhw6zR970LfEVqNi8ViQwn8Q+POF07SR5hx5cI='
+r.BASE_BUNDLE_SHA='9Gjw5uBIHQQoHZZbPFTQi4yfT8HGbu/tvJ8Gyip+fFc='
+r.BASE_REVISION='827b9757-6d9c-4e97-81ba-72dcae0bbac2'
 r.SOURCES=['src/functions/rm/post/pagamentoDiagnosticoSeguro.ts','src/functions/rm/post/solicitacaoDePagamentoSeguro.ts']
 r.MODULE_COUNTS=dict(zip(r.SOURCES,[1,1]))
 

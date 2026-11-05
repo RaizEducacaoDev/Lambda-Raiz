@@ -9,9 +9,19 @@ import { parsearCensoRetomada, type CensoRetomada } from './pagamentoRetomada';
 const parser = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: true });
 type Registro = Record<string, string>;
 
+export class FalhaContratoRm extends Error {
+  readonly reason = 'RESPOSTA_RM_INVALIDA';
+}
+export class PrazoPagamentoInsuficiente extends Error {
+  readonly reason = 'PRAZO_INSUFICIENTE';
+  constructor(readonly necessarioMs: number, readonly disponivelMs: number, mensagem = 'Tempo insuficiente; operação mantida pendente') {
+    super(mensagem);
+  }
+}
+
 const analisar = (xml: string): Record<string, unknown> => {
   if (typeof xml !== 'string' || /<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) {
-    throw new Error('XML RM inválido');
+    throw new FalhaContratoRm('XML RM inválido');
   }
   return parser.parse(xml);
 };
@@ -19,10 +29,10 @@ const analisar = (xml: string): Record<string, unknown> => {
 export const lerResultadoSoap = (xml: string, operacao: 'ReadRecord' | 'SaveRecord'): string => {
   const envelope = analisar(xml).Envelope as Record<string, unknown> | undefined;
   const body = envelope?.Body as Record<string, unknown> | undefined;
-  if (!body || body.Fault) throw new Error('SOAP RM inválido ou Fault');
+  if (!body || body.Fault) throw new FalhaContratoRm('SOAP RM inválido ou Fault');
   const resposta = body[`${operacao}Response`] as Record<string, unknown> | undefined;
   const resultado = resposta?.[`${operacao}Result`];
-  if (typeof resultado !== 'string' || !resultado.trim()) throw new Error('Resultado SOAP RM ausente ou ambíguo');
+  if (typeof resultado !== 'string' || !resultado.trim()) throw new FalhaContratoRm('Resultado SOAP RM ausente ou ambíguo');
   return resultado.trim();
 };
 
@@ -30,21 +40,21 @@ export const lerResultadoSoap = (xml: string, operacao: 'ReadRecord' | 'SaveReco
 export const registrosRm = (xml: string, nome: string): Registro[] => {
   const documento = analisar(xml);
   const raizes = Object.keys(documento).filter(k => !k.startsWith('?'));
-  if (raizes.length !== 1) throw new Error('Dataset RM ambíguo');
+  if (raizes.length !== 1) throw new FalhaContratoRm('Dataset RM ambíguo');
   const raiz = documento[raizes[0]] as Record<string, unknown>;
-  if (!raiz || typeof raiz !== 'object' || Array.isArray(raiz)) throw new Error('Dataset RM inválido');
+  if (!raiz || typeof raiz !== 'object' || Array.isArray(raiz)) throw new FalhaContratoRm('Dataset RM inválido');
   const registros = raiz[nome];
   if (registros === undefined) return [];
   return (Array.isArray(registros) ? registros : [registros]).map(registro => {
     if (!registro || typeof registro !== 'object' || Object.values(registro).some(v => typeof v !== 'string')) {
-      throw new Error(`Registro ${nome} ambíguo ou com campo duplicado`);
+      throw new FalhaContratoRm(`Registro ${nome} ambíguo ou com campo duplicado`);
     }
     return registro as Registro;
   });
 };
 export const registroUnico = (xml: string, nome: string): Registro => {
   const registros = registrosRm(xml, nome);
-  if (registros.length !== 1) throw new Error(`Esperado exatamente um ${nome}`);
+  if (registros.length !== 1) throw new FalhaContratoRm(`Esperado exatamente um ${nome}`);
   return registros[0];
 };
 
@@ -67,14 +77,16 @@ export class PrazoPagamento {
   }
   disponivel(): number { return Math.min(this.restante(), this.fim - Date.now()); }
   exigir(ms: number): void {
-    if (this.disponivel() < ms) throw new Error('Tempo insuficiente; operação mantida pendente');
+    const disponivel = this.disponivel();
+    if (disponivel < ms) throw new PrazoPagamentoInsuficiente(ms, disponivel);
   }
   timeout(): number { this.exigir(4000); return Math.min(8000, this.disponivel() - 3000); }
   timeoutCriacao(margemCheckpoint = 0): number {
     // Preserve time to checkpoint IDMOV, associate the bank data and reread RM.
     // The extra pre-checkpoint margin covers the bounded DynamoDB request.
     const timeout = Math.min(15000, this.disponivel() - 12000 - margemCheckpoint);
-    if (timeout < 9000) throw new Error('Tempo insuficiente antes de enviar a criação ao RM; manter pendente sem criar');
+    if (timeout < 9000) throw new PrazoPagamentoInsuficiente(21000 + margemCheckpoint, this.disponivel(),
+      'Tempo insuficiente antes de enviar a criação ao RM; manter pendente sem criar');
     return timeout;
   }
 }

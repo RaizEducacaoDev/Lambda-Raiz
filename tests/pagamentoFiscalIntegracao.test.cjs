@@ -145,7 +145,7 @@ test('falha na leitura do PG conhecido permanece pendente sem nova criação nem
 test('a duplicidade é decidida pelo SaveRecord e sua mensagem de negócio é devolvida sem stack',async()=>{
  const mensagem='Já Existe Nota do Emitente com este Número e Série.';
  const x=setup({nativeResult:mensagem+'\r\n=====\r\nat RM.Fixture.SaveRecord'}),result=await x.run();
- assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');
+ assert.equal(result.statusCode,400);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');
  assert.ok(parse(result).message.includes(mensagem));assert.doesNotMatch(parse(result).message,/at RM|não autoriza nova criação/);
  assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.fiscal,1);noDuplicateReads(x,3);
  assert.equal([...x.records.values()][0].state,'RESERVED');
@@ -156,7 +156,7 @@ test('série de cadastro fica a cargo do RM sem selecionar série alternativa ne
  for(const serie of ['', '70000']){
   const fields={serie,idDaNaturezaFiscal:'',codigoDaNaturezaFiscal:''},mensagem='Série não cadastrada.';
   const x=setup({fields,nativeResult:mensagem+'\n=====\nat RM.Fixture.Validate'}),snapshot=JSON.stringify(x.fields);
-  const result=await x.run();assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_UNCLASSIFIED_REJECTION');
+  const result=await x.run();assert.equal(result.statusCode,400);assert.equal(parse(result).code,'RM_UNCLASSIFIED_REJECTION');
   assert.ok(parse(result).message.includes(mensagem));assert.equal(x.calls.createdInput.serie,serie);
   assert.equal(JSON.stringify(x.fields),snapshot);assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);noDuplicateReads(x);
  }
@@ -165,14 +165,14 @@ test('série de cadastro fica a cargo do RM sem selecionar série alternativa ne
 test('timeout do SaveRecord não dispara uma segunda chamada nem expõe dados da exceção',async()=>{
  const erro=Object.assign(Error('PRIVATE_NATIVE_PAYLOAD'),{name:'TimeoutError'});
  const x=setup({createError:erro}),result=await x.run();assert.equal(result.statusCode,503);
- assert.equal(parse(result).code,'CRIACAO_RM_NAO_CONFIRMADA');assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);
+ assert.equal(parse(result).code,'COMUNICACAO_NAO_CONFIRMADA');assert.equal(parse(result).efeito,'CRIACAO_NAO_CONFIRMADA');assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);
  assert.equal(JSON.stringify(result).includes('PRIVATE_NATIVE_PAYLOAD'),false);noDuplicateReads(x);
 });
 
 test('rejeição fiscal é decisão nativa e devolve motivo fixo sem número nem stack',async()=>{
  const raw='Movimento 000000018 - Série 1: Natureza inválida.&#xD;Possíveis causas: natureza interestadual em movimentação interna e vice-versa.\n=====\nat RM.Mov.Movimento.MovMovConsistencia.ConsisteIntegracaoFiscal';
  const x=setup({nativeResult:raw}),result=await x.run(),body=parse(result);
- assert.equal(result.statusCode,503);assert.equal(body.code,'RM_INVALID_FISCAL_NATURE');
+ assert.equal(result.statusCode,400);assert.equal(body.code,'RM_INVALID_FISCAL_NATURE');
  assert.match(body.message,/TOTVS rejeitou a natureza fiscal/);assert.match(body.message,/tarefa Fiscal/);
  assert.doesNotMatch(body.message,/000000018|ConsisteIntegracaoFiscal|não autoriza|2\.949\.01/);
  assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);noDuplicateReads(x,3);
