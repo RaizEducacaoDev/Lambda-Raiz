@@ -1,0 +1,49 @@
+name: Verify one existing payment acknowledgement 225374
+on:
+  push:
+    branches: [fix/reuse-existing-payment-20261104]
+    paths:
+      - .github/workflows/existing-payment-225374-smoke.yml
+      - scripts/smoke-existing-payment-225374.py
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: existing-payment-release
+          path: .release-evidence
+          run-id: 41947569458
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Confirm current chain, invoke once, reread all state
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+        run: python3 scripts/smoke-existing-payment-225374.py --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-payment-225374-smoke
+          path: .existing-payment-smoke/
+          include-hidden-files: true
+          retention-days: 14
