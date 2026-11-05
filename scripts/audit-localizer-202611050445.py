@@ -19,7 +19,7 @@ assert end<dt.datetime.now(dt.timezone.utc)<end+dt.timedelta(hours=12)
 codes={'FALHA_INTEGRACAO_PAGAMENTO','PRAZO_INTEGRACAO_INSUFICIENTE','RESPOSTA_TOTVS_INVALIDA','COMUNICACAO_NAO_CONFIRMADA','FALHA_COMUNICACAO_TOTVS','OPERACAO_EM_PROCESSAMENTO','DADOS_PAGAMENTO_INVALIDOS','IDPGTO_NAO_CONFIRMADO'}|a.REASONS
 a.ENUMS={**a.ENUMS,'code':codes,'reason':codes|{'FALHA_TECNICA','PRAZO_INSUFICIENTE','TIMEOUT_OU_CANCELAMENTO','FALHA_COMUNICACAO','CONCORRENCIA_DETECTADA'},'origem':{'TOTVS','FORMULARIO','INTEGRACAO'},'etapa':{'inicio','identidade_bancaria','validacao_solicitacao','consulta_existente','validacao_bancaria','validacao_documento','validacao_fiscal','controle_tentativa','criacao_movimento','controle_criacao','leitura_movimento','leitura_lancamento','preparacao_vinculo','gravacao_vinculo','confirmacao_vinculo','confirmacao_final'},'efeito':{'MOVIMENTO_CONFIRMADO','CRIACAO_NAO_CONFIRMADA','SEM_MOVIMENTO_CONFIRMADO'}}
 a.NUMBERS=a.NUMBERS|{'necessarioMs','disponivelMs'}
-events,coverage=a.read_log_window('"[RM-IDPGTO] Integração pendente"',int(start.timestamp()*1000),int(end.timestamp()*1000),deadline)
+events,coverage=a.read_log_window('"pendente"',int(start.timestamp()*1000),int(end.timestamp()*1000),deadline)
 requests={}
 for e in events:
     _,r=a.unwrap(e)
