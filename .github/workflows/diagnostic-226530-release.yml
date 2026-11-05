@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: false # Scoped observer published and independently verified in run 42097000567.
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     steps:
@@ -39,7 +40,7 @@ jobs:
           retention-days: 3
   readback:
     needs: release
-    if: ${{ contains(github.event.head_commit.message, '[publish-observer-226530]') && github.run_attempt == 1 }}
+    if: false # Readback completed; observer automatically expires at 21 UTC.
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     steps:
