@@ -19,6 +19,7 @@ export interface RepositorioPagamento {
   corrigirReserva(antes: OperacaoPagamento, digestNovo: string, duracao: number): Promise<OperacaoPagamento>;
   confirmarCriacaoIncerta(antes: OperacaoPagamento, pg: string, duracao: number): Promise<OperacaoPagamento>;
   encerrarAntesDoEnvio(operacao: OperacaoPagamento): Promise<void>;
+  encerrarRejeicao(operacao: OperacaoPagamento): Promise<OperacaoPagamento>;
   concluida(pk: string, digest: string, pg: string | undefined): Promise<OperacaoPagamento | undefined>;
   movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
@@ -35,13 +36,17 @@ export class ConflitoPagamento extends Error {
 }
 
 function conferirIdentidadeReserva(existente: OperacaoPagamento, digest: string, pg: string | undefined): void {
+  if ((existente.digest !== digest || (pg && pg !== existente.pg)) && !Object.prototype.hasOwnProperty.call(existente, 'pg') &&
+      ['RESERVED', 'CREATING'].includes(existente.state) && existente.lockUntil > Date.now()) {
+    throw new ConflitoPagamento('O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente; os dados corrigidos do formulário serão considerados.');
+  }
   if (existente.digest !== digest) {
     throw new ConflitoPagamento('Os dados enviados pelo Zeev mudaram em relação à tentativa anterior deste ticket. Confira os dados corrigidos e a tentativa anterior antes de prosseguir.', 'DADOS_SOLICITACAO_ALTERADOS');
   }
   if (pg && pg !== existente.pg) {
     throw new ConflitoPagamento(existente.pg
-      ? 'O movimento recebido do Zeev difere do movimento registrado na tentativa anterior. Confira o campo Movimento e a consulta automática do formulário.'
-      : 'O Zeev enviou um movimento, mas a tentativa anterior deste ticket não confirmou nenhum movimento. Confira o campo Movimento e a consulta automática do formulário.',
+      ? 'O movimento recebido do Zeev difere do movimento registrado na tentativa anterior. Confira o campo Movimento do formulário.'
+      : 'O Zeev enviou um movimento, mas a tentativa anterior deste ticket não confirmou nenhum movimento. Confira o campo Movimento do formulário.',
     'MOVIMENTO_RESERVA_DIVERGENTE');
   }
 }
@@ -192,6 +197,28 @@ export class DynamoPagamento implements RepositorioPagamento {
       ExpressionAttributeValues: { ':newOwner': randomUUID(), ':expired': Date.now() - 1, ':oldOwner': op.owner,
         ':reserved': 'RESERVED', ':digest': op.digest, ':oldUntil': op.lockUntil, ':protocol': 2 } }),
     { abortSignal: AbortSignal.timeout(2000) });
+  }
+  // Only the invocation that received a native business rejection and reread an
+  // empty ticket census calls this. Fence it before allowing a corrected form;
+  // a timeout, a returned key or an unconfirmed checkpoint cannot release it.
+  async encerrarRejeicao(op: OperacaoPagamento): Promise<OperacaoPagamento> {
+    if (!raizPagamento(op.pk) || op.state !== 'CREATING' || Object.prototype.hasOwnProperty.call(op, 'pg') ||
+        op.continuation || !digestValido(op.digest) || !op.owner || !Number.isSafeInteger(op.lockUntil) ||
+        op.lockUntil <= 0 || (op.protocolVersion !== undefined && op.protocolVersion !== 2)) {
+      throw new ConflitoPagamento('A tentativa anterior ainda não confirmou o encerramento. Aguarde alguns instantes e envie novamente.');
+    }
+    const values: Record<string, unknown> = { ':owner': op.owner, ':digest': op.digest, ':until': op.lockUntil,
+      ':creating': 'CREATING', ':reserved': 'RESERVED', ':nextOwner': randomUUID(), ':expired': Date.now() - 1 };
+    let protocol = ' AND attribute_not_exists(protocolVersion)';
+    if (op.protocolVersion !== undefined) { values[':protocol'] = op.protocolVersion; protocol = ' AND protocolVersion = :protocol'; }
+    const result = await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk: op.pk },
+      UpdateExpression: 'SET #state = :reserved, #owner = :nextOwner, lockUntil = :expired',
+      ConditionExpression: '#state = :creating AND #owner = :owner AND digest = :digest AND lockUntil = :until' +
+        ' AND attribute_not_exists(pg) AND attribute_not_exists(continuation)' + protocol,
+      ExpressionAttributeNames: { '#state': 'state', '#owner': 'owner' }, ExpressionAttributeValues: values,
+      ReturnValues: 'ALL_NEW' }), { abortSignal: AbortSignal.timeout(2000) });
+    if (!result.Attributes) throw new Error('Encerramento da tentativa não confirmado');
+    return result.Attributes as OperacaoPagamento;
   }
   private async retomar(antes: OperacaoPagamento, estado: 'RESERVED' | 'CREATED', digest: string,
     pg: string | undefined, duracao: number,

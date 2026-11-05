@@ -19,10 +19,10 @@ spec = importlib.util.spec_from_file_location('release_primitives', Path(__file_
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 m.OUT = Path('.payment-contract-release')
-BASE_REF = 'c21a97afcffa0ee0298677d7fa435e55a427c6be'
-BASE_SHA = 'YL4vIKotm0GuMQC1sMC8ellzldxJgi7tu9rT9m8EO2Q='
-BASE_BUNDLE_SHA = 'QStwiGE3/AyPPJu6P+jyXRtI+lj2A/AjxPyieuHZNYs='
-BASE_REVISION = '1e5b7eb2-1e94-4706-981c-466734da49d7'
+BASE_REF = '0e4f958c0bc8206ba4a38da8df465c3ddf3883be'
+BASE_SHA = 'LU1O+lRYtjbpZMSX4QlGgw67aHbn2/rGOgB8hPIGkvk='
+BASE_BUNDLE_SHA = 'rWLzBg8e2AlBU6hkWqWMw8nKBqOLcaCIF4Tu820fY5c='
+BASE_REVISION = '9abeb52b-443a-42a9-b0d7-ad5b545810de'
 SOURCES = ['src/functions/rm/post/pagamentoIdentidade.ts',
            'src/functions/rm/post/pagamentoV2Idempotencia.ts',
            'src/functions/rm/post/solicitacaoDePagamentoSeguro.ts']
@@ -61,6 +61,9 @@ def validate_candidate(bundle):
         assert name in service, 'Durable continuation guard missing'
     assert service.index(b'.conferirEnvioProprio(') < service.rindex(b'.saveRecord(')
     assert b'resumirMensagemNegocioRm(retorno)' in service
+    assert b'await repo.encerrarRejeicao(' in service and b'if (!match && rejeicaoNegocio)' in service
+    assert b'!aposRejeicao.movimentos.length && !aposRejeicao.lancamentos.length' in service
+    assert b'entrada.idDoMovimento || entrada.movimentoExistente' not in service
     assert all(name not in service for name in [b'.consultarDocumento(', b'.buscarMovimentosPorTicket('])
 
 

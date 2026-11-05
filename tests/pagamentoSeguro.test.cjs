@@ -247,12 +247,51 @@ test('data de entrada omitida preserva default nativo após consulta do ticket',
  assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.count.censo,2);
 });
 
-test('rejeição RM retorna motivo allowlisted e nova solicitação pode tentar após expirar',async()=>{
+test('rejeição RM encerra a tentativa e permite corrigir e enviar novamente imediatamente',async()=>{
  const raw='Já Existe Nota do Emitente com este Número e Série. CPF_PRIVATE private@example.test\n=====\nat RM.Fixture';
  const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
  const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,2);assert.equal(evidence.find(r=>r.evidence.phase==='native_result').evidence.diagnostic.reasonCode,'RM_DUPLICATE_RECORD');
  const output=JSON.stringify([result,evidence]);assert.equal(output.includes('CPF_PRIVATE'),false);assert.equal(output.includes('private@example.test'),false);
- await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal((await x.run({numeroDaNF:'9003002'})).statusCode,409);assert.equal(x.count.create,2);
+ const root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(root.state,'RESERVED');assert.ok(root.lockUntil<Date.now());
+ x.setFiscal({createResult:'8;9001'});
+ assert.equal((await x.run({numeroDaNF:'9003002',dataDeEntrada:'2026-10-28'})).statusCode,200);
+ assert.equal(x.count.create,2);assert.equal(x.count.update,1);
+ const history=(await x.all()).filter(r=>r.pk.includes('#HISTORY#'));assert.equal(history.length,1);
+ assert.equal(history[0].snapshot.digest,root.digest);
+});
+
+test('consulta automática com movimento de outro ticket não bloqueia formulário corrigido nem adota o movimento alheio',async()=>{
+ const x=await setup();const result=await x.run({movimentoExistente:'71983'});
+ assert.equal(result.statusCode,200,result.body);assert.equal(parse(result).PG,'9001');
+ assert.equal(x.count.create,1);assert.notEqual(parse(result).PG,'71983');
+});
+
+test('consulta automática obsoleta não invalida confirmação nativa pelo ticket',async()=>{
+ const x=await setup();assert.equal((await x.run()).statusCode,200);
+ x.setFiscal({nativeAfterLost:true});
+ const result=await x.run({movimentoExistente:'71983'});
+ assert.equal(result.statusCode,200,result.body);assert.equal(parse(result).PG,'9001');
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+
+test('rejeição seguida de falha de consulta mantém a tentativa protegida e orienta aguardar em vez de reconciliar',async()=>{
+ const x=await setup({createResult:'Já Existe Nota do Emitente com este Número e Série.\n=====\nat RM.Fixture',censoErrorAt:3});
+ assert.equal((await x.run()).statusCode,503);
+ const before=await x.rawAll();assert.equal(before.find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
+ const retry=await x.run({numeroDaNF:'9003002'});assert.equal(retry.statusCode,409);
+ assert.match(parse(retry).message,/Aguarde alguns instantes e envie novamente/);
+ assert.doesNotMatch(parse(retry).message,/reconciliar/);assert.equal(x.count.create,1);
+ assert.deepEqual(await x.rawAll(),before);
+});
+
+test('retorno de rejeição não libera tentativa quando a consulta encontra movimento ou título',async()=>{
+  const x=await setup({createResult:'Já Existe Nota do Emitente com este Número e Série.\n=====\nat RM.Fixture'});
+  const original=x.repo.encerrarRejeicao.bind(x.repo);let closed=0;x.repo.encerrarRejeicao=async op=>{closed++;return original(op);};
+  // The first two censuses are pre-dispatch; expose an external effect only in
+  // the read after the response so it cannot be mistaken for a rejected write.
+  x.setFiscal({nativeFromCensus:3});
+  assert.equal((await x.run()).statusCode,503);assert.equal(closed,0);
+  assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
 });
 
 test('PIX: criação e gravação com leitura final; replay em instância nova sem nova escrita',async()=>{
@@ -451,9 +490,9 @@ test('digest ou PG divergente na leitura consistente não permite bypass fiscal 
   assert.deepEqual((await x.all()).find(r=>r.pk===before.pk),before);
 });
 
-test('referência automática de outro ticket é identificada antes de criar reserva ou financeiro',async()=>{
+test('movimento explícito de outro ticket é identificado antes de criar reserva ou financeiro',async()=>{
   const x=await setup({compl:{TICKET:'96611'}});
-  const result=await x.run({movimentoExistente:'9001'});
+  const result=await x.run({idDoMovimento:'9001'});
   assert.equal(result.statusCode,409);
   assert.match(parse(result).message,/Movimento não pertence ao ticket\/fornecedor\/destino/);
   assert.equal(parse(result).code,'OPERACAO_EM_CONFLITO');
@@ -466,7 +505,7 @@ test('referência errada do formulário não altera uma tentativa anterior já e
   await x.run();await x.expire();
   const before=await x.rawAll();
   x.setFiscal({compl:{TICKET:'96611'}});
-  const result=await x.run({movimentoExistente:'9001'});
+  const result=await x.run({idDoMovimento:'9001'});
   assert.equal(result.statusCode,409);
   assert.match(parse(result).message,/Movimento não pertence ao ticket\/fornecedor\/destino/);
   assert.equal(x.count.create,1);assert.equal(x.count.update,0);
@@ -588,8 +627,8 @@ test('rejeição1586multilinha registra motivo sem dados sensíveis e permite no
   assert.equal(diagnostic.reasonCode,'RM_REQUIRED_FIELD');assert.equal(diagnostic.length,1586);
   assert.equal(diagnostic.responseSha256,require('node:crypto').createHash('sha256').update(raw).digest('hex'));
   const serialized=JSON.stringify(logs);for(const value of ['private@example.test','CPF12345678909','ACCOUNT_PRIVATE',raw])assert.equal(serialized.includes(value),false);
-  assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
-  await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
+  assert.equal((await x.all())[0].state,'RESERVED');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
 });
 test('chave recebida fica distinguível de checkpoint perdido; nova tentativa consulta o RM',async()=>{
   const x=await setup({realLegacy:true});

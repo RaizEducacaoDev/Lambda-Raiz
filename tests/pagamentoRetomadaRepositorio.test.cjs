@@ -33,6 +33,33 @@ async function fixture(overrides={},customClient){
 }
 const histories=items=>items.filter(item=>item.pk.includes('#HISTORY#'));
 
+test('encerrar rejeição mantém metadados e digest, troca dono e permite correção imediata',async()=>{
+ const x=await fixture({state:'CREATING',lockUntil:Date.now()+60000});
+ const ended=await x.repo.encerrarRejeicao(x.original);
+ assert.equal(ended.state,'RESERVED');assert.ok(ended.lockUntil<Date.now());
+ assert.notEqual(ended.owner,x.original.owner);assert.equal(ended.digest,digest);
+ assert.deepEqual(ended.auditMetadata,x.original.auditMetadata);
+ await assert.rejects(()=>x.repo.avancar(x.original,'CREATED','44'));
+ const corrected=await x.repo.corrigirReserva(ended,novoDigest,30000);
+ assert.equal(corrected.digest,novoDigest);assert.equal(histories(await x.all()).length,1);
+});
+
+test('rejeição não encerra outro dono, movimento conhecido, continuação nem protocolo desconhecido',async()=>{
+ for(const change of [{owner:'different'},{digest:outroDigest},{lockUntil:Date.now()+120000},{pg:'44'},
+   {pg:''},{continuation:'unexpected'},{protocolVersion:3},{state:'CREATED'}]){
+  const x=await fixture({state:'CREATING',lockUntil:Date.now()+60000});
+  const actual={...x.original,...change};await x.replace(actual);
+  await assert.rejects(()=>x.repo.encerrarRejeicao(x.original));assert.deepEqual(await x.root(),actual);
+ }
+});
+
+test('encerramentos concorrentes têm apenas um vencedor e nunca removem a reserva',async()=>{
+ const x=await fixture({state:'CREATING',lockUntil:Date.now()+60000});
+ const results=await Promise.allSettled([x.repo.encerrarRejeicao(x.original),x.repo.encerrarRejeicao(x.original)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal((await x.root()).state,'RESERVED');
+ assert.equal((await x.all()).length,1);
+});
+
 test('evidência por tentativa é imutável e idempotente, não modifica raiz e não armazena campos arbitrários',async()=>{
  const x=await fixture(),evidence={version:1,phase:'prepared',xmlSha256:'d'.repeat(64),movementType:'1.2.01',
   company:'9',branch:'2',ticket:'226374',supplierCompany:'0',supplier:'0000000001',paymentId:'6',paymentCompany:'9',number:'000114',series:'1',documentType:'055',

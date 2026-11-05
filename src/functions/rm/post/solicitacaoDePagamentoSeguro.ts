@@ -32,9 +32,10 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     const chave = identidadePagamento(entrada);
     const coligada = chave.codColPgto, ticket = texto(entrada.ticketRaiz);
     const filial = texto(entrada.codigoDaFilial2 || entrada.codigoDaFilial);
-    let pgEntrada = texto(entrada.idDoMovimento || entrada.movimentoExistente) || undefined;
-    if (!idPositivo(ticket) || !idPositivo(filial) || (pgEntrada && !idPositivo(pgEntrada)) ||
-      (texto(entrada.idDoMovimento) && texto(entrada.movimentoExistente) && texto(entrada.idDoMovimento) !== texto(entrada.movimentoExistente))) {
+    // DataSource may find the same invoice number in another year/ticket. The
+    // native census below resolves automatic references by this ticket only.
+    let pgEntrada = texto(entrada.idDoMovimento) || undefined;
+    if (!idPositivo(ticket) || !idPositivo(filial) || (pgEntrada && !idPositivo(pgEntrada))) {
       throw new PagamentoInvalido('Ticket, filial ou movimento inválido/ambíguo');
     }
     const codTmv = codigoMovimento(entrada);
@@ -66,8 +67,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         compl.IDMOV !== pg || compl.TICKET !== ticket) throw new ConflitoPagamento('Movimento não pertence ao ticket/fornecedor/destino ativo esperado');
       return movimento;
     };
-    // A form/DataSource reference is only a hint until native identity confirms
-    // it. Validate before comparing reservation digests or changing a lease.
+    // An explicit form movement requires native identity confirmation before
+    // comparing reservation digests or changing a lease.
     // A document from another ticket must not masquerade as a digest conflict.
     if (pgEntrada) await conferirMovimento(pgEntrada);
     const validarBanco = async () => {
@@ -179,6 +180,21 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
               if (repo.registrarEvidencia) await repo.registrarEvidencia(op!, { ...evidencia, phase: 'native_result', diagnostic: diagnosticoCriacao });
             } catch {
               console.warn('[RM-IDPGTO] Evidência do retorno não confirmada', { ticket, coligada, reasonCode: diagnosticoCriacao.reasonCode });
+            }
+            const rejeicaoNegocio = diagnosticoCriacao.category === 'rm_rejection_or_diagnostic' &&
+              ['RM_DUPLICATE_RECORD', 'RM_INVALID_FISCAL_NATURE', 'RM_INVALID_REFERENCE', 'RM_REQUIRED_FIELD',
+                'RM_PERIOD_CLOSED', 'RM_PERMISSION_DENIED', 'RM_INVALID_DATE', 'RM_INVALID_FORMAT'].includes(diagnosticoCriacao.reasonCode);
+            if (!match && rejeicaoNegocio) {
+              try {
+                const aposRejeicao = await rm.consultarRetomada(coligada, ticket);
+                if (!aposRejeicao.movimentos.length && !aposRejeicao.lancamentos.length) {
+                  op = await repo.encerrarRejeicao(op!);
+                  console.info('[RM-IDPGTO] Rejeição encerrada para correção no formulário', { ticket, coligada,
+                    event: 'native_rejection_closed', reasonCode: diagnosticoCriacao.reasonCode });
+                }
+              } catch {
+                console.warn('[RM-IDPGTO] Encerramento da rejeição não confirmado', { ticket, coligada });
+              }
             }
             throw new Error('RM retornou diagnóstico sem chave de movimento');
           }
@@ -328,7 +344,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     // A failed build/preflight has no native creation effect. Fence this owner
     // before expiring its lease. A remotely persisted CREATING checkpoint makes
     // the CAS fail, preserving uncertainty even if its response was lost.
-    if (op?.state === 'RESERVED' && op.protocolVersion === 2 && !Object.prototype.hasOwnProperty.call(op, 'pg')) {
+    if (etapaCriacao !== 'transport_result' && op?.state === 'RESERVED' && op.protocolVersion === 2 && !Object.prototype.hasOwnProperty.call(op, 'pg')) {
       try {
         const repo = deps?.repositorio || new DynamoPagamento(process.env.PAGAMENTO_IDPGTO_TABLE!);
         await repo.encerrarAntesDoEnvio(op);
