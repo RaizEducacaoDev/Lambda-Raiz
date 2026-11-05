@@ -3,6 +3,7 @@ import collections,datetime as dt,importlib.util,json,re,time
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('a',Path(__file__).with_name('audit-payment-conflict-20261103-0609.py'))
 a=importlib.util.module_from_spec(spec);spec.loader.exec_module(a)
+a.AWS_READS=a.AWS_READS|{('logs','start-query'),('logs','get-query-results')}
 run_cli=a.subprocess.run
 def safe_cli(*args,**kwargs):
     result=run_cli(*args,**kwargs)
@@ -25,11 +26,26 @@ a.ENUMS={**a.ENUMS,'code':codes,'reason':codes|{'FALHA_TECNICA','PRAZO_INSUFICIE
 a.NUMBERS=a.NUMBERS|{'necessarioMs','disponivelMs'}
 start=dt.datetime(2026,11,5,18,tzinfo=dt.timezone.utc);end=dt.datetime.now(dt.timezone.utc)
 assert start<end<start+dt.timedelta(hours=12)
-rows=[];coverage=[]
-for pattern in ['"pendente"','"reasonCode"']:
-    events,cov=a.read_log_window(pattern,int(start.timestamp()*1000),int(end.timestamp()*1000),deadline)
-    coverage.append({'pattern':pattern,**cov})
-    rows.extend(s for event in events if (s:=a.sanitize(event)) is not None)
+query='fields toMillis(@timestamp) as timestampMillis, @message | filter @message like /pendente/ or @message like /reasonCode/ | sort @timestamp asc | limit 10000'
+qid=a.aws('logs','start-query','--log-group-name',a.GROUP,'--start-time',str(int(start.timestamp())),
+          '--end-time',str(int(end.timestamp())),'--query-string',query,deadline=deadline)['queryId']
+assert re.fullmatch(a.UUID,qid,re.I)
+result={}
+while time.monotonic()<deadline-30:
+    result=a.aws('logs','get-query-results','--query-id',qid,deadline=deadline)
+    if result.get('status') in ['Complete','Failed','Cancelled','Timeout']:break
+    time.sleep(2)
+rows=[]
+for result_row in result.get('results',[]):
+    fields={f['field']:f['value'] for f in result_row}
+    ts=int(fields['timestampMillis']);assert int(start.timestamp()*1000)<=ts<=int(end.timestamp()*1000)
+    event={'timestamp':ts,'message':fields.get('@message','')}
+    safe=a.sanitize(event)
+    if safe is not None:rows.append(safe)
+stats=result.get('statistics',{})
+coverage=[{'method':'LogsInsights','status':result.get('status'),'matchedEvents':stats.get('recordsMatched'),
+           'recordsScanned':stats.get('recordsScanned'),'bytesScanned':stats.get('bytesScanned'),
+           'complete':result.get('status')=='Complete' and stats.get('recordsMatched',10001)<=10000}]
 unique={(r['timestamp'],r.get('requestId'),r['kind']):r for r in rows};rows=sorted(unique.values(),key=lambda r:r['timestamp'])
 pending=[r for r in rows if r['kind']=='payment_pending']
 native=[r for r in rows if r['kind']=='non_key_result']
