@@ -1,6 +1,6 @@
 # Reconhecer pagamento existente antes de consultar a reserva
 
-Status: implementado e validado localmente; sem publicação ou avanço de tarefa Zeev.
+Status: publicado e verificado em produção; reconhecimento do225374 confirmado sem avanço de tarefa Zeev.
 Base: `504311b8f9f7b90fdf5332da644ee53eb0d2698e`, branch `fix/idpgto-vinculo-obrigatorio`.
 
 ## Problema e comportamento
@@ -82,7 +82,30 @@ acesso ao repositório. O ticket continua em T07 - Realizar Análise fiscal.
 Evidência sanitizada: Desktop/Analise-62-Tickets-Zeev-TOTVS-20261104/
 225374-validacao-reuso.json. XML e dados bancários não foram adicionados ao Git.
 
-Isso confirma o código local com dados reais, não uma execução da Lambda
-publicada. Publicação, conferência do pacote ativo e validação do retorno pelo
-Zeev são etapas posteriores. Não houve SaveRecord, atualização Dynamo, Invoke
-da Lambda de produção, aprovação ou reprocessamento de ticket nesta entrega.
+Essa etapa confirmou o código local com dados reais. A publicação e a execução
+controlada da função de produção foram autorizadas e concluídas em seguida,
+conforme a evidência abaixo. O avanço da tarefa pelo Zeev permanece com o usuário.
+
+## Publicação e verificação em produção
+
+- Run41947569458, commit67c1a9b79b15760e0b3f4aeee6f8c6ea2da404c5: publicação em
+  05/11/2026 01:19:08UTC (04/11 22:19BRT), após226 testes, typecheck, build e três
+  testes de integridade da publicação. O preparo Linux reproduziu o hash exato
+  do bundle anterior e alterou somente o entrypoint de pagamento.
+- Função: `lambda-raiz-prod-solicitacaoDePagamento`, região `sa-east-1`.
+  CodeSha256: `YL4vIKotm0GuMQC1sMC8ellzldxJgi7tu9rT9m8EO2Q=`.
+  RevisionId: `1e5b7eb2-1e94-4706-981c-466734da49d7`.
+  Núcleo legado, demais entradas e configurações preservados.
+- Leitura independente confirmou todos os hashes. Nova conferência após305s
+  manteve o mesmo pacote e registrou zero LambdaErrors. Essa métrica não mede
+  todos os erros de negócio tratados.
+- Run41947819299: formulário atual do225374 reconstruído pelo template, cadeia
+  completa relida, validação local com toda escrita bloqueada e uma única
+  invocação da função publicada em05/11 01:25:10UTC. Resposta200:
+  PG45178/LF69912, `integracaoBancaria=ja_gravada`.
+- Releituras concluídas às01:25:21UTC confirmaram censo/MOV/FLAN integralmente
+  iguais, raízes Dynamo iguais e formulário/tarefa Zeev iguais. Nenhum novo
+  lançamento, SaveRecord, aprovação de tarefa ou alteração bancária ocorreu.
+- Os dois workflows pontuais foram arquivados depois da confirmação para evitar
+  republicação ou repetição automática do teste. Evidências sanitizadas no Desktop,
+  pasta `Analise-62-Tickets-Zeev-TOTVS-20261104/publicacao-reuso`.

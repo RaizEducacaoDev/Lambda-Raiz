@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    if: github.run_attempt == 1
+    if: false # One invocation completed by run41947819299; do not replay automatically.
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     steps:
