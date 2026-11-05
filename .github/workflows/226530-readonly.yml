@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   audit:
-    if: ${{ github.run_attempt == 1 }} # Exact-ticket follow-up after user retry.
+    if: false # Follow-up completed in run 42101398033; no financial invocation.
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
