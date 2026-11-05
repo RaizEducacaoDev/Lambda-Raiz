@@ -24,6 +24,7 @@ function setup(options={}){
   async movimentoConhecido(){calls.order.push('movimentoConhecido');return options.durablePg;},
   async reservar(pk,digest,pg){calls.reserve++;calls.order.push('reservar');pg=options.reservePg||options.durablePg||pg;const op={pk,digest,...(pg?{pg}:{}),state:pg?'CREATED':'RESERVED',owner:'fixture',lockUntil:Date.now()+90000};records.set(pk,op);return op;},
   async registrarEvidencia(op,evidence){calls.evidences.push(evidence);},
+  async encerrarRejeicao(op){const next={...op,state:'RESERVED',owner:'rejected-owner',lockUntil:Date.now()-1};records.set(op.pk,next);return next;},
   async avancar(op,state,pg=op.pg){const next={...op,state,...(pg?{pg}:{})};records.set(op.pk,next);return next;},
   // This fixture tests fiscal routing only. Continuation CAS and lost ACKs are
   // exercised against the real Dynamo repository/dynalite in pagamentoSeguro.
@@ -95,7 +96,7 @@ test('consulta indisponível, contrato errado ou incompleto retorna503 sem reser
   const x=setup(options);assert.equal((await x.run()).statusCode,503);assert.equal(x.calls.reserve,0);assert.equal(x.calls.create,0);assert.equal(x.calls.bankWrite,0);
  }
 });
-const noDuplicateReads=x=>{assert.equal(x.calls.document,0);assert.equal(x.calls.lookup,0);assert.equal(x.calls.census,x.calls.create?2:1);};
+const noDuplicateReads=(x,census=x.calls.create?2:1)=>{assert.equal(x.calls.document,0);assert.equal(x.calls.lookup,0);assert.equal(x.calls.census,census);};
 
 test('os dez tipos PG conferem o ticket sem consultar DOC2 ou RECON antes de submeter ao RM',async()=>{
  const tipos=[{tipoDoPagamento:'NF',tipoDeItem:'Material'},{tipoDoPagamento:'NF',tipoDeItem:'Serviço'},
@@ -146,8 +147,8 @@ test('a duplicidade é decidida pelo SaveRecord e sua mensagem de negócio é de
  const x=setup({nativeResult:mensagem+'\r\n=====\r\nat RM.Fixture.SaveRecord'}),result=await x.run();
  assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');
  assert.ok(parse(result).message.includes(mensagem));assert.doesNotMatch(parse(result).message,/at RM|não autoriza nova criação/);
- assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.fiscal,1);noDuplicateReads(x);
- assert.equal([...x.records.values()][0].state,'CREATING');
+ assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);assert.equal(x.calls.fiscal,1);noDuplicateReads(x,3);
+ assert.equal([...x.records.values()][0].state,'RESERVED');
  assert.equal(JSON.stringify(x.calls.evidences).includes(mensagem),false);
 });
 
@@ -174,7 +175,7 @@ test('rejeição fiscal é decisão nativa e devolve motivo fixo sem número nem
  assert.equal(result.statusCode,503);assert.equal(body.code,'RM_INVALID_FISCAL_NATURE');
  assert.match(body.message,/TOTVS rejeitou a natureza fiscal/);assert.match(body.message,/tarefa Fiscal/);
  assert.doesNotMatch(body.message,/000000018|ConsisteIntegracaoFiscal|não autoriza|2\.949\.01/);
- assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);noDuplicateReads(x);
+ assert.equal(x.calls.create,1);assert.equal(x.calls.bankWrite,0);noDuplicateReads(x,3);
  assert.equal(JSON.stringify(x.calls.evidences).includes('Natureza inválida'),false);
  assert.equal(x.calls.evidences.find(e=>e.phase==='native_result').diagnostic.reasonCode,'RM_INVALID_FISCAL_NATURE');
 });
