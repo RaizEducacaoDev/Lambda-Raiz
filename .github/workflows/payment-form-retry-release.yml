@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: ${{ github.run_attempt == 1 }}
+    if: false # One-time publication and independent readback: run42081692649.
     runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
