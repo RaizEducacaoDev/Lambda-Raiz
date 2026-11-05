@@ -105,3 +105,37 @@ test('tributo explicitamente diferente do movimento não é reconhecido como suc
   taxes:[{CODTRB:'IRRF',BASEDECALCULO:'10000',ALIQUOTA:'0',VALOR:'0'}]});
  assert.equal((await x.run()).statusCode,409);assert.equal(x.calls.create+x.calls.save+x.calls.repository,0);
 });
+test('conflito informa todas as diferenças do cabeçalho e registra somente os nomes dos campos',async()=>{
+ const captured=[],warn=console.warn;
+ console.warn=(...args)=>captured.push(args);
+ try{
+  const x=fixture({input:{numeroDaNF:'9',serie:'2',dataDeEmissao:'20/10/2026',valorTotal:'9.999,00',codigoDoCentroDeCusto:'1.05.007',idDaNaturezaFiscal:'4'}});
+  const r=await x.run(),b=body(r);
+  assert.equal(r.statusCode,409);assert.equal(b.code,'DADOS_MOVIMENTO_DIVERGENTES');assert.equal(b.message,b.error);
+  for(const part of ['movimento 45178','número da nota: Zeev 9 / TOTVS 8','série: Zeev 2 / TOTVS 1',
+   'emissão: Zeev 2026-10-20 / TOTVS 2026-10-19','valor bruto: Zeev 9999.0 / TOTVS 10000.0',
+   'centro de custo: Zeev 1.05.007 / TOTVS 1.05.006','natureza fiscal: Zeev 4 / TOTVS 3'])assert.ok(b.message.includes(part),part);
+  const diagnostic=captured.find(v=>v[0]==='[RM-IDPGTO] Divergência de movimento existente');
+  assert.deepEqual(diagnostic[1],{ticket:'225374',coligada:'1',idMov:'45178',camposDivergentes:['NUMEROMOV','SERIE','DATAEMISSAO','VALORBRUTO','CODCCUSTO','IDNAT']});
+  assert.equal(x.calls.create+x.calls.save+x.calls.repository,0);
+ }finally{console.warn=warn;}
+});
+test('diagnóstico não reflete conteúdo livre em série, centro de custo ou natureza fiscal',async()=>{
+ const unsafe='senha: valor-privado@example.invalid';
+ const x=fixture({input:{serie:unsafe,codigoDoCentroDeCusto:unsafe,idDaNaturezaFiscal:unsafe}}),r=await x.run();
+ assert.equal(r.statusCode,409);assert.equal(body(r).code,'DADOS_MOVIMENTO_DIVERGENTES');
+ assert.ok(!r.body.includes(unsafe));assert.ok(!r.body.includes('example.invalid'));assert.ok(r.body.includes('(não exibido)'));
+ assert.equal(x.calls.create+x.calls.save+x.calls.repository,0);
+});
+test('valor malformado posterior não substitui conflito conhecido e continua inválido quando é o primeiro erro',async()=>{
+ for(const options of [
+  {input:{numeroDaNF:'9',dataDeEmissao:'invalid'}},
+  {input:{numeroDaNF:'9'},header:{VALORBRUTO:'invalid'}},
+ ]){
+  const x=fixture(options),r=await x.run();assert.equal(r.statusCode,409);assert.equal(body(r).code,'DADOS_MOVIMENTO_DIVERGENTES');
+  assert.ok(body(r).message.includes('número da nota: Zeev 9 / TOTVS 8'));assert.equal(x.calls.create+x.calls.save+x.calls.repository,0);
+ }
+ for(const options of [{input:{dataDeEmissao:'invalid'}},{header:{VALORBRUTO:'invalid'}}]){
+  const x=fixture(options),r=await x.run();assert.equal(r.statusCode,422);assert.equal(x.calls.create+x.calls.save+x.calls.repository,0);
+ }
+});
