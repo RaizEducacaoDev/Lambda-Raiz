@@ -66,6 +66,10 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         compl.IDMOV !== pg || compl.TICKET !== ticket) throw new ConflitoPagamento('Movimento não pertence ao ticket/fornecedor/destino ativo esperado');
       return movimento;
     };
+    // A form/DataSource reference is only a hint until native identity confirms
+    // it. Validate before comparing reservation digests or changing a lease.
+    // A document from another ticket must not masquerade as a digest conflict.
+    if (pgEntrada) await conferirMovimento(pgEntrada);
     const validarBanco = async () => {
       const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
         'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
@@ -107,7 +111,6 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           await validarNovaNota();
         }
       }
-      if (pgEntrada) await conferirMovimento(pgEntrada);
     }
     op = op || concluida || await repo.reservar(pk, digest, pgEntrada, prazo.disponivel());
     if (movimentoFiscalConhecido && op.pg !== movimentoFiscalConhecido) {
@@ -350,6 +353,8 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         erro instanceof PagamentoInvalido ? 'IDPGTO_NAO_CONFIRMADO' :
         diagnosticoCriacao?.reasonCode || (incerta ? 'CRIACAO_RM_NAO_CONFIRMADA' : op?.pg ? 'VINCULO_BANCARIO_PENDENTE' :
           erro instanceof ConflitoPagamento ? 'OPERACAO_EM_CONFLITO' : 'PRE_VALIDACAO_INDISPONIVEL'),
-      integracaoBancaria: 'pendente', ...(op?.pg ? { PG: op.pg } : {}) });
+      integracaoBancaria: 'pendente',
+      ...(erro instanceof ConflitoPagamento && erro.reason ? { reason: erro.reason } : {}),
+      ...(op?.pg ? { PG: op.pg } : {}) });
   }
 }

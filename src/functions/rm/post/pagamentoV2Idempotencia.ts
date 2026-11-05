@@ -28,7 +28,23 @@ export interface RepositorioPagamento {
   avancarParcelaPropria(operacao: OperacaoPagamento, idLan: string, estado: 'UPDATING' | 'COMPLETE'): Promise<OperacaoPagamento>;
   conferirEnvioProprio(operacao: OperacaoPagamento, idLan: string): Promise<void>;
 }
-export class ConflitoPagamento extends Error {}
+export class ConflitoPagamento extends Error {
+  constructor(mensagem: string, readonly reason?: 'DADOS_SOLICITACAO_ALTERADOS' | 'MOVIMENTO_RESERVA_DIVERGENTE') {
+    super(mensagem);
+  }
+}
+
+function conferirIdentidadeReserva(existente: OperacaoPagamento, digest: string, pg: string | undefined): void {
+  if (existente.digest !== digest) {
+    throw new ConflitoPagamento('Os dados enviados pelo Zeev mudaram em relação à tentativa anterior deste ticket. Confira os dados corrigidos e a tentativa anterior antes de prosseguir.', 'DADOS_SOLICITACAO_ALTERADOS');
+  }
+  if (pg && pg !== existente.pg) {
+    throw new ConflitoPagamento(existente.pg
+      ? 'O movimento recebido do Zeev difere do movimento registrado na tentativa anterior. Confira o campo Movimento e a consulta automática do formulário.'
+      : 'O Zeev enviou um movimento, mas a tentativa anterior deste ticket não confirmou nenhum movimento. Confira o campo Movimento e a consulta automática do formulário.',
+    'MOVIMENTO_RESERVA_DIVERGENTE');
+  }
+}
 
 const raizPagamento = (pk: unknown): pk is string => typeof pk === 'string' && /^[^#]+#PG#[1-9]\d*#[1-9]\d*$/.test(pk);
 const digestValido = (digest: unknown): digest is string => typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest);
@@ -232,9 +248,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
-      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
-    }
+    conferirIdentidadeReserva(existente, digest, pg);
     if (!['CREATED', 'UPDATING', 'COMPLETE'].includes(existente.state)) return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg) || !Number.isSafeInteger(Number(existente.pg))) {
       throw new ConflitoPagamento('Reserva sem movimento durável válido; reconciliar');
@@ -246,9 +260,7 @@ export class DynamoPagamento implements RepositorioPagamento {
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
     if (!existente) return undefined;
-    if (existente.digest !== digest || (pg && pg !== existente.pg)) {
-      throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
-    }
+    conferirIdentidadeReserva(existente, digest, pg);
     if (existente.state !== 'COMPLETE') return undefined;
     if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) {
       throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
@@ -269,7 +281,8 @@ export class DynamoPagamento implements RepositorioPagamento {
     const resposta = await this.cliente.send(new GetCommand({ TableName: this.tabela, Key: { pk }, ConsistentRead: true }),
       { abortSignal: AbortSignal.timeout(2000) });
     const existente = resposta.Item as OperacaoPagamento | undefined;
-    if (!existente || existente.digest !== digest || (pg && pg !== existente.pg)) throw new ConflitoPagamento('Ticket reservado com dados diferentes; reconciliar antes de prosseguir');
+    if (!existente) throw new ConflitoPagamento('A tentativa anterior não foi encontrada na releitura do controle de pagamento. A criação não será repetida sem confirmar esse controle.');
+    conferirIdentidadeReserva(existente, digest, pg);
     if (existente.state === 'COMPLETE') {
       if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
       return existente;
