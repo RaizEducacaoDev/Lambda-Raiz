@@ -4,6 +4,7 @@ Only the payment entrypoint changes. Original ZIP entries, legacy core and AWS
 configuration remain intact. Evidence contains hashes, never secrets/packages.
 """
 import argparse
+import collections
 import datetime as dt
 import importlib.util
 import json
@@ -141,20 +142,24 @@ def release():
         assert canary == baseline_canary
     except Exception:
         failure = {'observedUtc': m.now(), 'rollbackConfirmed': False}
-        current = m.aws('lambda', 'get-function-configuration', '--function-name', m.FUNCTION)
-        if current['LastUpdateStatus'] == 'InProgress':
-            wait_updated()
+        try:
             current = m.aws('lambda', 'get-function-configuration', '--function-name', m.FUNCTION)
-        # Never overwrite another deployment or configuration change, including
-        # a successful concurrent deployment during an ambiguous AWS response.
-        if current['CodeSha256'] == candidate_sha and configuration_hash(current) == config_sha:
-            m.aws('lambda', 'update-function-code', '--function-name', m.FUNCTION,
-                  '--revision-id', current['RevisionId'], '--zip-file', 'fileb://' + str(backup))
-            wait_updated()
-            restored, downloaded = m.active()
-            failure['rollbackConfirmed'] = (restored['CodeSha256'] == BASE_SHA and
-                downloaded == package and configuration_hash(restored) == config_sha)
-        m.write('failed-release.json', failure)
+            if current['LastUpdateStatus'] == 'InProgress':
+                wait_updated()
+                current = m.aws('lambda', 'get-function-configuration', '--function-name', m.FUNCTION)
+            # Never overwrite another deployment or configuration change,
+            # including after an ambiguous AWS response.
+            if current['CodeSha256'] == candidate_sha and configuration_hash(current) == config_sha:
+                m.aws('lambda', 'update-function-code', '--function-name', m.FUNCTION,
+                      '--revision-id', current['RevisionId'], '--zip-file', 'fileb://' + str(backup))
+                wait_updated()
+                restored, downloaded = m.active()
+                failure['rollbackConfirmed'] = (restored['CodeSha256'] == BASE_SHA and
+                    downloaded == package and configuration_hash(restored) == config_sha)
+        except Exception:
+            failure['recoveryReadOrRestoreUnconfirmed'] = True
+        finally:
+            m.write('failed-release.json', failure)
         raise RuntimeError('Scoped publication failed; inspect rollback metadata') from None
     report = {'deployedUtc': m.now(), 'function': m.FUNCTION, 'commit': os.environ.get('GITHUB_SHA'),
         'previousCodeSha256': BASE_SHA, 'activeCodeSha256': candidate_sha, 'revisionId': after['RevisionId'],
@@ -192,6 +197,23 @@ def readback(evidence, monitor):
             '--end-time', m.now(), '--period', '60', '--statistics', 'Sum')
         result['monitorSeconds'] = round(time.time() - dt.datetime.fromisoformat(report['deployedUtc']).timestamp())
         result['lambdaExecutionErrors'] = sum(point['Sum'] for point in metrics['Datapoints'])
+        spec = importlib.util.spec_from_file_location('log_projection', Path(__file__).with_name('audit-payment-conflict-20261103-0609.py'))
+        a = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(a)
+        start = int(dt.datetime.fromisoformat(report['deployedUtc']).timestamp() * 1000)
+        end = int(time.time() * 1000)
+        rows, coverage = [], []
+        for pattern in ['"[RM-IDPGTO]" "Integração pendente"', '"[RM-IDPGTO]" "Vínculo financeiro confirmado"']:
+            events, cov = a.read_log_window(pattern, start, end, time.monotonic() + 45)
+            coverage.append(cov)
+            rows += [safe for event in events if (safe := a.sanitize(event)) is not None and safe.get('ticket')]
+        unique = {(row['timestamp'], row.get('requestId'), row['kind']): row for row in rows}
+        projected = list(unique.values())
+        result['applicationEvents'] = projected
+        result['applicationPendingByStatus'] = dict(collections.Counter(str(row.get('status')) for row in projected if row['kind'] == 'payment_pending'))
+        result['applicationBankConfirmations'] = sum(row['kind'] == 'bank_confirmed' for row in projected)
+        result['applicationLogCoverageComplete'] = all(cov.get('complete') for cov in coverage)
+        result['businessResolutionProvenByExecutionMetric'] = False
     m.write('monitor.json' if monitor else 'independent-readback.json', result)
     print(json.dumps(result, indent=2))
 
