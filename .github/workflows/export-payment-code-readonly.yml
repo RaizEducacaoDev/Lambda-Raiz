@@ -1,0 +1,42 @@
+name: Export active payment source read only and encrypted
+on:
+  push:
+    branches: [chore/export-payment-code-20261104-2250]
+    paths:
+      - .github/workflows/export-payment-code-readonly.yml
+      - scripts/export-payment-code-readonly.py
+      - .github/payment-export-public.pem
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: python -m pip install cryptography==46.0.3
+      - name: Reproduce the entrypoint and map its source dependencies
+        run: npx --no-install esbuild src/functions/rm/post/solicitacaoDePagamento.ts --bundle --platform=node --target=node22 --external:./solicitacaoDePagamento.core.cjs --outfile=.build/solicitacaoDePagamento.cjs --metafile=.build/payment-export-metafile.json
+      - name: Read and encrypt selected published code without invoking Lambda
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python scripts/export-payment-code-readonly.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: payment-code-encrypted
+          path: .payment-code-export/
+          include-hidden-files: true
+          retention-days: 1
