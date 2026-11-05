@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "mode": "prepare",
-  "authorizedControlRestore": false,
-  "approvedPrepareRunId": "0",
-  "approvedManifestSha256": ""
+  "mode": "apply",
+  "authorizedControlRestore": true,
+  "approvedPrepareRunId": "41939698644",
+  "approvedManifestSha256": "88bf1b25bd59b7ae7dac83fcb3e84567e40673cafb03bbb121dbaa4da1fd4fe3"
 }
