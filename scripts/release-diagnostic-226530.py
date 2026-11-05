@@ -1,5 +1,6 @@
 """Publish only a bounded, encrypted incident observer. No ticket invocation."""
 import argparse
+import datetime as dt
 import importlib.util
 import os
 from pathlib import Path
@@ -37,5 +38,6 @@ if __name__=='__main__':
     if a.mode=='prepare':r.prepare()
     elif a.mode=='release':
         assert os.environ.get('GITHUB_REF')=='refs/heads/fix/diagnostic-226530-20261105'
+        assert (dt.datetime(2026,11,5,21,tzinfo=dt.timezone.utc)-dt.datetime.now(dt.timezone.utc)).total_seconds()>300, 'Observer expiry too close; no publication'
         r.release(expected_ref='refs/heads/fix/diagnostic-226530-20261105')
     else:r.readback(a.evidence,False)

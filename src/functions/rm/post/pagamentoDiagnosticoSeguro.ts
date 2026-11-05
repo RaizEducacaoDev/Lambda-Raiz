@@ -1,4 +1,4 @@
-import { constants, createCipheriv, createHash, publicEncrypt, randomBytes } from 'node:crypto';
+import { constants as constantesCrypto226530, createCipheriv, createHash, publicEncrypt, randomBytes } from 'node:crypto';
 
 // Temporary observation for one already-reported incident. The private key is
 // kept by the operator locally; only authenticated ciphertext leaves memory.
@@ -23,7 +23,7 @@ export function selarDiagnostico226530(retorno: string, chavePublica: string, ag
   const criptograma = Buffer.concat([cipher.update(retorno, 'utf8'), cipher.final()]);
   return { version: 1, ticket: 226530, coligada: 11, observedUtc: new Date(agora).toISOString(),
     responseSha256: createHash('sha256').update(retorno).digest('hex'),
-    wrappedKey: publicEncrypt({ key: chavePublica, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, chave).toString('base64'),
+    wrappedKey: publicEncrypt({ key: chavePublica, padding: constantesCrypto226530.RSA_PKCS1_OAEP_PADDING, oaepHash: 'sha256' }, chave).toString('base64'),
     iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ciphertext: criptograma.toString('base64') };
 }
 
