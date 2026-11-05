@@ -65,7 +65,7 @@ async function setup(opts={}) {
       if(table==='MovMovimentoTBCData')return movement();
       return dataset('FLAN',lans.get(key.split(';')[1]));},
     async saveRecord(content,table){
-      if(table==='MovMovimentoTBCData'){count.create++;count.createdXml=content;if(opts.createError){if(opts.commitOnError){opts.nativeAfterLost=true;opts.lookup=['9001'];}throw opts.createError instanceof Error?opts.createError:Error('timeout');}if(opts.timeAfterCreate)remaining=6000;return opts.createResult||'8;9001';}
+      if(table==='MovMovimentoTBCData'){count.create++;count.createdXml=content;if(opts.createError){if(opts.commitOnError){opts.nativeAfterLost=true;opts.lookup=['9001'];}throw opts.createError instanceof Error?opts.createError:Error('timeout');}if(opts.timeAfterCreate)remaining=6000;if(opts.remainingAfterCreate)remaining=opts.remainingAfterCreate;return opts.createResult||'8;9001';}
       count.update++;const row=registroUnico(content.slice(9,-3),'FLAN');
       if(!opts.noEffect)lans.set(row.IDLAN,{...lans.get(row.IDLAN),...row,...opts.nativeBankSideEffect});
       if(opts.afterFirstUpdate && count.update===1)remaining=7000;
@@ -249,7 +249,7 @@ test('data de entrada omitida preserva default nativo após consulta do ticket',
 
 test('rejeição RM encerra a tentativa e permite corrigir e enviar novamente imediatamente',async()=>{
  const raw='Já Existe Nota do Emitente com este Número e Série. CPF_PRIVATE private@example.test\n=====\nat RM.Fixture';
- const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,503);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
+ const x=await setup({createResult:raw});const result=await x.run();assert.equal(result.statusCode,400);assert.equal(parse(result).code,'RM_DUPLICATE_RECORD');assert.match(parse(result).message,/duplicado/);
  const evidence=(await x.rawAll()).filter(r=>r.pk.includes('#EVIDENCE#'));assert.equal(evidence.length,2);assert.equal(evidence.find(r=>r.evidence.phase==='native_result').evidence.diagnostic.reasonCode,'RM_DUPLICATE_RECORD');
  const output=JSON.stringify([result,evidence]);assert.equal(output.includes('CPF_PRIVATE'),false);assert.equal(output.includes('private@example.test'),false);
  const root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');assert.equal(root.state,'RESERVED');assert.ok(root.lockUntil<Date.now());
@@ -276,7 +276,7 @@ test('consulta automática obsoleta não invalida confirmação nativa pelo tick
 
 test('rejeição seguida de falha de consulta mantém a tentativa protegida e orienta aguardar em vez de reconciliar',async()=>{
  const x=await setup({createResult:'Já Existe Nota do Emitente com este Número e Série.\n=====\nat RM.Fixture',censoErrorAt:3});
- assert.equal((await x.run()).statusCode,503);
+ assert.equal((await x.run()).statusCode,400);
  const before=await x.rawAll();assert.equal(before.find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
  const retry=await x.run({numeroDaNF:'9003002'});assert.equal(retry.statusCode,409);
  assert.match(parse(retry).message,/Aguarde alguns instantes e envie novamente/);
@@ -290,7 +290,7 @@ test('retorno de rejeição não libera tentativa quando a consulta encontra mov
   // The first two censuses are pre-dispatch; expose an external effect only in
   // the read after the response so it cannot be mistaken for a rejected write.
   x.setFiscal({nativeFromCensus:3});
-  assert.equal((await x.run()).statusCode,503);assert.equal(closed,0);
+  assert.equal((await x.run()).statusCode,400);assert.equal(closed,0);
   assert.equal((await x.all()).find(r=>r.pk==='dev#PG#8#9003').state,'CREATING');
 });
 
@@ -349,6 +349,20 @@ test('erro ou timeout não bloqueia permanentemente novo envio após expirar loc
 test('timeout após checkpoint do movimento recupera PG sem duplicar',async()=>{
   const x=await setup({timeAfterCreate:true});assert.notEqual((await x.run()).statusCode,200);await x.expire();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);
 });
+
+test('janela de16,6s após criação reproduz a pendência local e identifica prazo, etapa e movimento confirmado',async()=>{
+ const x=await setup({remainingAfterCreate:16600});
+ const {result,logs}=await capturarLogs(()=>x.run());
+ assert.equal(result.statusCode,503);const body=parse(result);
+ assert.equal(body.code,'PRAZO_INTEGRACAO_INSUFICIENTE');assert.equal(body.reason,'PRAZO_INSUFICIENTE');
+ assert.equal(body.etapa,'gravacao_vinculo');assert.equal(body.efeito,'MOVIMENTO_CONFIRMADO');assert.equal(body.PG,'9001');
+ assert.equal(body.message,body.error);assert.match(body.message,/movimento 9001 já está gravado/);
+ assert.doesNotMatch(body.message,/IDPGTO|vínculo bancário ainda não foi confirmado/);
+ const pending=logs.find(r=>r[0]==='[RM-IDPGTO] Integração pendente')[1];
+ assert.equal(pending.reason,'PRAZO_INSUFICIENTE');assert.equal(pending.necessarioMs,17000);assert.ok(pending.disponivelMs<=16600);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+ await x.expire();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
 const fiscalFields={tipoDoPagamento:'NF',tipoDeItem:'Serviço',idDaNaturezaFiscal:'121',codigoDaNaturezaFiscal:'1.949.01'};
 const fiscalIncompativel={FISCAL_VERSION:1,REQUEST_COMPANY:8,REQUEST_BRANCH:4,REQUEST_SUPPLIER_COMPANY:0,REQUEST_SUPPLIER:'0000000001',REQUEST_NATURE:121,
   HAS_SUPPLIER:1,HAS_BRANCH:1,HAS_NATURE:1,NATURE_COMPANY:8,NATURE_ID:121,NATURE_CODE:'1.949.01',NATURE_ACTIVE:1,NATURE_ROUTE:'D',
@@ -377,7 +391,7 @@ test('corrigir intenção sem PG confirma ausência e mantém histórico antes d
 
 test('rejeição nativa permite corrigir série após expirar sem recuperar outro movimento automaticamente',async()=>{
  const x=await setup({createResult:'Série não permitida para este movimento.\n=====\nat RM.Fixture',mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
- const first=await x.run({...fiscalFields,serie:'1'});assert.equal(first.statusCode,503);
+ const first=await x.run({...fiscalFields,serie:'1'});assert.equal(first.statusCode,400);
  assert.equal(parse(first).message.includes('não autoriza uma nova criação'),false);
  await x.expire();const before=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
  x.setFiscal({createResult:'8;9001'});
@@ -622,13 +636,13 @@ test('retorno RM sem chave registra somente categoria e tamanho e permite nova t
 test('rejeição1586multilinha registra motivo sem dados sensíveis e permite nova tentativa',async()=>{
   const raw='Campo CODTRB não foi informado.\r\nprivate@example.test CPF12345678909 contaACCOUNT_PRIVATE\r\n=====\r\nat RM.Fixture'.padEnd(1586,'x');
   const x=await setup({realLegacy:true,createResult:raw});
-  const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
+  const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,400);
   const diagnostic=logs.find(l=>l[0]==='[RM-IDPGTO] Retorno de criação sem chave confirmada')[1];
   assert.equal(diagnostic.reasonCode,'RM_REQUIRED_FIELD');assert.equal(diagnostic.length,1586);
   assert.equal(diagnostic.responseSha256,require('node:crypto').createHash('sha256').update(raw).digest('hex'));
   const serialized=JSON.stringify(logs);for(const value of ['private@example.test','CPF12345678909','ACCOUNT_PRIVATE',raw])assert.equal(serialized.includes(value),false);
   assert.equal((await x.all())[0].state,'RESERVED');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
-  assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
+  assert.equal((await x.run()).statusCode,400);assert.equal(x.count.create,2);
 });
 test('chave recebida fica distinguível de checkpoint perdido; nova tentativa consulta o RM',async()=>{
   const x=await setup({realLegacy:true});
@@ -637,7 +651,7 @@ test('chave recebida fica distinguível de checkpoint perdido; nova tentativa co
   const events=logs.filter(l=>l[0]==='[RM-IDPGTO] Etapa de criação').map(l=>l[1].event);
   assert.deepEqual(events,['creating_checkpoint_started','creating_checkpoint_confirmed','transport_call_started','transport_call_returned','primary_key_received','created_checkpoint_started']);
   const pending=logs.find(l=>l[0]==='[RM-IDPGTO] Integração pendente')[1];
-  assert.equal(pending.creationStage,'checkpoint_created');assert.equal(pending.receivedPg,'9001');assert.equal(pending.pg,undefined);
+  assert.equal(pending.creationStage,'checkpoint_created');assert.equal(pending.receivedPg,'9001');assert.equal(pending.pg,'9001');assert.equal(pending.efeito,'MOVIMENTO_CONFIRMADO');
   assert.equal(JSON.stringify(logs).includes('PRIVATE_CHECKPOINT_DATA'),false);
   assert.equal((await x.all())[0].state,'CREATING');assert.equal(x.count.create,1);assert.equal(x.count.update,0);
   await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);

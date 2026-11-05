@@ -108,9 +108,9 @@ def wait_updated():
                     '--function-name', m.FUNCTION], check=True, capture_output=True)
 
 
-def release():
+def release(expected_ref='refs/heads/fix/payment-contract-incident-20261105'):
     assert os.environ.get('GITHUB_EVENT_NAME') == 'push', 'Only the scoped push workflow can publish'
-    assert os.environ.get('GITHUB_REF') == 'refs/heads/fix/payment-contract-incident-20261105'
+    assert os.environ.get('GITHUB_REF') == expected_ref
     assert os.environ.get('GITHUB_RUN_ATTEMPT') == '1', 'Never rerun publication automatically'
     cfg, package = m.active()
     assert cfg['CodeSha256'] == BASE_SHA and cfg['RevisionId'] == BASE_REVISION, 'Active version drift; no publication'
