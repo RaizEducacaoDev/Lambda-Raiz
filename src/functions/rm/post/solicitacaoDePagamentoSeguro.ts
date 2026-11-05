@@ -9,7 +9,7 @@ import { DocumentoPagamentoInvalido, prepararDocumento } from './pagamentoDocume
 import { DadosPagamentoInvalidos, validarDadosAntesDaCriacao } from './pagamentoPreflight';
 import { prepararEvidencia, mensagemDiagnostico } from './pagamentoEvidencia';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
-  normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
+  normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, validarFilialBancaria, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
 type Criar = (campos: CamposPagamento, transporte: Pick<TransporteRm, 'saveRecord' | 'buscarEstoque'>) => Promise<{ statusCode: number; body: string }>;
 type Dependencias = { repositorio: RepositorioPagamento; rm: TransporteRm };
@@ -56,6 +56,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const dado = registroUnico(await rm.readReacord(`${chave.codColPgto};${chave.codColCfo};${chave.codCfo};${chave.idPgto}`,
         'FinDadosPgtoDataBR', contextoF), 'FDadosPgto');
       validarCadastro(dado, chave, entrada, planos);
+      validarFilialBancaria(dado, filial);
     };
     const validarNovaNota = async () => {
       validarDadosAntesDaCriacao(entrada, codTmv);

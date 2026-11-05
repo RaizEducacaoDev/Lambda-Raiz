@@ -105,6 +105,44 @@ const tiposPG = [
  ['1.2.17',{tipoDoPagamento:'OG',outrosGastos:'',tipoDoLocador:'PJ'},'ALPJ',''],
 ];
 
+test('filial bancária incompatível é informada antes de reservar ou criar para todos os tipos PG',async()=>{
+ for(const [codTmv,fields] of tiposPG){
+  const x=await setup({codTmv,bank:{CODFILIAL:'5'}}),result=await x.run(fields);
+  assert.equal(result.statusCode,422,codTmv);assert.match(parse(result).message,/cadastro bancário.*filial 5.*solicitação.*filial 4/);
+  assert.equal(x.count.create,0);assert.equal(x.count.update,0);assert.equal((await x.rawAll()).length,0);
+  assert.equal(x.count.lookup+x.count.censo+x.count.document,0);
+ }
+});
+
+test('cadastro compatível após recusa de filial prossegue sem reserva presa nem alteração do digest',async()=>{
+ const x=await setup({bank:{CODFILIAL:'5'}}),snapshot=JSON.stringify(payload);
+ assert.equal((await x.run()).statusCode,422);assert.equal((await x.rawAll()).length,0);
+ x.setBank({CODFILIAL:'4'});assert.equal((await x.run()).statusCode,200);
+ const key=identidadePagamento(payload),root=(await x.all()).find(r=>r.pk==='dev#PG#8#9003');
+ assert.equal(root.digest,hashIntencao(intencaoPagamento(payload,key,planosPagamento(payload,key),codigoMovimento(payload))));
+ assert.equal(JSON.stringify(payload),snapshot);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+
+test('filial coincidente ou sem restrição positiva mantém contrato bancário existente',async()=>{
+ for(const bank of [{CODFILIAL:'4'},{CODFILIAL:'04'},{CODFILIAL:''},{CODFILIAL:'0'},{}]){
+  const x=await setup({bank}),result=await x.run();assert.equal(result.statusCode,200,result.body);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').CODFILIAL,'4');
+ }
+});
+
+test('cadastro passa a filial incompatível depois de CREATED: nenhum novo movimento ou banco é escrito',async()=>{
+ const x=await setup({bank:{CODFILIAL:'4'},timeAfterCreate:true});assert.equal((await x.run()).statusCode,503);
+ await x.expire();const before=await x.rawAll();x.setBank({CODFILIAL:'5'});
+ assert.equal((await x.run()).statusCode,422);assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+ assert.deepEqual(await x.rawAll(),before);
+});
+
+test('replay já confirmado preserva o vínculo persistido sem reaplicar cadastro posteriormente alterado',async()=>{
+ const x=await setup({bank:{CODFILIAL:'4'}});assert.equal((await x.run()).statusCode,200);
+ x.setBank({CODFILIAL:'5',ATIVO:'0'});assert.equal((await x.run()).statusCode,200);
+ assert.equal(x.count.create,1);assert.equal(x.count.update,1);assert.equal(x.lans.get('9002').CODFILIAL,'4');
+});
+
 test('dez tipos PG usam XML real, contrato nativo por tipo, IDPGTO e replay sem segunda criação',async()=>{
  for(const [codTmv,fields,series,documentType] of tiposPG){
   const x=await setup({realLegacy:true,codTmv,documentNative:{EFFECTIVE_SERIES:series,EFFECTIVE_DOCUMENT_TYPE:documentType||null,DOCUMENT_TYPE_IS_NULL:documentType?0:1},mov:{SERIE:series,CODTDO:documentType}});

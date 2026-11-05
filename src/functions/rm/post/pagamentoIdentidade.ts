@@ -129,6 +129,16 @@ function dadosBoleto(v: string): { codigo: string; ipte: string } {
   return { codigo: v.slice(0, 4) + v[32] + v.slice(33) + v.slice(4, 9) + v.slice(10, 20) + v.slice(21, 31), ipte: v };
 }
 
+export function validarFilialBancaria(dado: Record<string, string>, filial: string): void {
+  // A positive branch on FDADOSPGTO restricts this bank record to that branch.
+  // Preserve the existing RM handling of absent/zero values; do not invent a
+  // branch, move the financial entry or change the supplier's bank registration.
+  const cadastrada = texto(dado.CODFILIAL);
+  if (/^\d+$/.test(cadastrada) && Number(cadastrada) > 0 && Number(cadastrada) !== Number(filial)) {
+    throw new PagamentoInvalido(`O cadastro bancário selecionado pertence à filial ${Number(cadastrada)}, mas a solicitação é da filial ${Number(filial)}. Selecione um cadastro compatível com a filial da solicitação.`);
+  }
+}
+
 export function validarCadastro(dado: Record<string, string>, chave: ChaveDadoPagamento, c: CamposPagamento, planos: PlanoParcela[]): void {
   if (dado.CODCOLIGADA !== chave.codColPgto || dado.CODCOLCFO !== chave.codColCfo || dado.CODCFO !== chave.codCfo ||
       dado.IDPGTO !== String(chave.idPgto) || dado.ATIVO !== '1') throw new PagamentoInvalido('IDPGTO não pertence ao cadastro ativo do fornecedor/destino');
