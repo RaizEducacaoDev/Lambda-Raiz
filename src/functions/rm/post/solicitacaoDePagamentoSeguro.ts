@@ -9,6 +9,7 @@ import { DocumentoPagamentoInvalido, prepararDocumento } from './pagamentoDocume
 import { DadosPagamentoInvalidos, validarDadosAntesDaCriacao } from './pagamentoPreflight';
 import { prepararEvidencia, mensagemDiagnostico } from './pagamentoEvidencia';
 import { baselineParcela, hashSnapshot, lerContinuacao, type BaselineParcela } from './pagamentoContinuacao';
+import { consultarPagamentoExistente } from './pagamentoExistente';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, validarFilialBancaria, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -31,7 +32,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     const chave = identidadePagamento(entrada);
     const coligada = chave.codColPgto, ticket = texto(entrada.ticketRaiz);
     const filial = texto(entrada.codigoDaFilial2 || entrada.codigoDaFilial);
-    const pgEntrada = texto(entrada.idDoMovimento || entrada.movimentoExistente) || undefined;
+    let pgEntrada = texto(entrada.idDoMovimento || entrada.movimentoExistente) || undefined;
     if (!idPositivo(ticket) || !idPositivo(filial) || (pgEntrada && !idPositivo(pgEntrada)) ||
       (texto(entrada.idDoMovimento) && texto(entrada.movimentoExistente) && texto(entrada.idDoMovimento) !== texto(entrada.movimentoExistente))) {
       throw new PagamentoInvalido('Ticket, filial ou movimento inválido/ambíguo');
@@ -45,6 +46,18 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
     const rm = deps?.rm || new TransportePagamentoV2(prazo);
     const contextoF = `CODSISTEMA=F;CODCOLIGADA=${coligada};CODUSUARIO=p_heflo`;
     const contextoT = `CODSISTEMA=T;CODCOLIGADA=${coligada};CODUSUARIO=p_heflo`;
+    // A positive native read takes precedence over stale reservation metadata.
+    // This branch never writes RM/Dynamo or turns a partial integration into success.
+    const existente = await consultarPagamentoExistente(rm, entrada, chave, planos, codTmv, pgEntrada);
+    if (existente?.completo) {
+      console.info('[RM-IDPGTO] Operação existente confirmada', { ticket, coligada, idMov: existente.pg,
+        idLans: existente.idLans, event: 'existing_payment_confirmed_readonly' });
+      return formatResponse(200, { PG: existente.pg, LF: existente.idLans.length === 1 ? existente.idLans[0] : '',
+        idLans: existente.idLans, integracaoBancaria: 'ja_gravada' });
+    }
+    // Partial native chains can only continue the existing bank-association path.
+    // They must never fall through into a new movement creation.
+    if (existente) pgEntrada = existente.pg;
     const conferirMovimento = async (pg: string) => {
       const movimento = await rm.readReacord(`${coligada};${pg}`, 'MovMovimentoTBCData', contextoT);
       const mov = registroUnico(movimento, 'TMOV'), compl = registroUnico(movimento, 'TMOVCOMPL');
@@ -127,6 +140,10 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           const serieInformada = ['1.2.01', '1.2.03', '1.2.25'].includes(codTmv) ? texto(entrada.serie) : '';
           if (final.NUMEROMOV !== entrada.numeroDaNF || (serieInformada && final.SERIE !== serieInformada)) {
             throw new ConflitoPagamento('XML final não preservou a identidade do documento; nenhuma criação foi enviada');
+          }
+          const antesDoEnvio = await rm.consultarRetomada(coligada, ticket);
+          if (antesDoEnvio.movimentos.length || antesDoEnvio.lancamentos.length) {
+            throw new ConflitoPagamento('Foi identificado um movimento do ticket antes do envio. Reenvie para confirmar a operação existente; nenhuma nova criação foi enviada.');
           }
           // Persist only an allowlisted intent summary and hashes. A failure is
           // still pre-dispatch and can safely close this RESERVED lease.
