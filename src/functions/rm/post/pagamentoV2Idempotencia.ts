@@ -30,15 +30,17 @@ export interface RepositorioPagamento {
   conferirEnvioProprio(operacao: OperacaoPagamento, idLan: string): Promise<void>;
 }
 export class ConflitoPagamento extends Error {
-  constructor(mensagem: string, readonly reason?: 'DADOS_SOLICITACAO_ALTERADOS' | 'MOVIMENTO_RESERVA_DIVERGENTE') {
+  constructor(mensagem: string, readonly reason?: 'DADOS_SOLICITACAO_ALTERADOS' | 'MOVIMENTO_RESERVA_DIVERGENTE' |
+    'OPERACAO_EM_PROCESSAMENTO' | 'ESTADO_TENTATIVA_INVALIDO') {
     super(mensagem);
   }
 }
 
 function conferirIdentidadeReserva(existente: OperacaoPagamento, digest: string, pg: string | undefined): void {
-  if ((existente.digest !== digest || (pg && pg !== existente.pg)) && !Object.prototype.hasOwnProperty.call(existente, 'pg') &&
-      ['RESERVED', 'CREATING'].includes(existente.state) && existente.lockUntil > Date.now()) {
-    throw new ConflitoPagamento('O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente; os dados corrigidos do formulário serão considerados.');
+  if ((existente.digest !== digest || (pg && pg !== existente.pg)) &&
+      !Object.prototype.hasOwnProperty.call(existente, 'pg') && ['RESERVED', 'CREATING'].includes(existente.state) &&
+      existente.lockUntil > Date.now()) {
+    throw new ConflitoPagamento('O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente.', 'OPERACAO_EM_PROCESSAMENTO');
   }
   if (existente.digest !== digest) {
     throw new ConflitoPagamento('Os dados enviados pelo Zeev mudaram em relação à tentativa anterior deste ticket. Confira os dados corrigidos e a tentativa anterior antes de prosseguir.', 'DADOS_SOLICITACAO_ALTERADOS');
@@ -314,9 +316,11 @@ export class DynamoPagamento implements RepositorioPagamento {
       if (!existente.pg || !/^[1-9]\d*$/.test(existente.pg)) throw new ConflitoPagamento('Reserva concluída sem movimento válido; reconciliar');
       return existente;
     }
-    if (!['RESERVED', 'CREATING', 'CREATED', 'UPDATING'].includes(existente.state) || existente.lockUntil > agora) {
-      throw new ConflitoPagamento('Ticket em processamento ou estado desconhecido');
+    if (!['RESERVED', 'CREATING', 'CREATED', 'UPDATING'].includes(existente.state)) {
+      throw new ConflitoPagamento('Não foi possível confirmar o estado da tentativa anterior.', 'ESTADO_TENTATIVA_INVALIDO');
     }
+    if (existente.lockUntil > agora) throw new ConflitoPagamento(
+      'O envio anterior ainda está sendo finalizado. Aguarde alguns instantes e envie novamente.', 'OPERACAO_EM_PROCESSAMENTO');
     if (existente.state === 'CREATING') {
       // An expired unconfirmed attempt no longer permanently blocks a new
       // request. Preserve its snapshot and fence the previous owner before

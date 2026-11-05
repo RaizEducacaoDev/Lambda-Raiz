@@ -38,3 +38,10 @@ test('matching identity preserves pending and complete replay semantics',async()
  assert.equal((await complete.repo.concluida(root.pk,root.digest,'9001')).pg,'9001');
  assert.deepEqual(pending.calls,['GetCommand']);assert.deepEqual(complete.calls,['GetCommand']);
 });
+
+test('lease ativa com formulário corrigido informa processamento, sem acusar dado inválido ou mudar a reserva',async()=>{
+ const x=fixture({...root,lockUntil:Date.now()+60000});
+ await assert.rejects(()=>x.repo.concluida(root.pk,'b'.repeat(64),undefined),e=>
+  e.reason==='OPERACAO_EM_PROCESSAMENTO'&&/Aguarde alguns instantes/.test(e.message));
+ assert.deepEqual(x.calls,['GetCommand']);
+});
