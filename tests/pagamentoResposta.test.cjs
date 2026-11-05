@@ -61,6 +61,12 @@ test('processamento em andamento ou estado desconhecido não acusa divergência 
   assert.match(r.body.message,/Aguarde alguns instantes e envie novamente/);
  }
 });
+test('lease ativo informa bloqueio temporário sem afirmar execução ainda ativa no TOTVS',()=>{
+ const r=result(new ConflitoPagamento('aguarde','OPERACAO_EM_PROCESSAMENTO'),{etapa:'controle_tentativa',pgConfirmado:'9001'});
+ assert.equal(r.status,409);assert.equal(r.body.origem,'INTEGRACAO');assert.equal(r.body.code,'OPERACAO_EM_PROCESSAMENTO');
+ assert.match(r.body.message,/bloqueio temporário de uma tentativa anterior/);assert.doesNotMatch(r.body.message,/ainda está sendo finalizado/);
+ assert.equal(r.body.PG,'9001');assert.equal(r.body.efeito,'MOVIMENTO_CONFIRMADO');
+});
 
 test('timeout, contrato RM inválido e concorrência são causas distintas, sem expor exceções',()=>{
  const secret='Bearer SECRET_PRIVATE password=PRIVATE';

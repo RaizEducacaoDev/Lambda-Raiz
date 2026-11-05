@@ -1,5 +1,17 @@
 # Histórico de erros — pagamento
 
+## 2026-11-05 — retorno nativo do TOTVS e logs legíveis restaurados
+
+- **Sintoma:** uma rejeição de produto no SaveRecord chegava como HTTP503 genérico, embora o RM tivesse respondido com motivo específico. O texto estava disponível, mas não era exibido nem registrado em forma legível.
+- **Causa 1:** o extrator descartava todo o diagnóstico ao encontrar identificadores longos, texto desconhecido, nomes SQL ou caracteres de substituição de encoding. Foi substituído por redação dos valores sensíveis, preservando motivo, identificadores operacionais e as linhas de negócio antes da pilha.
+- **Causa 2:** SOAP Fault, corpo HTTP de erro nos GETs/POSTs e retorno bancário sem chave eram convertidos em exceções locais sem a mensagem remota. Um erro tipado agora transporta somente diagnóstico já sanitizado até a política de resposta e o logger.
+- **Causa 3:** o Zeev utiliza `message`; o contrato antigo mantinha o detalhe apenas em `error`. Os dois campos agora contêm o mesmo motivo nativo e conservam o prefixo quando um movimento foi comprovado. Rejeição nativa de negócio mantém HTTP400; falhas locais, rede sem resposta e contratos sem descrição nativa conservam suas causas próprias.
+- **Causa 4:** a mensagem de lease ativo afirmava que uma execução continuava finalizando mesmo quando o processo já havia terminado. A apresentação agora informa bloqueio temporário da tentativa anterior, mantendo HTTP409 e todas as condições de exclusividade.
+- **Revisão de segurança:** regex inicial podia refletir XML financeiro embutido em `Message`, inclusive escapado, ou descartar HTML com DOCTYPE e perder o motivo após cookie/conexão entre aspas. Corrigido com redação das subárvores, HTML reduzido a texto inerte sem DTD e limites de valores citados; regressões específicas adicionadas.
+- **Logs:** `[RM-WARN] Retorno do TOTVS` volta a conter texto remoto legível, com ticket, etapa e código. Não se restaurou a serialização de Axios, headers, config, campos recebidos ou XML financeiro integral do backup. Senhas configuradas, Basic/Bearer, tokens, conexão, CPF/CNPJ, dados bancários e datasets são redigidos antes da apresentação/log.
+- **Preservação:** nenhum limite/prazo, consulta financeira, validação fiscal, identidade bancária, estado/condição de reserva, avanço de continuação, retry ou efeito de gravação foi alterado. Nenhum ticket real foi invocado ou reprocessado na implementação; testes usam somente transporte simulado e DynamoDB local.
+- **Verificação:** `npm run verify:pagamento` passou nos **279 testes**, typecheck e build. As regressões cobrem criação desconhecida com encoding incompleto, associação bancária, todas as consultas HTTP, SOAP Fault/ReadRecord, segredo embutido e precedência das validações locais. A prova da versão produtiva é registrada pelo executor da publicação, sem confundir simulação local com aprovação do Zeev.
+
 ## 2026-10-29 — vínculo obrigatório para PG
 
 - Causa confirmada na AWS: entrada sem IDPGTO podia criar movimento e retornar
