@@ -1,0 +1,31 @@
+name: Read ticket 226927 final-attempt logs only
+on:
+  push:
+    branches: [audit/payment-226927-final-error-20261105]
+    paths:
+      - scripts/audit-226927-final-error.py
+      - .github/workflows/226927-final-error-readonly.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: ${{ github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read exact ticket logs and reservation; never invoke or write
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/audit-226927-final-error.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ticket-226927-final-attempt-readonly
+          path: .226927-final-error-readonly/
+          include-hidden-files: true
+          retention-days: 7
