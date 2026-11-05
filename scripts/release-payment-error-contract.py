@@ -81,8 +81,8 @@ def prepare():
     subprocess.run([npm,'run','build:pagamento'],check=True)
     after = Path('.build/solicitacaoDePagamento.cjs').read_bytes()
     patch(before,before,after)
-    Path('.build/native-before.cjs').write_bytes(before)
-    Path('.build/native-after.cjs').write_bytes(after)
+    Path('.build/contract-before.cjs').write_bytes(before)
+    Path('.build/contract-after.cjs').write_bytes(after)
     print(json.dumps({'prepared':True,'baselineVerified':True,'onlyErrorModulesChanged':True,
                       'budgetsUnchanged':True,'financialTicketInvocations':False}))
 
