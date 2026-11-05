@@ -25,6 +25,21 @@ function setup(options={}){
   async reservar(pk,digest,pg){calls.reserve++;calls.order.push('reservar');pg=options.reservePg||options.durablePg||pg;const op={pk,digest,...(pg?{pg}:{}),state:pg?'CREATED':'RESERVED',owner:'fixture',lockUntil:Date.now()+90000};records.set(pk,op);return op;},
   async registrarEvidencia(op,evidence){calls.evidences.push(evidence);},
   async avancar(op,state,pg=op.pg){const next={...op,state,...(pg?{pg}:{})};records.set(op.pk,next);return next;},
+  // This fixture tests fiscal routing only. Continuation CAS and lost ACKs are
+  // exercised against the real Dynamo repository/dynalite in pagamentoSeguro.
+  async confirmarCriacaoPropria(op,pg,xmlSha256){
+   const next={...op,state:'CREATED',pg,continuation:JSON.stringify({version:1,receipt:{owner:op.owner,digest:op.digest,pg,xmlSha256}})};
+   records.set(op.pk,next);return next;
+  },
+  async selarBaseline(op,baseline){
+   const c=JSON.parse(op.continuation),progress=Object.fromEntries(Object.keys(baseline.parcels).map(id=>[id,'PREPARED']));
+   const next={...op,continuation:JSON.stringify({...c,baseline,progress})};records.set(op.pk,next);return next;
+  },
+  async avancarParcelaPropria(op,id,state){
+   const c=JSON.parse(op.continuation),next={...op,continuation:JSON.stringify({...c,progress:{...c.progress,[id]:state}})};
+   records.set(op.pk,next);return next;
+  },
+  async conferirEnvioProprio(op){assert.equal(records.get(op.pk).continuation,op.continuation);},
  };
  const rm={
   async consultarRetomada(){calls.census++;throw Error('RETRY must not run in payment submission');},

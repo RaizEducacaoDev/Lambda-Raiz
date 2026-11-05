@@ -8,6 +8,7 @@ import { NaturezaFiscalInvalida, prepararContextoFiscal, validarContextoFiscal }
 import { DocumentoPagamentoInvalido, prepararDocumento } from './pagamentoDocumento';
 import { DadosPagamentoInvalidos, validarDadosAntesDaCriacao } from './pagamentoPreflight';
 import { prepararEvidencia, mensagemDiagnostico } from './pagamentoEvidencia';
+import { baselineParcela, hashSnapshot, lerContinuacao, type BaselineParcela } from './pagamentoContinuacao';
 import { CamposPagamento, codigoMovimento, dataCanonica, dataLegado, hashIntencao, identidadePagamento, intencaoPagamento,
   normalizar, PagamentoInvalido, planosPagamento, PlanoParcela, validarCadastro, validarFilialBancaria, valorCanonico, xmlLancamento } from './pagamentoIdentidade';
 
@@ -166,7 +167,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           etapaCriacao = 'checkpoint_created';
           inicioEtapa = Date.now();
           console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'created_checkpoint_started', idMov: chaveRmRecebida });
-          op = await repo.avancar(op!, 'CREATED', match[2]);
+          op = await repo.confirmarCriacaoPropria(op!, match[2], evidencia.xmlSha256);
           console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'created_checkpoint_confirmed', idMov: chaveRmRecebida, durationMs: Date.now() - inicioEtapa });
           etapaCriacao = undefined;
           criadoAgora = true;
@@ -204,6 +205,48 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         planosPorId.set(nativa.IDLAN, matches[0]); restantes.splice(restantes.indexOf(matches[0]), 1);
       }
     }
+    const lerLancamento = async (pagamento: Record<string, string>, plano: PlanoParcela) => {
+      prazo.exigir(4000);
+      const idLan = pagamento.IDLAN;
+      const lan = registroUnico(await rm.readReacord(`${coligada};${idLan}`, 'FinLanDataBR', contextoF), 'FLAN');
+      if (lan.CODCOLIGADA !== coligada || lan.IDLAN !== idLan || lan.IDMOV !== pg || lan.CODCFO !== chave.codCfo ||
+        lan.CODCOLCFO !== chave.codColCfo || lan.CODFILIAL !== filial || dataCanonica(lan.DATAVENCIMENTO) !== plano.vencimento ||
+        valorCanonico(lan.VALORORIGINAL) !== valorCanonico(pagamento.VALOR)) throw new ConflitoPagamento('FLAN diverge do movimento/fornecedor/parcela esperado');
+      return lan;
+    };
+    const validarAlteracao = (lan: Record<string, string>, target: Array<[string, string]>, ownDefault: boolean) => {
+      if (lan.STATUSLAN !== '0' || (texto(lan.VALORBAIXADO) && valorCanonico(lan.VALORBAIXADO) !== '0.0') ||
+        !['', '0'].includes(texto(lan.BAIXAPENDENTE)) || idPositivo(lan.IDBOLETO)) {
+        throw new ConflitoPagamento('Lançamento já baixado, pendente ou com boleto; atualização bloqueada');
+      }
+      if (target.some(([k, v]) => texto(lan[k]) && lan[k] !== v &&
+        !(['IDPGTO', 'CODCOLPGTO'].includes(k) && Number(lan[k]) === 0) && !(k === 'IDPGTO' && ownDefault))) {
+        throw new ConflitoPagamento('FLAN possui dados bancários diferentes; não sobrescrever');
+      }
+    };
+    const movementHash = hashSnapshot({ movement: registroUnico(movimento, 'TMOV'), complement: registroUnico(movimento, 'TMOVCOMPL'),
+      installments: pagamentos.slice().sort((a, b) => a.IDLAN.localeCompare(b.IDLAN)) });
+    let continuation = op.continuation ? lerContinuacao(op.continuation) : undefined;
+    if (continuation) {
+      if (continuation.receipt.digest !== digest || continuation.receipt.pg !== pg) {
+        throw new ConflitoPagamento('Recibo próprio diverge da intenção/movimento');
+      }
+    }
+    // Only this invocation's positive native ACK grants the initial capture.
+    // A later CREATED/ADOPT/readback cannot manufacture a missing baseline.
+    if (criadoAgora && continuation && !continuation.baseline) {
+      const parcels: Record<string, BaselineParcela> = {};
+      for (const payment of pagamentos) {
+        const plan = planosPorId.get(payment.IDLAN)!;
+        const observed = await lerLancamento(payment, plan);
+        if (!plan.campos.every(([k, v]) => observed[k] === v)) validarAlteracao(observed, plan.campos, true);
+        parcels[payment.IDLAN] = baselineParcela(observed, plan.campos);
+      }
+      prazo.exigir(5000);
+      op = await repo.selarBaseline(op, { movementHash, parcels });
+      continuation = lerContinuacao(op.continuation!);
+    }
+    const baseline = continuation?.baseline;
     let gravou = false;
     const ids: string[] = [];
     for (const pagamento of pagamentos) {
@@ -212,15 +255,9 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const plano = planosPorId.get(idLan)!;
       const esperado = plano.campos;
       const completo = (lan: Record<string, string>) => esperado.every(([k, v]) => lan[k] === v);
-      const ler = async () => {
-        prazo.exigir(4000);
-        const lan = registroUnico(await rm.readReacord(`${coligada};${idLan}`, 'FinLanDataBR', contextoF), 'FLAN');
-        if (lan.CODCOLIGADA !== coligada || lan.IDLAN !== idLan || lan.IDMOV !== pg || lan.CODCFO !== chave.codCfo ||
-          lan.CODCOLCFO !== chave.codColCfo || lan.CODFILIAL !== filial || dataCanonica(lan.DATAVENCIMENTO) !== plano.vencimento ||
-          valorCanonico(lan.VALORORIGINAL) !== valorCanonico(pagamento.VALOR)) throw new ConflitoPagamento('FLAN diverge do movimento/fornecedor/parcela esperado');
-        return lan;
-      };
+      const ler = () => lerLancamento(pagamento, plano);
       const antes = await ler();
+      const propria = baseline?.parcels[idLan];
       if (concluida) {
         if (!completo(antes)) throw new ConflitoPagamento('Vínculo bancário alterado após confirmação; conciliar sem sobrescrever');
         ids.push(idLan); continue;
@@ -231,6 +268,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
       const concluidaLan = await repo.concluida(pkLan, digestLan, pg);
       if (concluidaLan) {
         if (!completo(antes)) throw new ConflitoPagamento('Vínculo de parcela confirmada foi alterado; conciliar');
+        if (propria && lerContinuacao(op.continuation!).progress![idLan] !== 'COMPLETE') op = await repo.avancarParcelaPropria(op, idLan, 'COMPLETE');
         ids.push(idLan); continue;
       }
       let opLan = await repo.reservar(pkLan, digestLan, pg, prazo.disponivel());
@@ -238,24 +276,28 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
         if (opLan.state === 'UPDATING' || opLan.state === 'COMPLETE') {
           throw new ConflitoPagamento('Associação anterior incerta/divergente; confirmar sem repetir escrita');
         }
-        if (antes.STATUSLAN !== '0' || (texto(antes.VALORBAIXADO) && valorCanonico(antes.VALORBAIXADO) !== '0.0') ||
-          !['', '0'].includes(texto(antes.BAIXAPENDENTE)) || (idPositivo(antes.IDBOLETO))) {
-          throw new ConflitoPagamento('Lançamento já baixado, pendente ou com boleto; atualização bloqueada');
+        if (propria && (lerContinuacao(op.continuation!).progress![idLan] !== 'PREPARED' || propria.nativeHash !== hashSnapshot(antes))) {
+          throw new ConflitoPagamento('Baseline bancário alterado ou associação anterior incerta; não repetir escrita');
         }
-        // O RM pode preencher o cadastro padrão ao criar o título. Só esta
-        // chamada que acabou de criá-lo pode substituí-lo pelo cadastro validado.
-        // Movimentos históricos ou recuperados nunca recebem esse privilégio.
-        if (esperado.some(([k, v]) => texto(antes[k]) && antes[k] !== v &&
-          !(['IDPGTO', 'CODCOLPGTO'].includes(k) && Number(antes[k]) === 0) && !(k === 'IDPGTO' && criadoAgora))) {
-          throw new ConflitoPagamento('FLAN possui dados bancários diferentes; não sobrescrever');
+        if (baseline && (!propria || propria.targetHash !== hashSnapshot(esperado) || baseline.movementHash !== movementHash ||
+          Object.keys(baseline.parcels).sort().join(',') !== pagamentos.map(p => p.IDLAN).sort().join(','))) {
+          throw new ConflitoPagamento('Movimento/parcelas divergem do baseline próprio');
         }
-        prazo.exigir(11000);
+        // The exact observed baseline preserves this creation's authorization
+        // across invocations. Historical/adopted movements have no such grant.
+        validarAlteracao(antes, esperado, Boolean(propria));
+        // Account for the extra bounded root CAS/read before dispatch.
+        prazo.exigir(propria ? 17000 : 11000);
+        if (propria) op = await repo.avancarParcelaPropria(op, idLan, 'UPDATING');
         opLan = await repo.avancar(opLan, 'UPDATING');
+        if (propria) await repo.conferirEnvioProprio(op, idLan);
         const result = await rm.saveRecord(xmlLancamento(coligada, idLan, esperado), 'FinLanDataBR', contextoF);
         if (result.trim() !== `${coligada};${idLan}`) throw new Error('Resultado da associação bancária incerto');
-        if (!completo(await ler())) throw new ConflitoPagamento('IDPGTO/dados bancários não persistidos no lançamento');
+        const depois = await ler();
+        if (!completo(depois)) throw new ConflitoPagamento('IDPGTO/dados bancários não persistidos no lançamento');
         gravou = true;
       }
+      if (propria) op = await repo.avancarParcelaPropria(op, idLan, 'COMPLETE');
       await repo.avancar(opLan, 'COMPLETE'); ids.push(idLan);
     }
     if (!concluida) op = await repo.avancar(op, 'COMPLETE');

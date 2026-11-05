@@ -66,7 +66,7 @@ async function setup(opts={}) {
     async saveRecord(content,table){
       if(table==='MovMovimentoTBCData'){count.create++;count.createdXml=content;if(opts.createError){if(opts.commitOnError){opts.nativeAfterLost=true;opts.lookup=['9001'];}throw opts.createError instanceof Error?opts.createError:Error('timeout');}if(opts.timeAfterCreate)remaining=6000;return opts.createResult||'8;9001';}
       count.update++;const row=registroUnico(content.slice(9,-3),'FLAN');
-      if(!opts.noEffect)lans.set(row.IDLAN,{...lans.get(row.IDLAN),...row});
+      if(!opts.noEffect)lans.set(row.IDLAN,{...lans.get(row.IDLAN),...row,...opts.nativeBankSideEffect});
       if(opts.afterFirstUpdate && count.update===1)remaining=7000;
       if(opts.updateError)throw Error('timeout after commit');
       return `8;${row.IDLAN}`;
@@ -398,7 +398,8 @@ test('CREATED/UPDATING duráveis retomam sem PG na entrada nem nova consulta fis
     const x=await setup({timeAfterCreate:true,mov:{CODTMV:'1.2.03'},createMov:{CODTMV:'1.2.03'}});
     assert.equal((await x.run(fiscalFields)).statusCode,503);assert.equal(x.count.create,1);assert.equal(x.count.fiscal,1);
     let root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));assert.equal(root.state,'CREATED');assert.equal(root.pg,'9001');
-    if(state==='UPDATING')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:root.pk},UpdateExpression:'SET #state=:state',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':state}}));
+    // Root-UPDATING is a legacy fixture, not a phase emitted by the new receipt.
+    if(state==='UPDATING')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:root.pk},UpdateExpression:'SET #state=:state REMOVE continuation',ExpressionAttributeNames:{'#state':'state'},ExpressionAttributeValues:{':state':state}}));
     root=(await x.all()).find(r=>!r.pk.includes('#FLAN#'));
     assert.equal(await x.repo.concluida(root.pk,root.digest,undefined),undefined);
     assert.equal(await x.repo.movimentoConhecido(root.pk,root.digest,undefined),'9001');
@@ -488,7 +489,7 @@ test('movimento histórico, pago/cancelado, com boleto ou outra identidade nunca
     const x=await setup(opts);assert.notEqual((await x.run({idDoMovimento:'9001'})).statusCode,200);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
   }
 });
-test('default do RM só é substituído na chamada que acabou de criar o lançamento',async()=>{
+test('default do RM só é substituído com baseline da criação própria, nunca por movimento explícito',async()=>{
   const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});assert.equal((await x.run()).statusCode,200);assert.equal(x.lans.get('9002').IDPGTO,'6');
   const y=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});assert.equal((await y.run({idDoMovimento:'9001'})).statusCode,409);assert.equal(y.count.update,0);
 });
@@ -545,8 +546,8 @@ test('rejeição1586multilinha registra motivo sem dados sensíveis e permite no
   await x.expire();assert.equal((await x.run()).statusCode,503);assert.equal(x.count.create,2);
 });
 test('chave recebida fica distinguível de checkpoint perdido; nova tentativa consulta o RM',async()=>{
-  const x=await setup({realLegacy:true});const advance=x.repo.avancar.bind(x.repo);
-  x.repo.avancar=async(op,state,pg)=>{if(state==='CREATED')throw Object.assign(Error('PRIVATE_CHECKPOINT_DATA'),{name:'TimeoutError'});return advance(op,state,pg);};
+  const x=await setup({realLegacy:true});
+  x.repo.confirmarCriacaoPropria=async()=>{throw Object.assign(Error('PRIVATE_CHECKPOINT_DATA'),{name:'TimeoutError'});};
   const {result,logs}=await capturarLogs(()=>x.run());assert.equal(result.statusCode,503);
   const events=logs.filter(l=>l[0]==='[RM-IDPGTO] Etapa de criação').map(l=>l[1].event);
   assert.deepEqual(events,['creating_checkpoint_started','creating_checkpoint_confirmed','transport_call_started','transport_call_returned','primary_key_received','created_checkpoint_started']);
@@ -590,4 +591,177 @@ test('handler preserva bundle original para não-PG e bloqueia JSON/PG inválido
   assert.equal((await handler({body:JSON.stringify({tipoDaSolicitacao:'AD'})})).statusCode,200);assert.equal(old,1);
   assert.equal((await handler({body:'{'},{})).statusCode,422);
   assert.notEqual((await handler({body:JSON.stringify({...payload,idpgto:''})},{getRemainingTimeInMillis:()=>30000})).statusCode,200);assert.equal(old,1);
+});
+
+
+// Production continuation path: real Dynamo commands/dynalite; no audit reader
+// injection and no network to AWS, RM or Zeev. Native records deliberately omit
+// RECCREATEDON/RECMODIFIEDON, as observed on the installed DataServer.
+const continuation = op => JSON.parse(op.continuation);
+const rootOf = async x => (await x.all()).find(r=>r.pk==='dev#PG#8#9003');
+function pauseAfterSeal(x) {
+  const seal=x.repo.selarBaseline.bind(x.repo);
+  x.repo.selarBaseline=async(...args)=>{const op=await seal(...args);x.setTime(6000);return op;};
+}
+
+test('continuação: padrão RM em duas parcelas retoma somente a pendente depois do prazo',async()=>{
+  const x=await setup({afterFirstUpdate:true,lan:{IDPGTO:'1',CODCOLPGTO:'8'},parcelas:[
+    {IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'40.0000'},
+    {IDLAN:'9004',DATAVENCIMENTO:'2026-12-10',VALOR:'60.0000'}]});
+  const fields={listaDeParcelas:[{vencimentoDaParcela:'2026-11-10',valorDaParcela:'40,00'},
+    {vencimentoDaParcela:'2026-12-10',valorDaParcela:'60,00'}]};
+  assert.equal((await x.run(fields)).statusCode,503);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+  const first=await rootOf(x),saved=continuation(first);
+  assert.deepEqual(saved.progress,{'9002':'COMPLETE','9004':'PREPARED'});
+  assert.deepEqual(Object.keys(saved.baseline.parcels).sort(),['9002','9004']);
+  assert.equal(first.continuation.includes('fixture@example.test'),false);
+  assert.equal(first.continuation.includes('RECCREATEDON'),false);
+  await x.expire();x.newRepo();assert.equal((await x.run(fields)).statusCode,200);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,2);
+  const last=await rootOf(x);assert.equal(last.digest,first.digest);assert.equal(last.state,'COMPLETE');
+  assert.deepEqual(continuation(last).progress,{'9002':'COMPLETE','9004':'COMPLETE'});
+});
+
+test('continuação: selo completo antes da primeira parcela mantém autorização após expirar lease',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});pauseAfterSeal(x);
+  assert.equal((await x.run()).statusCode,503);assert.equal(x.count.update,0);
+  const first=await rootOf(x);assert.equal(continuation(first).progress['9002'],'PREPARED');
+  await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,200);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+
+test('continuação: CREATED antes do primeiro baseline não autoriza banco divergente tardio',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}}),confirm=x.repo.confirmarCriacaoPropria.bind(x.repo);
+  x.repo.confirmarCriacaoPropria=async(...args)=>{const op=await confirm(...args);x.setTime(3000);return op;};
+  assert.equal((await x.run()).statusCode,503);
+  const first=await rootOf(x);assert.ok(continuation(first).receipt);assert.equal(continuation(first).baseline,undefined);
+  await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,409);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  assert.equal(continuation(await rootOf(x)).baseline,undefined);
+});
+
+test('continuação: alvo já persistido confirma após perda da resposta sem novo SaveRecord',async()=>{
+  const x=await setup({updateError:true,lan:{IDPGTO:'1',CODCOLPGTO:'8'}});
+  assert.equal((await x.run()).statusCode,503);assert.equal(continuation(await rootOf(x)).progress['9002'],'UPDATING');
+  await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,200);
+  assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+
+test('continuação: estado nativo completo muda antes do despacho e nenhuma diferença é sobrescrita',async()=>{
+  for(const change of [{IDPGTO:'3'},{HISTORICO:'external-edit'},{RECMODIFIEDON:'2026-11-04T20:00:00'},
+    {STATUSLAN:'1'},{VALORORIGINAL:'101.0000'},{CODFILIAL:'3'}]) {
+    const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});pauseAfterSeal(x);assert.equal((await x.run()).statusCode,503);
+    x.setLan('9002',change);await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,409,JSON.stringify(change));
+    assert.equal(x.count.create,1);assert.equal(x.count.update,0);
+  }
+});
+
+test('continuação: legado e ADOPT com PG não ganham recibo/baseline pela presença de CREATED',async()=>{
+  for(const adopted of [false,true]) {
+    const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});
+    const key=identidadePagamento(payload),digest=hashIntencao(intencaoPagamento(payload,key,planosPagamento(payload,key),codigoMovimento(payload)));
+    const op=await x.repo.reservar('dev#PG#8#9003',digest,'9001',30000);
+    if(adopted)await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:op.pk},UpdateExpression:'SET recuperadaCriacaoIncerta=:v',ExpressionAttributeValues:{':v':true}}));
+    await x.expire();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.create,0);assert.equal(x.count.update,0);
+    assert.equal((await rootOf(x)).continuation,undefined);
+  }
+});
+
+test('continuação: ACK perdido de recibo, selo ou claim de envio usa readback exato sem reenviar DDB',async()=>{
+  for(const phase of ['receipt','seal','dispatch']) {
+    const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}}),send=doc.send.bind(doc);let lost=0,writes=0;
+    doc.send=async(cmd,...args)=>{
+      const v=cmd.input?.ExpressionAttributeValues?.[':next'];
+      const state=typeof v==='string'?JSON.parse(v):undefined;
+      const matches=cmd.input?.TableName===x.table && state &&
+        (phase==='receipt'?!state.baseline:phase==='seal'?state.progress?.['9002']==='PREPARED':state.progress?.['9002']==='UPDATING');
+      if(matches)writes++;
+      const result=await send(cmd,...args);
+      if(matches&&!lost++){throw Object.assign(Error('ack lost after commit'),{name:'TimeoutError'});}
+      return result;
+    };
+    try {assert.equal((await x.run()).statusCode,200,phase);}finally {doc.send=send;}
+    assert.equal(writes,1,phase);assert.equal(lost,1);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+  }
+});
+
+test('continuação: ACK perdido do checkpoint da parcela permanece incerto e não rearma UPDATING',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}}),advance=x.repo.avancar.bind(x.repo);
+  x.repo.avancar=async(op,state,...args)=>{const next=await advance(op,state,...args);if(op.pk.includes('#FLAN#')&&state==='UPDATING')throw Error('lost child ACK');return next;};
+  assert.equal((await x.run()).statusCode,503);assert.equal(x.count.update,0);
+  await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,409);assert.equal(x.count.update,0);
+  assert.equal(continuation(await rootOf(x)).progress['9002'],'UPDATING');
+});
+
+test('continuação: raiz, owner, prazo, digest e baseline são cercados no mesmo CAS por parcela',async()=>{
+  for(const change of ['owner','lease','digest','baseline']) {
+    const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}}),dispatch=x.repo.avancarParcelaPropria.bind(x.repo);let changed=false;
+    x.repo.avancarParcelaPropria=async(op,id,state)=>{
+      if(state==='UPDATING'&&!changed){
+        changed=true;let field=change==='lease'?'lockUntil':change==='baseline'?'continuation':change;
+        let value=change==='owner'?'different-owner':change==='lease'?Date.now()-1:change==='digest'?'a'.repeat(64):undefined;
+        if(change==='baseline'){const c=continuation(op);c.baseline.parcels[id].nativeHash='a'.repeat(64);value=JSON.stringify(c);}
+        await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:op.pk},UpdateExpression:'SET #f=:v',ExpressionAttributeNames:{'#f':field},ExpressionAttributeValues:{':v':value}}));
+      }
+      return dispatch(op,id,state);
+    };
+    assert.notEqual((await x.run()).statusCode,200,change);assert.equal(x.count.create,1);assert.equal(x.count.update,0,change);
+  }
+});
+
+test('continuação: duas execuções após expirar lease despacham a parcela uma única vez',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}});pauseAfterSeal(x);assert.equal((await x.run()).statusCode,503);
+  await x.expire();x.newRepo();const results=await Promise.all([x.run(),x.run()]);
+  assert.equal(results.filter(r=>r.statusCode===200).length,1);assert.equal(x.count.create,1);assert.equal(x.count.update,1);
+});
+
+test('continuação: efeito nativo VALORAUXILIAR1→3 e auditoria posterior não invalidam alvo confirmado',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8',VALORAUXILIAR:'1'},nativeBankSideEffect:{VALORAUXILIAR:'3'}});
+  assert.equal((await x.run()).statusCode,200);assert.equal(x.lans.get('9002').VALORAUXILIAR,'3');
+  x.setLan('9002',{STATUSLAN:'1',VALORBAIXADO:'100.0000',RECMODIFIEDON:'2026-11-05T10:00:00',HISTORICO:'normal later payment'});
+  x.setFiscal({mov:{STATUS:'Q',RECMODIFIEDON:'2026-11-05T10:00:00'}});
+  assert.equal((await x.run()).statusCode,200);assert.equal(x.count.update,1);assert.equal(x.count.create,1);
+  x.setLan('9002',{IDPGTO:'9'});assert.equal((await x.run()).statusCode,409);assert.equal(x.count.update,1);
+});
+
+test('continuação: ACK bancário perdido com alvo persistido e alterações nativas permite só confirmação',async()=>{
+  const x=await setup({updateError:true,lan:{IDPGTO:'1',CODCOLPGTO:'8',VALORAUXILIAR:'1'},nativeBankSideEffect:{VALORAUXILIAR:'3'}});
+  assert.equal((await x.run()).statusCode,503);assert.equal(x.lans.get('9002').IDPGTO,'6');
+  x.setFiscal({mov:{RECMODIFIEDON:'2026-11-05T10:00:00'}});
+  await x.expire();x.newRepo();assert.equal((await x.run()).statusCode,200);assert.equal(x.count.update,1);
+  x.setLan('9002',{CODCFO:'outro'});assert.equal((await x.run()).statusCode,409);assert.equal(x.count.update,1);
+});
+
+test('continuação: perda da raiz durante checkpoint filho é detectada imediatamente antes do Save',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'}}),advance=x.repo.avancar.bind(x.repo);
+  x.repo.avancar=async(op,state,...args)=>{
+    const next=await advance(op,state,...args);
+    if(op.pk.includes('#FLAN#')&&state==='UPDATING')await doc.send(new UpdateCommand({TableName:x.table,Key:{pk:'dev#PG#8#9003'},
+      UpdateExpression:'SET #owner=:owner',ExpressionAttributeNames:{'#owner':'owner'},ExpressionAttributeValues:{':owner':'new-owner'}}));
+    return next;
+  };
+  assert.equal((await x.run()).statusCode,409);assert.equal(x.count.update,0);assert.equal(x.count.create,1);
+});
+
+test('continuação: baseline de todas as parcelas é validado antes de associar a primeira',async()=>{
+  const x=await setup({lan:{IDPGTO:'1',CODCOLPGTO:'8'},parcelas:[
+    {IDLAN:'9002',DATAVENCIMENTO:'2026-11-10',VALOR:'40.0000'},
+    {IDLAN:'9004',DATAVENCIMENTO:'2026-12-10',VALOR:'60.0000'}]});
+  x.setLan('9004',{IDBOLETO:'12'});
+  const fields={listaDeParcelas:[{vencimentoDaParcela:'2026-11-10',valorDaParcela:'40,00'},
+    {vencimentoDaParcela:'2026-12-10',valorDaParcela:'60,00'}]};
+  assert.equal((await x.run(fields)).statusCode,409);assert.equal(x.count.update,0);
+  assert.equal(continuation(await rootOf(x)).baseline,undefined);
+});
+
+test('continuação: manifesto completo é limitado, tipado e nunca aceita campos secretos ou parcela parcial',()=>{
+  const {validarContinuacao,baselineParcela,hashSnapshot}=load('pagamentoContinuacao.ts');
+  const receipt={owner:'fixture-owner',digest:'a'.repeat(64),pg:'9001',xmlSha256:'b'.repeat(64)};
+  const entry=baselineParcela({IDLAN:'9002',IDPGTO:'1'},[['IDPGTO','6']]);
+  const valid={version:1,receipt,baseline:{movementHash:hashSnapshot('movement'),parcels:{'9002':entry}},progress:{'9002':'PREPARED'}};
+  validarContinuacao(valid);
+  for(const bad of [{...valid,progress:{}},{...valid,secret:'private'},
+    {...valid,receipt:{...receipt,xml:'secret'}},{...valid,baseline:{...valid.baseline,parcels:{'9002':{...entry,nativeHash:''}}}}])assert.throws(()=>validarContinuacao(bad));
+  const parcels=Object.fromEntries(Array.from({length:1001},(_,i)=>[String(i+1),entry]));
+  assert.throws(()=>validarContinuacao({...valid,baseline:{...valid.baseline,parcels},progress:Object.fromEntries(Object.keys(parcels).map(k=>[k,'PREPARED']))}));
 });

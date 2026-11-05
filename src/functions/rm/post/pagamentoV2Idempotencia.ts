@@ -2,12 +2,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { validarEvidencia, type EvidenciaPagamento } from './pagamentoEvidencia';
+import { lerContinuacao, serializarContinuacao, validarContinuacao, type ContinuacaoPagamento } from './pagamentoContinuacao';
 
 export type EstadoPagamento = 'RESERVED' | 'CREATING' | 'CREATED' | 'UPDATING' | 'COMPLETE';
 export type OperacaoPagamento = {
   pk: string; digest: string; owner: string; lockUntil: number; state: EstadoPagamento; pg?: string;
   protocolVersion?: 2;
   recuperadaCriacaoIncerta?: true;
+  // A canonical scalar permits one exact Dynamo CAS over the entire manifest
+  // and all parcel phases without unsupported/oversized nested conditions.
+  continuation?: string;
 };
 export interface RepositorioPagamento {
   registrarEvidencia?(operacao: OperacaoPagamento, evidencia: EvidenciaPagamento): Promise<void>;
@@ -19,6 +23,10 @@ export interface RepositorioPagamento {
   movimentoConhecido(pk: string, digest: string, pg: string | undefined): Promise<string | undefined>;
   reservar(pk: string, digest: string, pg: string | undefined, duracao: number): Promise<OperacaoPagamento>;
   avancar(operacao: OperacaoPagamento, estado: EstadoPagamento, pg?: string): Promise<OperacaoPagamento>;
+  confirmarCriacaoPropria(operacao: OperacaoPagamento, pg: string, xmlSha256: string): Promise<OperacaoPagamento>;
+  selarBaseline(operacao: OperacaoPagamento, baseline: NonNullable<ContinuacaoPagamento['baseline']>): Promise<OperacaoPagamento>;
+  avancarParcelaPropria(operacao: OperacaoPagamento, idLan: string, estado: 'UPDATING' | 'COMPLETE'): Promise<OperacaoPagamento>;
+  conferirEnvioProprio(operacao: OperacaoPagamento, idLan: string): Promise<void>;
 }
 export class ConflitoPagamento extends Error {}
 
@@ -41,6 +49,72 @@ const snapshotCanonico = (valor: unknown): string => JSON.stringify(ordenarSnaps
 export class DynamoPagamento implements RepositorioPagamento {
   constructor(private readonly tabela: string,
     private readonly cliente = DynamoDBDocumentClient.from(new DynamoDBClient({ maxAttempts: 1 }))) {}
+  private async escreverContinuacao(op: OperacaoPagamento, next: ContinuacaoPagamento,
+    creation = false): Promise<OperacaoPagamento> {
+    validarContinuacao(next);
+    const serialized = serializarContinuacao(next);
+    if (!raizPagamento(op.pk) || !digestValido(op.digest) || next.receipt.digest !== op.digest ||
+      op.state !== (creation ? 'CREATING' : 'CREATED') ||
+      (creation ? Object.prototype.hasOwnProperty.call(op, 'pg') : op.pg !== next.receipt.pg) ||
+      Buffer.byteLength(snapshotCanonico({ ...op, continuation: serialized })) > 350000) {
+      throw new ConflitoPagamento('Raiz não admite continuação bancária própria');
+    }
+    const values: Record<string, unknown> = { ':owner': op.owner, ':state': op.state, ':digest': op.digest,
+      ':until': op.lockUntil, ':now': Date.now(), ':next': serialized, ':pg': next.receipt.pg };
+    let condition = '#owner = :owner AND #state = :state AND digest = :digest AND lockUntil = :until AND lockUntil > :now';
+    if (op.continuation) {
+      lerContinuacao(op.continuation); values[':old'] = op.continuation;
+      condition += ' AND #continuation = :old';
+    } else condition += ' AND attribute_not_exists(#continuation)';
+    condition += creation ? ' AND attribute_not_exists(pg)' : ' AND pg = :pg';
+    if (creation) values[':created'] = 'CREATED';
+    try {
+      const response = await this.cliente.send(new UpdateCommand({ TableName: this.tabela, Key: { pk: op.pk },
+        UpdateExpression: 'SET #continuation = :next' + (creation ? ', #state = :created, pg = :pg' : ''),
+        ConditionExpression: condition,
+        ExpressionAttributeNames: { '#owner': 'owner', '#state': 'state', '#continuation': 'continuation' },
+        ExpressionAttributeValues: values, ReturnValues: 'ALL_NEW' }), { abortSignal: AbortSignal.timeout(2000) });
+      if (!response.Attributes) throw new Error('Continuação sem confirmação');
+      return response.Attributes as OperacaoPagamento;
+    } catch (error) {
+      // An uncertain ACK never resends a financial write or rearms UPDATING.
+      // The same immutable requested result can only be accepted by readback.
+      if (error instanceof Error && error.name === 'ConditionalCheckFailedException') throw error;
+      const actual = await this.consultar(op.pk);
+      if (actual?.owner === op.owner && actual.lockUntil === op.lockUntil && actual.lockUntil > Date.now() &&
+        actual.state === 'CREATED' && actual.pg === next.receipt.pg && actual.digest === op.digest &&
+        actual.continuation === serialized) return actual;
+      throw error;
+    }
+  }
+  async confirmarCriacaoPropria(op: OperacaoPagamento, pg: string, xmlSha256: string): Promise<OperacaoPagamento> {
+    if (op.continuation || op.recuperadaCriacaoIncerta) throw new ConflitoPagamento('Origem própria não pode ser reconstruída');
+    return this.escreverContinuacao(op, { version: 1, receipt: { owner: op.owner, digest: op.digest, pg, xmlSha256 } }, true);
+  }
+  async selarBaseline(op: OperacaoPagamento, baseline: NonNullable<ContinuacaoPagamento['baseline']>): Promise<OperacaoPagamento> {
+    const c = op.continuation ? lerContinuacao(op.continuation) : undefined;
+    if (!c || c.baseline || c.receipt.owner !== op.owner) throw new ConflitoPagamento('Baseline exige a invocação que recebeu a chave própria');
+    const progress = Object.fromEntries(Object.keys(baseline.parcels).map(id => [id, 'PREPARED' as const]));
+    return this.escreverContinuacao(op, { ...c, baseline, progress });
+  }
+  async avancarParcelaPropria(op: OperacaoPagamento, idLan: string, state: 'UPDATING' | 'COMPLETE'): Promise<OperacaoPagamento> {
+    const c = op.continuation ? lerContinuacao(op.continuation) : undefined;
+    if (!c) throw new ConflitoPagamento('Parcela sem recibo próprio');
+    validarContinuacao(c);
+    const previous = c.progress?.[idLan];
+    if (!c.baseline?.parcels[idLan] || !previous || (state === 'UPDATING' && previous !== 'PREPARED')) {
+      throw new ConflitoPagamento('Parcela não admite novo envio bancário');
+    }
+    return this.escreverContinuacao(op, { ...c, progress: { ...c.progress!, [idLan]: state } });
+  }
+  async conferirEnvioProprio(op: OperacaoPagamento, idLan: string): Promise<void> {
+    const c = op.continuation ? lerContinuacao(op.continuation) : undefined;
+    if (!c || c.progress?.[idLan] !== 'UPDATING') throw new ConflitoPagamento('Parcela sem autorização de envio');
+    const actual = await this.consultar(op.pk);
+    if (!actual || actual.state !== 'CREATED' || actual.owner !== op.owner || actual.digest !== op.digest ||
+      actual.pg !== op.pg || actual.lockUntil !== op.lockUntil || actual.lockUntil <= Date.now() ||
+      actual.continuation !== op.continuation) throw new ConflitoPagamento('Autorização de envio perdeu a raiz/lease');
+  }
   async registrarEvidencia(op: OperacaoPagamento, evidencia: EvidenciaPagamento): Promise<void> {
     validarEvidencia(evidencia);
     if (!raizPagamento(op.pk) || !digestValido(op.digest) || !/^[A-Za-z0-9._-]{1,100}$/.test(op.owner) ||
@@ -219,10 +293,19 @@ export class DynamoPagamento implements RepositorioPagamento {
   }
   async avancar(op: OperacaoPagamento, estado: EstadoPagamento, pg = op.pg): Promise<OperacaoPagamento> {
     const proximo = { ...op, state: estado, ...(pg ? { pg } : {}) };
+    if (op.continuation) {
+      const continuation = lerContinuacao(op.continuation);
+      if (estado === 'COMPLETE' && continuation.baseline &&
+        Object.values(continuation.progress!).some(state => state !== 'COMPLETE')) {
+        throw new ConflitoPagamento('Há parcelas próprias ainda não confirmadas');
+      }
+    }
     await this.cliente.send(new PutCommand({ TableName: this.tabela, Item: proximo,
-      ConditionExpression: '#owner = :owner AND #state = :oldState AND digest = :digest AND lockUntil > :now',
-      ExpressionAttributeNames: { '#owner': 'owner', '#state': 'state' },
-      ExpressionAttributeValues: { ':owner': op.owner, ':oldState': op.state, ':digest': op.digest, ':now': Date.now() } }),
+      ConditionExpression: '#owner = :owner AND #state = :oldState AND digest = :digest AND lockUntil > :now' +
+        (op.continuation ? ' AND #continuation = :continuation' : ''),
+      ExpressionAttributeNames: { '#owner': 'owner', '#state': 'state', ...(op.continuation ? { '#continuation': 'continuation' } : {}) },
+      ExpressionAttributeValues: { ':owner': op.owner, ':oldState': op.state, ':digest': op.digest, ':now': Date.now(),
+        ...(op.continuation ? { ':continuation': op.continuation } : {}) } }),
       { abortSignal: AbortSignal.timeout(2000) });
     return proximo;
   }
