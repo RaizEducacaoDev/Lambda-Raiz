@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ false }} # One-off publication completed and independently verified.
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -42,7 +43,7 @@ jobs:
           retention-days: 14
   readback:
     needs: release
-    if: ${{ contains(github.event.head_commit.message, '[publish-native-errors-restored]') && github.run_attempt == 1 }}
+    if: ${{ false }} # Archived after independent readback; never republish automatically.
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     steps:
