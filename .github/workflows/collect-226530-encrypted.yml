@@ -1,0 +1,32 @@
+name: Read encrypted diagnostic for ticket 226530 only
+on:
+  push:
+    branches: [audit/payment-226530-encrypted-20261105]
+    paths:
+      - scripts/collect-226530-encrypted.py
+      - .github/workflows/collect-226530-encrypted.yml
+      - .226530-capture-request.json
+permissions:
+  contents: read
+jobs:
+  collect:
+    if: ${{ github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read only the protected envelope; no Lambda invocation
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          AWS_MAX_ATTEMPTS: '1'
+        run: python3 scripts/collect-226530-encrypted.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: protected-diagnostic-226530
+          path: .226530-encrypted-readonly/
+          include-hidden-files: true
+          retention-days: 3
