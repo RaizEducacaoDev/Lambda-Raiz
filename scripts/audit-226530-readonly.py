@@ -16,7 +16,7 @@ assert a.aws('sts','get-caller-identity',deadline=deadline)['Account']==a.ACCOUN
 cfg=a.aws('lambda','get-function-configuration','--function-name',a.FUNCTION,deadline=deadline)
 assert cfg.get('Environment',{}).get('Variables',{}).get('STAGE')=='prod'
 assert cfg.get('Environment',{}).get('Variables',{}).get('PAGAMENTO_IDPGTO_TABLE')==a.TABLE
-end=dt.datetime.now(dt.timezone.utc); start=dt.datetime(2026,11,5,18,50,tzinfo=dt.timezone.utc)
+end=dt.datetime.now(dt.timezone.utc); start=dt.datetime(2026,11,5,19,40,tzinfo=dt.timezone.utc)
 assert start<end<start+dt.timedelta(hours=12)
 events,coverage=a.read_log_window('"226530"',int(start.timestamp()*1000),int(end.timestamp()*1000),deadline)
 requests={}
@@ -37,7 +37,7 @@ def project(event):
     return row
 result={'ticket':226530,'company':11,'observedUtc':end.isoformat(),'windowStartUtc':start.isoformat(),
         'readOnly':True,'lambdaInvoked':False,'awsWrites':False,'ticketCoverage':coverage,
-        'function':{k:cfg.get(k) for k in ['FunctionName','CodeSha256','RevisionId','LastModified','State','LastUpdateStatus']},'requests':[]}
+        'function':{k:cfg.get(k) for k in ['FunctionName','CodeSha256','RevisionId','LastModified','State','LastUpdateStatus','LoggingConfig']},'requests':[]}
 for request,timestamps in sorted(requests.items(),key=lambda item:min(item[1])):
     full,cov=a.read_log_window('"'+request+'"',min(timestamps)-30000,max(timestamps)+30000,deadline)
     rows=[row for event in full if (row:=project(event)) is not None]
