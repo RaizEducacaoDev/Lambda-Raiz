@@ -1,0 +1,42 @@
+name: Payment incident November 5 read-only audit
+on:
+  push:
+    branches: [chore/payment-incident-readonly-20261105]
+    paths:
+      - .github/workflows/incident-payment-readonly-20261105.yml
+      - scripts/incident-payment-readonly-20261105.py
+      - .github/payment-incident-public.pem
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: python -m pip install cryptography==46.0.3
+      - name: Build pinned payment source without executing a handler
+        run: npx --no-install esbuild src/functions/rm/post/solicitacaoDePagamento.ts --bundle --platform=node --target=node22 --external:./solicitacaoDePagamento.core.cjs --outfile=.build/incident-source.cjs
+      - name: Read production metadata, encrypted code, reservation metadata and sanitized logs
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python scripts/incident-payment-readonly-20261105.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-incident-readonly-20261105
+          path: .incident-payment-readonly/
+          include-hidden-files: true
+          retention-days: 2
