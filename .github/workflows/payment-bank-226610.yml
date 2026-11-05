@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   bank:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    if: false # One bank association already persisted in run41938110743; never repeat it.
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:

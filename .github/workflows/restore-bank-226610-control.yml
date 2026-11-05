@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   restore:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    if: false # Original control restored by run41939959041; preserve the operation history.
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
