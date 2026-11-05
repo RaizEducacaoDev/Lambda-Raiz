@@ -31,7 +31,7 @@ export interface RepositorioPagamento {
 }
 export class ConflitoPagamento extends Error {
   constructor(mensagem: string, readonly reason?: 'DADOS_SOLICITACAO_ALTERADOS' | 'MOVIMENTO_RESERVA_DIVERGENTE' |
-    'OPERACAO_EM_PROCESSAMENTO' | 'ESTADO_TENTATIVA_INVALIDO') {
+    'OPERACAO_EM_PROCESSAMENTO' | 'ESTADO_TENTATIVA_INVALIDO' | 'DADOS_MOVIMENTO_DIVERGENTES') {
     super(mensagem);
   }
 }

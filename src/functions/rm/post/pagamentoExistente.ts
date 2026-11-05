@@ -82,13 +82,44 @@ export async function consultarPagamentoExistente(rm: LeituraRm, entrada: Campos
       compl.CODCOLIGADA !== coligada || compl.IDMOV !== pg || compl.TICKET !== ticket) {
     return conflito('O movimento existente diverge do ticket, fornecedor, unidade ou tipo esperado, ou está cancelado.');
   }
-  if (numero(mov.NUMEROMOV) !== numero(entrada.numeroDaNF) ||
-      (['1.2.01', '1.2.03', '1.2.25'].includes(tipo) && texto(entrada.serie) && mov.SERIE !== texto(entrada.serie)) ||
-      (texto(entrada.dataDeEmissao) && dataCanonica(mov.DATAEMISSAO) !== dataCanonica(entrada.dataDeEmissao)) ||
-      !igual(mov.VALORBRUTO, entrada.valorTotal) ||
-      (texto(entrada.codigoDoCentroDeCusto) && mov.CODCCUSTO !== texto(entrada.codigoDoCentroDeCusto)) ||
-      (tipo === '1.2.03' && texto(entrada.idDaNaturezaFiscal) && mov.IDNAT !== texto(entrada.idDaNaturezaFiscal))) {
-    return conflito('O documento, valor ou classificação do movimento existente difere da solicitação. Confira o registro existente; não será criado outro.');
+  // Keep every original predicate. Report all mismatching fields from the same
+  // reads; never log form/native values or use a mismatch to permit a write.
+  type Campo = 'NUMEROMOV' | 'SERIE' | 'DATAEMISSAO' | 'VALORBRUTO' | 'CODCCUSTO' | 'IDNAT';
+  const divergencias: Array<{ campo: Campo; detalhe: string }> = [];
+  const exibirCodigo = (v: unknown): string => /^\d{1,35}(?:\.\d{1,10})*$/.test(texto(v)) ? texto(v) : '(não exibido)';
+  const comparar = (campo: Campo, rotulo: string, enviado: string, existente: string) => {
+    if (enviado !== existente) divergencias.push({ campo,
+      detalhe: `${rotulo}: Zeev ${exibirCodigo(enviado)} / TOTVS ${exibirCodigo(existente)}` });
+  };
+  const avaliar = (comparacao: () => void) => {
+    try { comparacao(); } catch (erro) {
+      // The original disjunction stopped at the first mismatch. A later
+      // malformed optional value must not replace that known conflict.
+      if (!divergencias.length) throw erro;
+    }
+  };
+  comparar('NUMEROMOV', 'número da nota', numero(entrada.numeroDaNF), numero(mov.NUMEROMOV));
+  if (['1.2.01', '1.2.03', '1.2.25'].includes(tipo) && texto(entrada.serie)) {
+    comparar('SERIE', 'série', texto(entrada.serie), mov.SERIE);
+  }
+  avaliar(() => {
+    if (texto(entrada.dataDeEmissao) && dataCanonica(mov.DATAEMISSAO) !== dataCanonica(entrada.dataDeEmissao)) {
+      divergencias.push({ campo: 'DATAEMISSAO', detalhe:
+        `emissão: Zeev ${dataCanonica(entrada.dataDeEmissao)} / TOTVS ${dataCanonica(mov.DATAEMISSAO)}` });
+    }
+  });
+  avaliar(() => comparar('VALORBRUTO', 'valor bruto', valorCanonico(entrada.valorTotal), valorCanonico(mov.VALORBRUTO)));
+  if (texto(entrada.codigoDoCentroDeCusto)) {
+    comparar('CODCCUSTO', 'centro de custo', texto(entrada.codigoDoCentroDeCusto), mov.CODCCUSTO);
+  }
+  if (tipo === '1.2.03' && texto(entrada.idDaNaturezaFiscal)) {
+    comparar('IDNAT', 'natureza fiscal', texto(entrada.idDaNaturezaFiscal), mov.IDNAT);
+  }
+  if (divergencias.length) {
+    console.warn('[RM-IDPGTO] Divergência de movimento existente', { ticket, coligada, idMov: pg,
+      camposDivergentes: divergencias.map(d => d.campo) });
+    throw new ConflitoPagamento(`O movimento ${pg} já existe no TOTVS. ${divergencias.map(d => d.detalhe).join('; ')}. Confira os campos indicados antes de enviar novamente.`,
+      'DADOS_MOVIMENTO_DIVERGENTES');
   }
   // Entry/processing dates are not invoice identity and are never rewritten by
   // this acknowledgement. In 225374 RM recorded entry before the Zeev form date.
