@@ -1,0 +1,64 @@
+name: Verify and publish encrypted observer for ticket 226530
+on:
+  push:
+    branches: [fix/diagnostic-226530-20261105]
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 scripts/release-diagnostic-226530.py prepare
+      - name: Publish only the reviewed encrypted observer
+        if: ${{ contains(github.event.head_commit.message, '[publish-observer-226530]') && github.run_attempt == 1 }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-diagnostic-226530.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-226530-publication
+          path: .diagnostic-226530-release/
+          include-hidden-files: true
+          retention-days: 3
+  readback:
+    needs: release
+    if: ${{ contains(github.event.head_commit.message, '[publish-observer-226530]') && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: diagnostic-226530-publication
+          path: .release-evidence
+      - name: Independently verify active code and unchanged configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-diagnostic-226530.py readback --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic-226530-independent-readback
+          path: .diagnostic-226530-release/
+          include-hidden-files: true
+          retention-days: 3

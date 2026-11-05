@@ -3,7 +3,7 @@ import { formatResponse } from '../../../utils/response';
 import { idPositivo, texto, preservarNumeroMovimentoContaConsumo } from './solicitacaoDePagamentoBancario';
 import { ConflitoPagamento, DynamoPagamento, OperacaoPagamento, RepositorioPagamento } from './pagamentoV2Idempotencia';
 import { PrazoPagamento, registroUnico, registrosRm, TransportePagamentoV2, TransporteRm } from './pagamentoV2Rm';
-import { diagnosticarRetornoRm, resumirMensagemNegocioRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
+import { capturarDiagnostico226530, diagnosticarRetornoRm, resumirMensagemNegocioRm, tipoErroSeguro } from './pagamentoDiagnosticoSeguro';
 import { NaturezaFiscalInvalida, prepararContextoFiscal, validarContextoFiscal } from './pagamentoFiscal';
 import { DocumentoPagamentoInvalido, prepararDocumento } from './pagamentoDocumento';
 import { DadosPagamentoInvalidos, validarDadosAntesDaCriacao } from './pagamentoPreflight';
@@ -172,6 +172,7 @@ export async function executarPagamentoSeguro(entrada: CamposPagamento, context:
           console.info('[RM-IDPGTO] Etapa de criação', { ticket, coligada, event: 'transport_call_returned', durationMs: Date.now() - inicioEtapa });
           const match = retorno.trim().match(/^(\d+);([1-9]\d*)$/);
           if (!match || match[1] !== coligada) {
+            capturarDiagnostico226530(retorno, ticket, coligada);
             diagnosticoCriacao = diagnosticarRetornoRm(retorno, Boolean(match));
             mensagemNativa = resumirMensagemNegocioRm(retorno);
             console.warn('[RM-IDPGTO] Retorno de criação sem chave confirmada', { ticket, coligada,
