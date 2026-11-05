@@ -1,0 +1,67 @@
+name: Restore only temporary bank control 226610
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/restore-bank-226610-control.json
+      - .github/workflows/restore-bank-226610-control.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+jobs:
+  restore:
+    if: false # Original control restored by run41939959041; preserve the operation history.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests -p test_restore_bank_226610_control.py
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41938110743
+          name: payment-bank-226610-private
+          path: .restore-226610-reference/private
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41938110743
+          name: payment-bank-226610-lease
+          path: .restore-226610-reference/lease
+      - id: mode
+        run: |
+          python3 - <<'PY'
+          import json, os
+          c=json.load(open('.github/restore-bank-226610-control.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write('mode='+c['mode']+'\nrun='+c['approvedPrepareRunId']+'\n')
+          PY
+      - uses: actions/download-artifact@v4
+        if: steps.mode.outputs.mode == 'apply'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.mode.outputs.run }}
+          name: restore-bank-226610-control-evidence
+          path: .approved-restore-bank-226610-control
+      - name: Prepare or restore only reviewed owner and lock
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/restore-bank-226610-control.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: restore-bank-226610-control-evidence
+          path: .restore-bank-226610-control/
+          include-hidden-files: true
+          retention-days: 1

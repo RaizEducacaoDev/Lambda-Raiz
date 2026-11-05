@@ -1,0 +1,64 @@
+name: Scoped payment backlog recovery
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/payment-backlog-recovery.json
+      - .github/workflows/payment-backlog-recovery.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  # The root-level CAS rejects bank leases and any concurrent state change.
+  # This queue contains only recovery jobs; bank repairs have their own queue.
+  group: payment-backlog-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Validate all reviewed recovery targets and fencing
+        run: python3 -m unittest discover -s tests -p 'test_payment_backlog_*.py'
+      - id: config
+        run: python3 scripts/run-payment-backlog-recovery.py --emit-workflow-config
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41892943724
+          name: payment-bulk-readonly-evidence
+          path: .payment-bulk-readonly
+      - uses: actions/download-artifact@v4
+        if: steps.config.outputs.mode != 'prepare'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.config.outputs.approved_run }}
+          name: payment-backlog-recovery-evidence
+          path: .approved-payment-backlog-recovery
+      - name: Prepare and dry-run, or apply the exact reviewed artifact once
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/run-payment-backlog-recovery.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-backlog-recovery-evidence
+          path: .payment-backlog-recovery/
+          include-hidden-files: true
+          retention-days: 7

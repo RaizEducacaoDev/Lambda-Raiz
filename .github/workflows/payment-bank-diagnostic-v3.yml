@@ -1,0 +1,86 @@
+name: One pinned existing bank diagnostic V3
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/payment-bank-diagnostic-v3.json
+      - .github/workflows/payment-bank-diagnostic-v3.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+jobs:
+  diagnostic:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: python3 -m unittest discover -s tests -p test_payment_bank_diagnostic_v3.py
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41914496274
+          name: payment-bank-lease-v3-applied
+          path: .bank-diagnostic-references/restore
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41915570241
+          name: hml-null-bank-private-evidence
+          path: .bank-diagnostic-references/hml
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41892943724
+          name: payment-bulk-readonly-evidence
+          path: .payment-bulk-readonly
+      - id: mode
+        run: |
+          python3 - <<'PY'
+          import json, os
+          c=json.load(open('.github/payment-bank-diagnostic-v3.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write('mode='+c['mode']+'\nrun='+c['approvedPrepareRunId']+'\n')
+          PY
+      - uses: actions/download-artifact@v4
+        if: steps.mode.outputs.mode == 'apply'
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.mode.outputs.run }}
+          name: payment-bank-diagnostic-v3-private
+          path: .approved-bank-diagnostic-v3
+      - name: Prepare read-only or execute one explicitly pinned diagnostic
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/run-payment-bank-diagnostic-v3.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-diagnostic-v3-private
+          path: .payment-bank-diagnostic-v3/
+          include-hidden-files: true
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-diagnostic-v3-lease
+          path: .payment-bank-lease/
+          include-hidden-files: true
+          retention-days: 1

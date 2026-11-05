@@ -1,0 +1,40 @@
+name: One DEV NULL to bank comparison
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/hml-null-bank-once.yml
+      - scripts/probe-hml-null-bank.py
+permissions:
+  contents: read
+concurrency:
+  group: hml-bank-fixture-11-148481
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 && contains(github.event.head_commit.message, '[probe-hml-null-bank-once]')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests -p test_hml_null_bank.py
+      - name: Exact DEV fixture, one NULL clear then one reattachment only after two verified readbacks
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          HML_NULL_BANK_AUTHORIZATION: ONE_CLEAR_AND_ONE_ATTACH_ONLY
+        run: python3 scripts/probe-hml-null-bank.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hml-null-bank-private-evidence
+          path: .hml-null-bank/
+          include-hidden-files: true
+          retention-days: 1

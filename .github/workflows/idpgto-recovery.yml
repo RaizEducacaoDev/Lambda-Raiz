@@ -1,0 +1,58 @@
+name: IDPGTO scoped recovery release
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/idpgto-recovery.yml
+      - scripts/deploy-idpgto-recovery.py
+permissions:
+  contents: read
+concurrency:
+  group: idpgto-payment-function-recovery-20261030
+  cancel-in-progress: false
+jobs:
+  recovery:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - name: Publish only the payment function with revision and package guards
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          IDPGTO_RECOVERY_MODE: deploy
+        run: python3 scripts/deploy-idpgto-recovery.py
+      - name: Reconcile only the independently verified existing movement 455
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          IDPGTO_RECONCILE_MODE: apply
+        run: |
+          python3 - <<'PY'
+          import json, os, runpy
+          from pathlib import Path
+          release = json.loads(Path('.idpgto-recovery/deployment.json').read_text())
+          assert release['function'] == 'lambda-raiz-prod-solicitacaoDePagamento'
+          assert release['lastUpdateStatus'] == 'Successful' and release['configurationPreserved']
+          os.environ['IDPGTO_EXPECTED_CODE_SHA'] = release['activeCodeSha256']
+          runpy.run_path('scripts/reconcile-idpgto-228130.py', run_name='__main__')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idpgto-recovery-evidence
+          path: |
+            .idpgto-recovery/
+            .idpgto-reconciled/
+          include-hidden-files: true
+          retention-days: 7

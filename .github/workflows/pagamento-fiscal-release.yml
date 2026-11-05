@@ -1,0 +1,65 @@
+name: Payment fiscal validation scoped release
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/pagamento-fiscal-release.yml
+      - scripts/deploy-pagamento-fiscal.py
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - name: Publish only payment code after native SELECT contract readback
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          PAGAMENTO_FISCAL_RELEASE_MODE: deploy
+        run: python3 scripts/deploy-pagamento-fiscal.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pagamento-fiscal-release-evidence
+          path: |
+            .pagamento-fiscal-release/
+            .build/pagamento-fiscal.manifest.json
+          include-hidden-files: true
+          retention-days: 7
+  readback:
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pagamento-fiscal-release-evidence
+          path: .release-evidence
+      - name: Independently read deployed code, checkpoints and HTTP route
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/readback-pagamento-fiscal.py --evidence-directory .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pagamento-fiscal-independent-readback
+          path: .pagamento-fiscal-readback/
+          include-hidden-files: true
+          retention-days: 7

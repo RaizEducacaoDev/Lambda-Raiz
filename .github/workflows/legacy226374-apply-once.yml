@@ -1,0 +1,75 @@
+name: Authorized one-time recovery for ticket 226374
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths: [.github/workflows/legacy226374-apply-once.yml]
+permissions:
+  contents: read
+concurrency:
+  group: legacy-payment-226374-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    # Completed and independently verified in run 41877211477. Never replay.
+    if: ${{ false }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tests/test_legacy_226374_recovery.py
+      - run: python3 tests/test_legacy_226374_readback.py
+      - name: Fresh read-only proof of the closed original invocation
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-20261104-1325.py
+      - name: Archive original and conditionally reserve the authorized new attempt once
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_226374_ZEEV_TOKEN }}
+        run: |
+          python3 scripts/prepare-closure-proof-226374.py --source .payment-current-1325/readback.json --output .legacy226374/closure-proof.json --run-id "$GITHUB_RUN_ID"
+          python3 scripts/reconcile-legacy-226374.py --apply --controlled-test-nf1141 --new-digest dc1348992b3d67d49485a1ab8aef3b9dd7af7c51c0eef2e8f2817766cd1a0d9e --expected-code-sha 'Pt8n1Td1BarRUJWuGaQnMcNY5bYXcS8b3TvUaY28U0U=' --closure-proof .legacy226374/closure-proof.json --output .legacy226374/applied.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy226374-authorized-recovery
+          path: .legacy226374/
+          include-hidden-files: true
+          retention-days: 7
+  independent-readback:
+    needs: recover
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: legacy226374-authorized-recovery
+          path: .legacy226374/
+      - name: Independently reread reservation, original archive, Zeev and RM
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_226374_ZEEV_TOKEN }}
+        run: python3 scripts/readback-legacy-226374.py --evidence .legacy226374/applied.json --output .legacy226374/independent-readback.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy226374-independent-readback
+          path: .legacy226374/independent-readback.json
+          include-hidden-files: true
+          retention-days: 7

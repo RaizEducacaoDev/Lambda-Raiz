@@ -15,6 +15,16 @@ yarn-error.log*
 # Builds
 dist/
 .build/
+.idpgto-evidence/
+.idpgto-readback/
+.idpgto-incident/
+.idpgto-recovery/
+.fiscal-uf-release/
+.uncertain-creation-release/
+.native-duplication-release/
+.verification.log
+__pycache__/
+*.pyc
 .serverless/
 coverage/
 
@@ -36,3 +46,5 @@ credenciaisAWS.txt
 backup/
 
 undefined
+.native-fiscal-diagnostic-release/
+.ticket225136-execution/

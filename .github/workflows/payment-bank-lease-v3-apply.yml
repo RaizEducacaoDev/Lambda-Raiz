@@ -1,0 +1,70 @@
+name: Restore reviewed bank lease V3 once
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-bank-lease-v3-apply.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+jobs:
+  restore:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: c6c01b1b1af1eed4cef73e54d95d908bedee3bb1
+          path: .bank-v2-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: .bank-v2-source/package-lock.json
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+        working-directory: .bank-v2-source
+      - name: Offline administrative restoration tests
+        run: python3 -m unittest discover -s tests -p 'test_payment_bank_lease_v3*.py'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41911008831
+          name: payment-bank-repair-evidence
+          path: .failed-bank-v2
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41911008831
+          name: payment-bank-repair-lease-evidence
+          path: .failed-bank-v3-lease
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41913520774
+          name: payment-bank-lease-v3-proposal
+          path: .reviewed-v3-lease
+      - name: Restore only owner and lock under reviewed atomic conditions
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          GH_TOKEN: ${{ github.token }}
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+        run: python3 scripts/apply-payment-bank-lease-v3.py --authorized-administrative-restoration
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-lease-v3-applied
+          path: .payment-bank-lease-v3-applied/
+          include-hidden-files: true
+          retention-days: 7

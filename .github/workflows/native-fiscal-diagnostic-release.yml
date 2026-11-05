@@ -1,0 +1,82 @@
+name: Expose native RM fiscal rejection correctly
+on:
+  push:
+    branches: [fix/payment-native-225136-20261104]
+    paths:
+      - .github/workflows/native-fiscal-diagnostic-release.yml
+      - scripts/release-native-fiscal-diagnostic.py
+      - src/functions/rm/post/pagamentoDiagnosticoSeguro.ts
+      - src/functions/rm/post/pagamentoEvidencia.ts
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    if: false # One-off release completed by run 41918344032; preserve evidence, do not republish.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 -m unittest discover -s tests -p test_native_fiscal_diagnostic_release.py
+      - run: python3 scripts/release-native-fiscal-diagnostic.py prepare
+      - name: Publish the native fiscal reason with scoped byte verification
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-fiscal-diagnostic.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-fiscal-diagnostic-release
+          path: .native-fiscal-diagnostic-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-fiscal-diagnostic-release
+          path: .release-evidence
+      - name: Independently verify the active AWS package
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-fiscal-diagnostic.py readback --evidence .release-evidence
+      - name: Observe execution errors and reread after five minutes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-native-fiscal-diagnostic.py monitor --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-fiscal-diagnostic-independent-readback
+          path: .native-fiscal-diagnostic-release/
+          include-hidden-files: true
+          retention-days: 14

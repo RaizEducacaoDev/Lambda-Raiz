@@ -1,0 +1,40 @@
+name: Audit nine exact bank roots and claims read-only
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - scripts/audit-payment-bank-nine-readonly.py
+      - tests/test_payment_bank_nine_readonly.py
+      - .github/workflows/payment-bank-nine-readonly.yml
+permissions:
+  contents: read
+concurrency:
+  group: payment-bank-nine-readonly
+  cancel-in-progress: false
+jobs:
+  read-only:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify read-only scope and snapshot invariants
+        run: python3 -m unittest discover -s tests -p test_payment_bank_nine_readonly.py -v
+      - name: Read nine exact roots and canonical claims twice
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-bank-nine-readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-nine-readonly-evidence
+          path: .payment-bank-nine-readonly/
+          include-hidden-files: true
+          retention-days: 7

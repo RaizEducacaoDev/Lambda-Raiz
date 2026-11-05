@@ -1,0 +1,32 @@
+name: Read-only payment backlog and named ticket diagnosis
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - scripts/audit-payment-backlog-20261104.py
+      - .github/workflows/payment-backlog-readonly.yml
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read payment roots and logs without changing access or data
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/audit-payment-backlog-20261104.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-backlog-readonly-evidence
+          path: .payment-backlog-audit/
+          include-hidden-files: true
+          retention-days: 7

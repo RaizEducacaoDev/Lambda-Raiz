@@ -1,0 +1,34 @@
+name: Read-only bank context and schema diagnosis 228007
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/diagnose-bank-228007-readonly.yml
+      - scripts/diagnose-bank-228007-readonly.py
+permissions:
+  contents: read
+jobs:
+  diagnosis:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read metadata, GetSchema and exact target/control ReadRecord only
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/diagnose-bank-228007-readonly.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bank-228007-readonly-diagnosis
+          path: .bank-228007-readonly-diagnosis/
+          include-hidden-files: true
+          retention-days: 7

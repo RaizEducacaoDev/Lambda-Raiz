@@ -1,0 +1,40 @@
+name: One DEV same-bank probe as runtime user
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/hml-bank-same-user-once.yml
+      - scripts/probe-hml-bank-same-user.py
+permissions:
+  contents: read
+concurrency:
+  group: hml-bank-fixture-11-148481
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 && contains(github.event.head_commit.message, '[probe-hml-bank-same-user-once]')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests -p test_hml_bank_same_user.py
+      - name: Read PROD credentials in RAM and perform at most one DEV same-bank SaveRecord
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          HML_SAME_BANK_AUTHORIZATION: ONE_SAME_BANK_SAVE_ONLY
+        run: python3 scripts/probe-hml-bank-same-user.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hml-bank-same-user-private-evidence
+          path: .hml-bank-same-user/
+          include-hidden-files: true
+          retention-days: 1

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "mode": "apply",
+  "authorizedBankWrite": true,
+  "approvedPrepareRunId": "41937775740",
+  "approvedManifestSha256": "95e6787e1b0c09b75e918e2126bc465d78a38684b3c75b45e8c50e16795cdfbf"
+}

@@ -1,0 +1,41 @@
+name: Read-only systemic publication outcome
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-systemic-failure-readonly.yml
+      - scripts/read-payment-systemic-failure.py
+permissions:
+  contents: read
+  actions: read
+jobs:
+  readback:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41901379371
+          name: payment-systemic-release-evidence
+          path: .failed-systemic-attempt
+      - name: Read active hashes, metadata shape and bounded CloudTrail only
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+        run: python3 scripts/read-payment-systemic-failure.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-systemic-failure-readonly
+          path: .systemic-failure-readonly/
+          include-hidden-files: true
+          retention-days: 7

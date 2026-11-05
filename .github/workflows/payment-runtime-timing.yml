@@ -1,0 +1,46 @@
+name: Payment active runtime timing fenced negative probe
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-runtime-timing.yml
+      - scripts/probe-payment-runtime-timing.py
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  timing:
+    if: >-
+      ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 && contains(github.event.head_commit.message, '[probe-payment-runtime-timing-once]') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run build:pagamento
+      - run: python3 tests/test_payment_runtime_timing.py
+      - name: Measure three rejected calls on the pinned existing function
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          PAYMENT_RUNTIME_TIMING_MODE: probe
+        run: python3 scripts/probe-payment-runtime-timing.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-runtime-timing-sanitized
+          path: .payment-runtime-timing/timing.json
+          include-hidden-files: true
+          retention-days: 7

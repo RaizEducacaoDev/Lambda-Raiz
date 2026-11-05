@@ -119,19 +119,19 @@ test('duas execuções concorrentes criam e atualizam uma única vez',async()=>{
  assert.equal(results.filter(r=>r.statusCode===409 || r.statusCode===503).length,1);
  assert.equal(x.stats.create,1);assert.equal(x.stats.update,1);
 });
-test('timeout de criação mantém CREATING após expirar lock, sem segunda criação',async()=>{
+test('timeout de criação permite nova tentativa após expirar lock',async()=>{
  const x=await setup({createError:true});assert.notEqual((await x.run()).statusCode,200);
  assert.equal((await x.record()).state,'CREATING');await x.expire();
- const retry=await x.run();assert.equal(retry.statusCode,409);assert.match(body(retry).avisoIntegracaoBancaria,/incerta/);
- assert.equal(x.stats.create,1);assert.equal(x.stats.update,0);
+ const retry=await x.run();assert.equal(retry.statusCode,503);
+ assert.equal(x.stats.create,2);assert.equal(x.stats.update,0);
 });
-test('resposta de criação ambígua e falha no checkpoint permanecem sem repetição',async()=>{
+test('resposta de criação ambígua e falha no checkpoint não bloqueiam nova solicitação',async()=>{
  const x=await setup({createResult:'texto inesperado'});assert.notEqual((await x.run()).statusCode,200);await x.expire();
- assert.notEqual((await x.run()).statusCode,200);assert.equal(x.stats.create,1);
+ assert.notEqual((await x.run()).statusCode,200);assert.equal(x.stats.create,2);
  const y=await setup();const original=y.repo.avancar.bind(y.repo);
  y.repo.avancar=async(op,state,pg)=>{if(state==='CREATED')throw Error('Dynamo indisponível após criar');return original(op,state,pg);};
  assert.notEqual((await y.run()).statusCode,200);assert.equal((await y.record()).state,'CREATING');
- await y.expire();assert.notEqual((await y.run()).statusCode,200);assert.equal(y.stats.create,1);
+ await y.expire();assert.notEqual((await y.run()).statusCode,200);assert.equal(y.stats.create,2);
 });
 test('timeout depois do IDMOV recupera CREATED e não cria novamente',async()=>{
  const x=await setup({afterCreate:true});const first=await x.run();assert.notEqual(first.statusCode,200);

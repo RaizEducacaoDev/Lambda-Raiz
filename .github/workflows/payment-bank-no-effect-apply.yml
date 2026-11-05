@@ -1,0 +1,112 @@
+# Prepared locally from successful read-only run41909761029; ROOT must review before publication.
+name: Apply reviewed bank no-effect receipt once
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-bank-no-effect-apply.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: payment-backlog-bank-lease
+  cancel-in-progress: false
+env:
+  APPROVED_PREPARE_RUN_ID: '41909761029'
+  APPROVED_PLAN_SHA256: 'a64b9ff3ad672853a93d27c227cfd33e94a8eba91ad4cdc0a08633f8b14510c3'
+  APPROVED_PROPOSAL_FILE_SHA256: '5ddccea163cf570f880cbbc1479d864344242d036f8a109fcf827dca17e30a58'
+jobs:
+  adjudicate:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/idpgto-vinculo-obrigatorio' && github.run_attempt == 1 }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - name: Require concrete reviewed proposal pins
+        run: |
+          python3 - <<'PY'
+          import os,re
+          assert re.fullmatch(r'[1-9]\d*',os.environ['APPROVED_PREPARE_RUN_ID'])
+          for key in ('APPROVED_PLAN_SHA256','APPROVED_PROPOSAL_FILE_SHA256'):
+              assert re.fullmatch(r'[a-f0-9]{64}',os.environ[key])
+          PY
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 71bda76c539ea155320aec4f46de0679de5da4a6
+          path: .bank-original-code
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: .bank-original-code/package-lock.json
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+        working-directory: .bank-original-code
+      - run: python3 -m unittest discover -s tests -p test_payment_bank_no_effect.py
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41905310017
+          name: payment-bank-repair-evidence
+          path: .failed-bank-attempt
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41905310017
+          name: payment-bank-repair-lease-evidence
+          path: .failed-bank-lease
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41908274896
+          name: uncertain-creation-removal-release
+          path: .verified-runtime-release
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 41908274896
+          name: uncertain-creation-removal-independent-readback
+          path: .verified-runtime-independent
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ env.APPROVED_PREPARE_RUN_ID }}
+          name: payment-bank-no-effect-proposal
+          path: .reviewed-bank-no-effect
+      - name: Verify downloaded proposal file and canonical plan hashes
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          path=Path('.reviewed-bank-no-effect/proposed.json')
+          assert hashlib.sha256(path.read_bytes()).hexdigest()==os.environ['APPROVED_PROPOSAL_FILE_SHA256']
+          plan=json.loads(path.read_text())
+          canonical=json.dumps(plan,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)
+          assert hashlib.sha256(canonical.encode()).hexdigest()==os.environ['APPROVED_PLAN_SHA256']
+          assert plan['workflow']['runId']==os.environ['APPROVED_PREPARE_RUN_ID']
+          assert plan['mode']=='PREPARE' and plan['dynamoWrites'] is False
+          PY
+      - name: One atomic control transaction with exact readback; no financial write
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_MAX_ATTEMPTS: '1'
+          AWS_PAGER: ''
+          GH_TOKEN: ${{ github.token }}
+          RECONCILE_ZEEV_TOKEN: ${{ secrets.RECONCILE_ZEEV_TOKEN }}
+        run: >-
+          python3 scripts/adjudicate-payment-bank-no-effect.py
+          --apply --authorized-no-effect-adjudication
+          --review .reviewed-bank-no-effect/proposed.json
+          --expect-plan-sha "$APPROVED_PLAN_SHA256"
+          --output-dir .payment-bank-no-effect-applied
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-no-effect-applied
+          path: .payment-bank-no-effect-applied/
+          include-hidden-files: true
+          retention-days: 7

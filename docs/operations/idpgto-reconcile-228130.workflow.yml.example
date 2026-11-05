@@ -1,0 +1,36 @@
+# Prepared template only. Refresh RM proof and pin the independently verified
+# active release hash before installing this as an executable workflow.
+name: IDPGTO adopt verified movement for ticket 228130
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/idpgto-reconcile-228130.yml
+      - scripts/reconcile-idpgto-228130.py
+permissions:
+  contents: read
+concurrency:
+  group: idpgto-payment-function-recovery-20261030
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Adopt only the independently verified existing movement
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+          IDPGTO_EXPECTED_CODE_SHA: REPLACE_FROM_VERIFIED_RELEASE
+          IDPGTO_RECONCILE_MODE: apply
+        run: python3 scripts/reconcile-idpgto-228130.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: idpgto-reconciled-228130
+          path: .idpgto-reconciled/
+          include-hidden-files: true
+          retention-days: 7

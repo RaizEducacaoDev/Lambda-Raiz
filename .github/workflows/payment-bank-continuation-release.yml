@@ -1,0 +1,80 @@
+name: Continue bank association from a sealed own creation
+on:
+  push:
+    branches: [fix/idpgto-vinculo-obrigatorio]
+    paths:
+      - .github/workflows/payment-bank-continuation-release.yml
+      - scripts/release-payment-bank-continuation.py
+permissions:
+  contents: read
+concurrency:
+  group: payment-function-production-publication
+  cancel-in-progress: false
+jobs:
+  release:
+    if: false # One-off publication verified by run41940590447; preserve evidence, do not republish.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - run: npm run verify:pagamento
+      - run: python3 -m unittest discover -s tests -p test_payment_bank_continuation_release.py
+      - run: python3 scripts/release-payment-bank-continuation.py prepare
+      - name: Publish only the reviewed payment wrapper
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-bank-continuation.py release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-continuation-release
+          path: .payment-bank-continuation-release/
+          include-hidden-files: true
+          retention-days: 14
+  readback:
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: payment-bank-continuation-release
+          path: .release-evidence
+      - name: Independently verify the active AWS package
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-bank-continuation.py readback --evidence .release-evidence
+      - name: Observe errors and confirm active package after five minutes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+          AWS_PAGER: ''
+        run: python3 scripts/release-payment-bank-continuation.py monitor --evidence .release-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-bank-continuation-independent-readback
+          path: .payment-bank-continuation-release/
+          include-hidden-files: true
+          retention-days: 14
