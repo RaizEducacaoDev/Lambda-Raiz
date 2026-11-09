@@ -89,6 +89,7 @@ def main():
     # Never serialize cfg or the presigned download URL.
     manifest = {
         'exportedAtUtc': datetime.now(timezone.utc).isoformat(),
+        'githubActionsRun': os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
         'functionName': FUNCTION, 'region': REGION,
         'handler': cfg['Handler'], 'runtime': cfg['Runtime'], 'architectures': cfg['Architectures'],
         'version': cfg['Version'], 'awsAccount': ACCOUNT,
