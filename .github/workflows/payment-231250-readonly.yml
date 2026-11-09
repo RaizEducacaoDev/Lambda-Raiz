@@ -27,7 +27,7 @@ jobs:
         run: python scripts/audit-payment-231250-readonly.py
       - uses: actions/upload-artifact@v4
         with:
-          name: payment-231250-readonly-followup
+          name: payment-231250-native-error
           path: .audit231250/aws-readonly.json
           include-hidden-files: true
           retention-days: 1

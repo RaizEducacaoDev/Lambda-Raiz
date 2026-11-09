@@ -21,6 +21,31 @@ a.ENUMS.update({
     'efeito': {'MOVIMENTO_CONFIRMADO', 'CRIACAO_NAO_CONFIRMADA', 'SEM_MOVIMENTO_CONFIRMADO'},
     'etapa': {'inicio', 'identidade_bancaria', 'validacao_solicitacao', 'consulta_existente', 'validacao_bancaria', 'validacao_documento', 'validacao_fiscal', 'controle_tentativa', 'criacao_movimento', 'controle_criacao', 'leitura_movimento', 'leitura_lancamento', 'preparacao_vinculo', 'gravacao_vinculo', 'confirmacao_vinculo', 'confirmacao_final'},
 })
+a.ENUMS['code'].update(a.REASONS)
+a.ENUMS['reason'].update(a.REASONS)
+
+
+def project(event):
+    row = a.sanitize(event)
+    if row is not None:
+        return row
+    message, request = a.unwrap(event)
+    marker = '[RM-WARN] Retorno do TOTVS'
+    if marker not in message:
+        return None
+    # This logger accepts only ErroNativoRm.diagnosticoNativo, already redacted
+    # by sanitizarTextoErroRm. Never export a generic exception or raw payload.
+    body = message.split(marker, 1)[1]
+    match = re.search(r'\bretorno\s*:\s*([\s\S]*)\}\s*$', body)
+    if not match:
+        return {'kind': 'native_error', 'requestId': request, 'parseable': False}
+    text = match[1][:6000]
+    text = re.sub(r'https?://[^\s<>\"\']+', '[URL OCULTA]', text)
+    text = re.sub(r'\b\d{11,}\b', '[NUMERO LONGO OCULTO]', text)
+    text = re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', '[EMAIL OCULTO]', text)
+    return {'kind': 'native_error', 'requestId': request,
+            'timestamp': event['timestamp'], 'code': a.scalar(body, 'codigo'),
+            'nativeDiagnosticAlreadyRedactedByLambda': text}
 
 
 def reservation(pk, deadline):
@@ -70,7 +95,7 @@ def main():
     assert 0 < len(requests) <= 25
     for request, times in requests.items():
         full, coverage = a.read_log_window('"'+request+'"', min(times)-60000, max(times)+60000, deadline)
-        safe = [row for e in full if (row := a.sanitize(e)) is not None]
+        safe = [row for e in full if (row := project(e)) is not None]
         out['requests'].append({'requestId': request, 'coverage': coverage, 'events': safe})
     out['after'] = [reservation(pk, deadline) for pk in [a.PK, a.PK + '#FLAN#70223']]
     out['reservationUnchanged'] = out['before'] == out['after']
