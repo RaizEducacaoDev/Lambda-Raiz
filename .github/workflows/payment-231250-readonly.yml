@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   read-only:
-    if: ${{ github.run_attempt == 1 && contains(github.event.head_commit.message, '[audit-231250-readonly-once]') }}
+    if: false # One-off read verified by run 42678178090; evidence delivered to Desktop.
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
