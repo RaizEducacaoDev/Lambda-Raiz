@@ -15,11 +15,11 @@ a.CODTMV = '1.2.16'
 a.NUMBERS.update({'necessarioMs', 'disponivelMs'})
 a.ERROR_TYPES.add('PrazoPagamentoInsuficiente')
 a.ENUMS.update({
-    'code': {'PRAZO_INTEGRACAO_INSUFICIENTE', 'IDPGTO_NAO_CONFIRMADO', 'OPERACAO_EM_PROCESSAMENTO'},
-    'reason': {'PRAZO_INSUFICIENTE'},
+    'code': {'PRAZO_INTEGRACAO_INSUFICIENTE', 'IDPGTO_NAO_CONFIRMADO', 'OPERACAO_EM_PROCESSAMENTO', 'OPERACAO_EM_CONFLITO', 'DADOS_SOLICITACAO_ALTERADOS', 'MOVIMENTO_RESERVA_DIVERGENTE', 'ESTADO_TENTATIVA_INVALIDO', 'DADOS_MOVIMENTO_DIVERGENTES', 'FALHA_INTEGRACAO_PAGAMENTO', 'RESPOSTA_TOTVS_INVALIDA', 'COMUNICACAO_NAO_CONFIRMADA', 'FALHA_COMUNICACAO_TOTVS'},
+    'reason': {'PRAZO_INSUFICIENTE', 'OPERACAO_EM_PROCESSAMENTO', 'OPERACAO_EM_CONFLITO', 'DADOS_SOLICITACAO_ALTERADOS', 'MOVIMENTO_RESERVA_DIVERGENTE', 'ESTADO_TENTATIVA_INVALIDO', 'DADOS_MOVIMENTO_DIVERGENTES', 'FALHA_TECNICA', 'RESPOSTA_RM_INVALIDA', 'TIMEOUT_OU_CANCELAMENTO', 'FALHA_COMUNICACAO', 'CONCORRENCIA_DETECTADA'},
     'origem': {'INTEGRACAO', 'TOTVS', 'FORMULARIO'},
     'efeito': {'MOVIMENTO_CONFIRMADO', 'CRIACAO_NAO_CONFIRMADA', 'SEM_MOVIMENTO_CONFIRMADO'},
-    'etapa': {'leitura_movimento', 'leitura_lancamento', 'preparacao_vinculo', 'gravacao_vinculo', 'confirmacao_vinculo', 'confirmacao_final', 'controle_criacao'},
+    'etapa': {'inicio', 'identidade_bancaria', 'validacao_solicitacao', 'consulta_existente', 'validacao_bancaria', 'validacao_documento', 'validacao_fiscal', 'controle_tentativa', 'criacao_movimento', 'controle_criacao', 'leitura_movimento', 'leitura_lancamento', 'preparacao_vinculo', 'gravacao_vinculo', 'confirmacao_vinculo', 'confirmacao_final'},
 })
 
 
@@ -43,6 +43,8 @@ def reservation(pk, deadline):
         progress = c.get('progress', {})
         assert all(re.fullmatch(r'\d+', k) and v in {'PREPARED', 'UPDATING', 'COMPLETE'} for k, v in progress.items())
         safe['progress'] = progress
+        safe['baselineHashes'] = c.get('baseline')
+        assert safe['baselineHashes'] is None or re.fullmatch(r'[a-f0-9]{64}', safe['baselineHashes'].get('movementHash', ''))
     return safe
 
 
@@ -65,7 +67,7 @@ def main():
         _, request = a.unwrap(e)
         if request:
             requests.setdefault(request, []).append(e['timestamp'])
-    assert 0 < len(requests) <= 15
+    assert 0 < len(requests) <= 25
     for request, times in requests.items():
         full, coverage = a.read_log_window('"'+request+'"', min(times)-60000, max(times)+60000, deadline)
         safe = [row for e in full if (row := a.sanitize(e)) is not None]
